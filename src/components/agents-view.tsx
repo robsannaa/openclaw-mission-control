@@ -1388,6 +1388,559 @@ function AddAgentModal({
 }
 
 /* ================================================================
+   Edit Agent Modal
+   ================================================================ */
+
+function EditAgentModal({
+  agent,
+  idx,
+  allAgents,
+  defaultModel,
+  defaultFallbacks,
+  onClose,
+  onSaved,
+}: {
+  agent: Agent;
+  idx: number;
+  allAgents: Agent[];
+  defaultModel: string;
+  defaultFallbacks: string[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  /* ── derive initial bindings in channel:accountId format ── */
+  const initialBindings = useMemo(
+    () =>
+      agent.bindings.map((b) => {
+        const ch = b.split(" ")[0];
+        const accMatch = b.match(/accountId=(\S+)/);
+        return accMatch ? `${ch}:${accMatch[1]}` : ch;
+      }),
+    [agent.bindings]
+  );
+
+  const [model, setModel] = useState(agent.model);
+  const [fallbacks, setFallbacks] = useState<string[]>(agent.fallbackModels);
+  const [subagents, setSubagents] = useState<string[]>(agent.subagents);
+  const [bindings, setBindings] = useState<string[]>(initialBindings);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  /* ── Fetch available models ── */
+  const [models, setModels] = useState<AvailableModel[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/models?scope=all");
+        const data = await res.json();
+        const all = (data.models || []) as AvailableModel[];
+        const avail = all
+          .filter((m) => m.available || m.local)
+          .sort((a, b) => (a.name || a.key).localeCompare(b.name || b.key));
+        setModels(avail);
+      } catch {
+        /* ignore */
+      }
+      setModelsLoading(false);
+    })();
+  }, []);
+
+  /* ── Channel binding wizard state ── */
+  const [bindChannel, setBindChannel] = useState<string | null>(null);
+  const [bindAccountId, setBindAccountId] = useState("");
+
+  /* ── Keyboard ── */
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onClose, busy]);
+
+  const addBinding = useCallback(() => {
+    if (!bindChannel) return;
+    const binding = bindAccountId.trim()
+      ? `${bindChannel}:${bindAccountId.trim()}`
+      : bindChannel;
+    if (!bindings.includes(binding)) {
+      setBindings((prev) => [...prev, binding]);
+    }
+    setBindChannel(null);
+    setBindAccountId("");
+  }, [bindChannel, bindAccountId, bindings]);
+
+  const removeBinding = useCallback((b: string) => {
+    setBindings((prev) => prev.filter((x) => x !== b));
+  }, []);
+
+  const toggleFallback = useCallback((modelKey: string) => {
+    setFallbacks((prev) =>
+      prev.includes(modelKey)
+        ? prev.filter((f) => f !== modelKey)
+        : [...prev, modelKey]
+    );
+  }, []);
+
+  const toggleSubagent = useCallback((agentId: string) => {
+    setSubagents((prev) =>
+      prev.includes(agentId)
+        ? prev.filter((s) => s !== agentId)
+        : [...prev, agentId]
+    );
+  }, []);
+
+  /* ── Save ── */
+  const handleSave = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update",
+          id: agent.id,
+          model: model || null,
+          fallbacks: fallbacks.length > 0 ? fallbacks : [],
+          subagents,
+          bindings,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error || `Failed (HTTP ${res.status})`);
+        setBusy(false);
+        return;
+      }
+      setSuccess(true);
+      requestRestart("Agent settings updated — restart to pick up changes.");
+      setTimeout(() => {
+        onSaved();
+        onClose();
+      }, 1200);
+    } catch (err) {
+      setError(String(err));
+    }
+    setBusy(false);
+  }, [agent.id, model, fallbacks, subagents, bindings, onSaved, onClose]);
+
+  const sc = STATUS_COLORS[agent.status] || STATUS_COLORS.unknown;
+  const selectedChannelMeta = CHANNEL_OPTIONS.find(
+    (c) => c.value === bindChannel
+  );
+  const otherAgents = allAgents.filter((a) => a.id !== agent.id);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[5vh] sm:pt-[8vh]">
+      <div
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        onClick={() => {
+          if (!busy) onClose();
+        }}
+      />
+
+      <div className="relative z-10 mx-3 flex max-h-[88vh] w-full max-w-[min(34rem,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-foreground/[0.08] bg-card/95 shadow-2xl sm:mx-4 sm:max-h-[80vh]">
+        {/* ── Header ── */}
+        <div className="flex shrink-0 items-center justify-between border-b border-foreground/[0.06] px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div
+              className={cn(
+                "flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br text-lg font-bold text-white shadow",
+                AGENT_GRADIENTS[idx % AGENT_GRADIENTS.length]
+              )}
+            >
+              {agent.emoji}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h2 className="text-sm font-bold text-foreground">
+                  {agent.name}
+                </h2>
+                <span className={cn("h-2 w-2 rounded-full", sc.dot)} />
+                <span className={cn("text-[10px] font-medium", sc.text)}>
+                  {agent.status === "active"
+                    ? "Active"
+                    : agent.status === "idle"
+                      ? "Idle"
+                      : "Unknown"}
+                </span>
+                {agent.isDefault && (
+                  <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[9px] font-medium text-violet-400">
+                    Default
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                {agent.id} · {formatAgo(agent.lastActive)} ·{" "}
+                {agent.sessionCount} sessions · {formatTokens(agent.totalTokens)}{" "}
+                tokens
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded p-1 text-muted-foreground/60 hover:text-foreground/70 disabled:opacity-40"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* ── Scrollable form ── */}
+        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+          {/* 1. Primary Model */}
+          <div>
+            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-foreground/70">
+              <Cpu className="h-3 w-3 text-violet-400" /> Primary Model
+            </label>
+            {modelsLoading ? (
+              <div className="flex items-center gap-2 rounded-lg border border-foreground/[0.08] bg-foreground/[0.02] px-3 py-2.5 text-[12px] text-muted-foreground/50">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading models…
+              </div>
+            ) : (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                disabled={busy}
+                className="w-full appearance-none rounded-lg border border-foreground/[0.08] bg-foreground/[0.02] px-3 py-2.5 text-[13px] text-foreground/90 focus:border-violet-500/30 focus:outline-none disabled:opacity-40"
+              >
+                <option value="">
+                  Use default ({shortModel(defaultModel)})
+                </option>
+                {models.map((m) => (
+                  <option key={m.key} value={m.key}>
+                    {m.name || m.key.split("/").pop()} —{" "}
+                    {m.key.split("/")[0]}
+                    {m.local ? " (local)" : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+            {!modelsLoading && models.length > 0 && (
+              <p className="mt-1 text-[10px] text-muted-foreground/50">
+                {models.length} authenticated models.{" "}
+                <a
+                  href="/?section=models"
+                  className="text-violet-400 hover:text-violet-300"
+                >
+                  Manage providers →
+                </a>
+              </p>
+            )}
+          </div>
+
+          {/* 2. Fallback Models (multi-select checkboxes) */}
+          <div>
+            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-foreground/70">
+              <Layers className="h-3 w-3 text-violet-400" /> Fallback Models
+              <span className="text-[10px] font-normal text-muted-foreground/40">
+                — priority order
+              </span>
+            </label>
+            {modelsLoading ? (
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground/50">
+                <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+              </div>
+            ) : models.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground/50">
+                No authenticated models available
+              </p>
+            ) : (
+              <div className="max-h-[150px] space-y-0.5 overflow-y-auto rounded-lg border border-foreground/[0.06] p-1.5">
+                {models
+                  .filter((m) => m.key !== model)
+                  .map((m) => {
+                    const checked = fallbacks.includes(m.key);
+                    const order = checked
+                      ? fallbacks.indexOf(m.key) + 1
+                      : null;
+                    return (
+                      <label
+                        key={m.key}
+                        className={cn(
+                          "flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] transition-colors",
+                          checked
+                            ? "bg-violet-500/[0.08] text-violet-300"
+                            : "text-muted-foreground hover:bg-foreground/[0.03]"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleFallback(m.key)}
+                          disabled={busy}
+                          className="sr-only"
+                        />
+                        <div
+                          className={cn(
+                            "flex h-4 w-4 shrink-0 items-center justify-center rounded border text-[9px] font-bold",
+                            checked
+                              ? "border-violet-500/50 bg-violet-500/20 text-violet-300"
+                              : "border-foreground/[0.1] bg-foreground/[0.02]"
+                          )}
+                        >
+                          {order ?? ""}
+                        </div>
+                        <span className="flex-1 truncate">
+                          {m.name || shortModel(m.key)}
+                        </span>
+                        <span className="text-[9px] text-muted-foreground/40">
+                          {m.key.split("/")[0]}
+                        </span>
+                      </label>
+                    );
+                  })}
+              </div>
+            )}
+            {fallbacks.length > 0 && (
+              <p className="mt-1 text-[10px] text-muted-foreground/50">
+                {fallbacks.length} fallback{fallbacks.length !== 1 && "s"}{" "}
+                selected — numbered in priority order
+              </p>
+            )}
+          </div>
+
+          {/* 3. Sub-Agents (multi-select checkboxes) */}
+          {otherAgents.length > 0 && (
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-foreground/70">
+                <Network className="h-3 w-3 text-cyan-400" /> Sub-Agents
+                <span className="text-[10px] font-normal text-muted-foreground/40">
+                  — can delegate tasks to
+                </span>
+              </label>
+              <div className="space-y-0.5 rounded-lg border border-foreground/[0.06] p-1.5">
+                {otherAgents.map((a) => {
+                  const checked = subagents.includes(a.id);
+                  return (
+                    <label
+                      key={a.id}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-[11px] transition-colors",
+                        checked
+                          ? "bg-cyan-500/[0.08] text-cyan-300"
+                          : "text-muted-foreground hover:bg-foreground/[0.03]"
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleSubagent(a.id)}
+                        disabled={busy}
+                        className="sr-only"
+                      />
+                      <div
+                        className={cn(
+                          "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                          checked
+                            ? "border-cyan-500/50 bg-cyan-500/20"
+                            : "border-foreground/[0.1] bg-foreground/[0.02]"
+                        )}
+                      >
+                        {checked && (
+                          <CheckCircle className="h-2.5 w-2.5 text-cyan-400" />
+                        )}
+                      </div>
+                      <span className="text-sm">{a.emoji}</span>
+                      <span className="flex-1 truncate font-medium">
+                        {a.name}
+                      </span>
+                      <span className="text-[9px] text-muted-foreground/40">
+                        {shortModel(a.model)}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 4. Channel Bindings */}
+          <div>
+            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-foreground/70">
+              <Globe className="h-3 w-3 text-blue-400" /> Channel Bindings
+            </label>
+
+            {/* Existing binding chips */}
+            {bindings.length > 0 && (
+              <div className="mb-2.5 flex flex-wrap gap-1.5">
+                {bindings.map((b) => {
+                  const chKey = b.split(":")[0];
+                  const chMeta = CHANNEL_OPTIONS.find(
+                    (c) => c.value === chKey
+                  );
+                  return (
+                    <span
+                      key={b}
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/20 bg-blue-500/[0.06] px-2.5 py-1 text-[11px] text-blue-400"
+                    >
+                      <span>{chMeta?.icon || "📡"}</span>
+                      <span className="font-medium">{b}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeBinding(b)}
+                        className="ml-0.5 rounded text-blue-400/60 hover:text-blue-200"
+                        disabled={busy}
+                      >
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Channel wizard */}
+            {bindChannel === null ? (
+              <div>
+                <p className="mb-2 text-[10px] text-muted-foreground/60">
+                  Route messages from a channel to this agent:
+                </p>
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                  {CHANNEL_OPTIONS.map((ch) => (
+                    <button
+                      key={ch.value}
+                      type="button"
+                      onClick={() => setBindChannel(ch.value)}
+                      disabled={busy}
+                      className="flex items-center gap-2 rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] px-3 py-2 text-left text-[11px] text-foreground/70 transition-colors hover:border-blue-500/20 hover:bg-blue-500/[0.05] hover:text-blue-400 disabled:opacity-40"
+                    >
+                      <span className="text-base">{ch.icon}</span>
+                      <span className="font-medium">{ch.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.03] p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">
+                      {selectedChannelMeta?.icon}
+                    </span>
+                    <span className="text-[12px] font-semibold text-foreground/80">
+                      {selectedChannelMeta?.label}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBindChannel(null);
+                      setBindAccountId("");
+                    }}
+                    className="rounded p-0.5 text-muted-foreground/40 hover:text-foreground/70"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={bindAccountId}
+                    onChange={(e) => setBindAccountId(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addBinding();
+                      }
+                    }}
+                    placeholder={
+                      selectedChannelMeta?.hint || "Account ID (optional)"
+                    }
+                    className="flex-1 rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-[12px] text-foreground/90 placeholder:text-muted-foreground/40 focus:border-blue-500/30 focus:outline-none"
+                    autoFocus
+                    disabled={busy}
+                  />
+                  <button
+                    type="button"
+                    onClick={addBinding}
+                    disabled={busy}
+                    className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
+                  >
+                    Add
+                  </button>
+                </div>
+                <p className="mt-1.5 text-[10px] text-muted-foreground/50">
+                  Leave empty for all {selectedChannelMeta?.label} messages, or
+                  enter an account ID for specific routing.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Workspace (read-only) */}
+          <div className="rounded-lg border border-foreground/[0.04] bg-foreground/[0.02] px-3 py-2.5">
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60">
+              <FolderOpen className="h-3 w-3 text-amber-400/60" /> Workspace
+            </div>
+            <code className="mt-0.5 block truncate text-[11px] text-foreground/60">
+              {agent.workspace}
+            </code>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/[0.05] px-3 py-2 text-[12px] text-red-400">
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          {/* Success */}
+          {success && (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-2 text-[12px] text-emerald-400">
+              <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+              Settings saved! Restarting gateway to apply…
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="flex shrink-0 items-center justify-end gap-2 border-t border-foreground/[0.06] px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-lg border border-foreground/[0.08] px-4 py-2 text-[12px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] disabled:opacity-40"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={busy || success}
+            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-[12px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+          >
+            {busy ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Saving…
+              </>
+            ) : success ? (
+              <>
+                <CheckCircle className="h-3.5 w-3.5" />
+                Saved!
+              </>
+            ) : (
+              <>
+                <CheckCircle className="h-3.5 w-3.5" />
+                Save Changes
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ================================================================
    Main Export
    ================================================================ */
 
@@ -1396,8 +1949,14 @@ export function AgentsView() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [view, setView] = useState<"flow" | "grid">("flow");
   const [showAddModal, setShowAddModal] = useState(false);
+
+  const handleAgentClick = useCallback((id: string) => {
+    setSelectedId(id);
+    setEditingAgentId(id);
+  }, []);
 
   const fetchAgents = useCallback(async () => {
     try {
@@ -1429,6 +1988,16 @@ export function AgentsView() {
   const selectedIdx = useMemo(
     () => data?.agents.findIndex((a) => a.id === selectedId) ?? 0,
     [data, selectedId]
+  );
+
+  const editingAgent = useMemo(
+    () => data?.agents.find((a) => a.id === editingAgentId) || null,
+    [data, editingAgentId]
+  );
+
+  const editingIdx = useMemo(
+    () => data?.agents.findIndex((a) => a.id === editingAgentId) ?? 0,
+    [data, editingAgentId]
   );
 
   if (loading) {
@@ -1513,7 +2082,7 @@ export function AgentsView() {
         <FlowView
           data={data}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={handleAgentClick}
         />
       )}
 
@@ -1525,7 +2094,7 @@ export function AgentsView() {
             <GridView
               agents={data.agents}
               selectedId={selectedId}
-              onSelect={setSelectedId}
+              onSelect={handleAgentClick}
             />
             {selectedAgent && (
               <AgentDetail
@@ -1547,6 +2116,22 @@ export function AgentsView() {
             fetchAgents();
           }}
           defaultModel={data.defaultModel}
+        />
+      )}
+
+      {/* Edit Agent Modal */}
+      {editingAgent && (
+        <EditAgentModal
+          agent={editingAgent}
+          idx={editingIdx}
+          allAgents={data.agents}
+          defaultModel={data.defaultModel}
+          defaultFallbacks={data.defaultFallbacks}
+          onClose={() => setEditingAgentId(null)}
+          onSaved={() => {
+            setLoading(true);
+            fetchAgents();
+          }}
         />
       )}
     </div>

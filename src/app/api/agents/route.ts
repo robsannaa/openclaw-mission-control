@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFile, readdir } from "fs/promises";
+import { readFile, writeFile, readdir } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome, getDefaultWorkspaceSync } from "@/lib/paths";
 import { runCliJson, runCli } from "@/lib/openclaw-cli";
@@ -334,6 +334,97 @@ export async function POST(request: NextRequest) {
         }
 
         return NextResponse.json({ ok: true, action, name, workspace, ...result });
+      }
+
+      case "update": {
+        const id = body.id as string;
+        if (!id) {
+          return NextResponse.json(
+            { error: "Agent ID is required" },
+            { status: 400 }
+          );
+        }
+
+        const configPath = join(OPENCLAW_HOME, "openclaw.json");
+        let config: Record<string, unknown>;
+        try {
+          config = JSON.parse(await readFile(configPath, "utf-8"));
+        } catch {
+          return NextResponse.json(
+            { error: "Failed to read config" },
+            { status: 500 }
+          );
+        }
+
+        const agentsSection = config.agents as Record<string, unknown>;
+        const agentsList = (agentsSection?.list || []) as Record<
+          string,
+          unknown
+        >[];
+        const agentIdx = agentsList.findIndex((a) => a.id === id);
+        if (agentIdx === -1) {
+          return NextResponse.json(
+            { error: `Agent "${id}" not found in config` },
+            { status: 404 }
+          );
+        }
+
+        const agent = { ...agentsList[agentIdx] };
+
+        // Update model
+        if ("model" in body) {
+          const newModel = body.model as string | null;
+          const newFallbacks = (body.fallbacks || []) as string[];
+          if (!newModel) {
+            // Empty = inherit default, remove override
+            delete agent.model;
+          } else if (newFallbacks.length > 0) {
+            agent.model = { primary: newModel, fallbacks: newFallbacks };
+          } else {
+            agent.model = newModel;
+          }
+        }
+
+        // Update subagents
+        if ("subagents" in body) {
+          const subs = (body.subagents || []) as string[];
+          if (subs.length > 0) {
+            agent.subagents = {
+              ...((agent.subagents as Record<string, unknown>) || {}),
+              allowAgents: subs,
+            };
+          } else {
+            delete agent.subagents;
+          }
+        }
+
+        // Update bindings
+        if ("bindings" in body) {
+          const newBindings = (body.bindings || []) as string[];
+          // Remove existing bindings for this agent
+          const existingBindings = (
+            (config.bindings || []) as Record<string, unknown>[]
+          ).filter((b) => (b.agentId as string) !== id);
+          // Add new ones
+          for (const binding of newBindings) {
+            const parts = binding.split(":");
+            existingBindings.push({
+              agentId: id,
+              match: {
+                channel: parts[0],
+                accountId: parts[1] || "default",
+              },
+            });
+          }
+          config.bindings = existingBindings;
+        }
+
+        agentsList[agentIdx] = agent;
+        agentsSection.list = agentsList;
+
+        await writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+        return NextResponse.json({ ok: true, action: "update", id });
       }
 
       default:
