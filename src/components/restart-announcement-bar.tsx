@@ -3,7 +3,9 @@
 import { useSyncExternalStore, useCallback } from "react";
 import {
   subscribeRestartStore,
-  getRestartSnapshot,
+  isRestartNeeded,
+  getRestartReason,
+  isRestarting as getIsRestarting,
   dismissRestart,
   setRestarting,
 } from "@/lib/restart-store";
@@ -12,13 +14,14 @@ import { AlertTriangle, RefreshCw, X, Loader2 } from "lucide-react";
 /**
  * Global announcement bar shown when a config change requires a gateway restart.
  * Mounted in layout.tsx so it's visible across all views.
+ *
+ * Uses individual primitive snapshots to avoid the "getServerSnapshot must be cached"
+ * error that occurs when returning new objects from useSyncExternalStore.
  */
 export function RestartAnnouncementBar() {
-  const state = useSyncExternalStore(
-    subscribeRestartStore,
-    () => getRestartSnapshot(),
-    () => ({ needed: false, reason: "", restarting: false })
-  );
+  const needed = useSyncExternalStore(subscribeRestartStore, isRestartNeeded, () => false);
+  const reason = useSyncExternalStore(subscribeRestartStore, getRestartReason, () => "");
+  const restarting = useSyncExternalStore(subscribeRestartStore, getIsRestarting, () => false);
 
   const handleRestart = useCallback(async () => {
     setRestarting(true);
@@ -40,7 +43,7 @@ export function RestartAnnouncementBar() {
     }
   }, []);
 
-  if (!state.needed) return null;
+  if (!needed) return null;
 
   return (
     <div className="flex shrink-0 items-center gap-3 border-b border-amber-500/20 bg-amber-500/[0.06] px-5 py-2.5">
@@ -49,18 +52,18 @@ export function RestartAnnouncementBar() {
         <p className="text-[12px] font-medium text-amber-600 dark:text-amber-200">
           Configuration changed — gateway restart recommended
         </p>
-        {state.reason && (
+        {reason && (
           <p className="text-[11px] text-amber-500/70 dark:text-amber-400/60">
-            {state.reason}
+            {reason}
           </p>
         )}
       </div>
       <button
         onClick={handleRestart}
-        disabled={state.restarting}
+        disabled={restarting}
         className="flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500/15 px-4 py-1.5 text-[12px] font-semibold text-amber-700 transition-colors hover:bg-amber-500/25 disabled:opacity-60 dark:text-amber-200 dark:hover:bg-amber-500/30"
       >
-        {state.restarting ? (
+        {restarting ? (
           <>
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
             Restarting...
