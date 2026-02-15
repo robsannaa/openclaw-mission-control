@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192">
   <rect width="192" height="192" rx="32" fill="#0a0a0e"/>
   <circle cx="96" cy="80" r="36" fill="#7c3aed" opacity="0.2"/>
-  <text x="96" y="100" text-anchor="middle" font-size="72" font-family="system-ui">>ž</text>
+  <text x="96" y="100" text-anchor="middle" font-size="72" font-family="system-ui">>ï¿½</text>
   <text x="96" y="160" text-anchor="middle" font-size="16" fill="#a1a1aa" font-family="system-ui" font-weight="600">MISSION CTRL</text>
 </svg>
