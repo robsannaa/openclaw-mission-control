@@ -18,7 +18,7 @@ export function ThemeToggle() {
   const ref = useRef<HTMLDivElement>(null);
 
   // Prevent hydration mismatch
-  useEffect(() => setMounted(true), []);
+  useEffect(() => { queueMicrotask(() => setMounted(true)); }, []);
 
   // Close on click outside
   useEffect(() => {

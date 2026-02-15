@@ -196,7 +196,7 @@ function EmbeddingModelEditor({ currentProvider, currentModel, currentDims, onSa
   // Fetch authenticated providers when editor opens
   useEffect(() => {
     if (!editing) return;
-    setAuthLoading(true);
+    queueMicrotask(() => setAuthLoading(true));
     (async () => {
       try {
         const res = await fetch("/api/models");
@@ -377,9 +377,11 @@ function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]
   // Auto-select best available option
   useEffect(() => {
     if (selected) return;
-    if (authProviders.includes("openai")) { setSelected("openai"); return; }
-    if (authProviders.includes("google")) { setSelected("google"); return; }
-    setSelected("local");
+    queueMicrotask(() => {
+      if (authProviders.includes("openai")) { setSelected("openai"); return; }
+      if (authProviders.includes("google")) { setSelected("google"); return; }
+      setSelected("local");
+    });
   }, [authProviders, selected]);
 
   const recommended = SETUP_OPTIONS.find((o) => {
@@ -706,7 +708,7 @@ export function VectorView() {
             <p><span className="text-violet-400">openclaw memory status</span> <span className="text-muted-foreground/60"># Index status</span></p>
             <p><span className="text-violet-400">openclaw memory index</span> <span className="text-muted-foreground/60"># Incremental reindex</span></p>
             <p><span className="text-violet-400">openclaw memory index --force</span> <span className="text-muted-foreground/60"># Full reindex</span></p>
-            <p><span className="text-violet-400">openclaw memory search "query"</span> <span className="text-muted-foreground/60"># Semantic search</span></p>
+            <p><span className="text-violet-400">openclaw memory search &quot;query&quot;</span> <span className="text-muted-foreground/60"># Semantic search</span></p>
           </div>
         </div>
       </div>

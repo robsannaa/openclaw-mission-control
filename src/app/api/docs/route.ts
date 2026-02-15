@@ -177,7 +177,7 @@ export async function DELETE(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { action, path: filePath, newName, newPath } = body as {
+    const { action, path: filePath, newName, newPath: _newPath } = body as {
       action: "rename" | "duplicate";
       path: string;
       newName?: string;

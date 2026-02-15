@@ -21,6 +21,11 @@ import {
   Database,
   Gauge,
   Timer,
+  AlertTriangle,
+  Info,
+  ArrowRight,
+  Shield,
+  Rocket,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -524,8 +529,9 @@ const POLL_INTERVAL = 5000;
 export function DashboardView() {
   const [live, setLive] = useState<LiveData | null>(null);
   const [system, setSystem] = useState<SystemData | null>(null);
-  const [tick, setTick] = useState(0); // for countdown refresh
+  const [_tick, setTick] = useState(0); // for countdown refresh
   const [lastRefresh, setLastRefresh] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { stats: sysStats, connected: sseConnected } = useSystemStats();
@@ -540,7 +546,7 @@ export function DashboardView() {
   }, []);
 
   useEffect(() => {
-    fetchLive();
+    queueMicrotask(() => fetchLive());
     // Also fetch system data once (channels, devices, skills)
     fetch("/api/system")
       .then((r) => r.json())
@@ -548,7 +554,7 @@ export function DashboardView() {
       .catch(() => {});
 
     pollRef.current = setInterval(fetchLive, POLL_INTERVAL);
-    tickRef.current = setInterval(() => setTick((t) => t + 1), 1000);
+    tickRef.current = setInterval(() => { setTick((t) => t + 1); setNow(Date.now()); }, 1000);
 
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
@@ -567,6 +573,103 @@ export function DashboardView() {
 
   const gw = live.gateway;
   const isOnline = gw.status === "online";
+
+  // ── Issue detection ──────────────────────────────
+  type Issue = {
+    id: string;
+    severity: "critical" | "warning" | "info";
+    title: string;
+    detail: string;
+    fixLabel?: string;
+    fixHref?: string;
+  };
+
+  const issues: Issue[] = [];
+
+  // Critical: gateway offline
+  if (!isOnline) {
+    issues.push({
+      id: "gw-offline",
+      severity: "critical",
+      title: "Gateway is offline",
+      detail: "The OpenClaw gateway process is not responding. Most features will not work.",
+      fixLabel: "Restart Gateway",
+      fixHref: "/?section=system",
+    });
+  }
+
+  // Critical: cron jobs with consecutive errors
+  for (const job of live.cron.jobs) {
+    if (job.consecutiveErrors >= 3) {
+      issues.push({
+        id: `cron-err-${job.id}`,
+        severity: "critical",
+        title: `Cron "${job.name}" keeps failing`,
+        detail: `${job.consecutiveErrors} consecutive errors. Last: ${job.lastError || "unknown"}`,
+        fixLabel: "Fix Cron Job",
+        fixHref: `/?section=cron&show=errors`,
+      });
+    }
+  }
+
+  // Warning: cron jobs with missing delivery targets
+  for (const job of live.cron.jobs) {
+    if (job.lastError?.includes("delivery target is missing")) {
+      issues.push({
+        id: `cron-target-${job.id}`,
+        severity: "warning",
+        title: `"${job.name}" has no delivery target`,
+        detail: "Job runs but can't deliver results. Set a recipient (e.g. telegram:CHAT_ID).",
+        fixLabel: "Set Target",
+        fixHref: `/?section=cron&show=errors`,
+      });
+    }
+  }
+
+  // Warning: single cron error
+  for (const job of live.cron.jobs) {
+    if (job.lastStatus === "error" && (job.consecutiveErrors || 0) < 3 && !issues.find(i => i.id === `cron-err-${job.id}` || i.id === `cron-target-${job.id}`)) {
+      issues.push({
+        id: `cron-warn-${job.id}`,
+        severity: "warning",
+        title: `Cron "${job.name}" last run failed`,
+        detail: job.lastError || "Unknown error",
+        fixLabel: "View Details",
+        fixHref: `/?section=cron&show=errors`,
+      });
+    }
+  }
+
+  // Warning: no channels connected
+  if (system && system.stats.totalChannels === 0) {
+    issues.push({
+      id: "no-channels",
+      severity: "warning",
+      title: "No messaging channels connected",
+      detail: "Connect Telegram, WhatsApp, or another channel to receive agent messages.",
+      fixLabel: "Setup Channel",
+      fixHref: "/?section=agents",
+    });
+  }
+
+  // Info: no cron jobs configured
+  if (live.cron.stats.total === 0) {
+    issues.push({
+      id: "no-cron",
+      severity: "info",
+      title: "No cron jobs configured",
+      detail: "Scheduled tasks let your agent work automatically — summaries, reminders, reports.",
+      fixLabel: "Create Cron Job",
+      fixHref: "/?section=cron",
+    });
+  }
+
+  // Sort: critical → warning → info
+  const severityOrder = { critical: 0, warning: 1, info: 2 };
+  issues.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
+
+  // ── Newbie onboarding: show "what to do next" if system is fresh
+  const isFreshSetup = live.agents.length <= 1 && live.cron.stats.total === 0;
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto">
@@ -593,7 +696,7 @@ export function DashboardView() {
             </span>
           </div>
           <span className="text-[10px] text-muted-foreground/60">
-            Refreshed {Math.floor((Date.now() - lastRefresh) / 1000)}s ago &bull; auto-refresh 5s
+            Refreshed {Math.floor((now - lastRefresh) / 1000)}s ago &bull; auto-refresh 5s
           </span>
         </div>
       </div>
@@ -640,6 +743,123 @@ export function DashboardView() {
           />
         </div>
 
+        {/* ── Top Issues Now ─────────────────────────── */}
+        {issues.length > 0 && (
+          <div>
+            <h2 className="mb-2.5 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <Shield className="h-3.5 w-3.5" />
+              Top Issues
+              <span className="ml-1 rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-[10px] font-medium">
+                {issues.length}
+              </span>
+            </h2>
+            <div className="space-y-2">
+              {issues.slice(0, 5).map((issue) => {
+                const severityCfg = {
+                  critical: {
+                    border: "border-red-500/20",
+                    bg: "bg-red-500/[0.04]",
+                    icon: AlertCircle,
+                    iconColor: "text-red-400",
+                    badge: "bg-red-500/15 text-red-400",
+                    badgeLabel: "Critical",
+                  },
+                  warning: {
+                    border: "border-amber-500/20",
+                    bg: "bg-amber-500/[0.03]",
+                    icon: AlertTriangle,
+                    iconColor: "text-amber-400",
+                    badge: "bg-amber-500/15 text-amber-400",
+                    badgeLabel: "Warning",
+                  },
+                  info: {
+                    border: "border-blue-500/15",
+                    bg: "bg-blue-500/[0.02]",
+                    icon: Info,
+                    iconColor: "text-blue-400",
+                    badge: "bg-blue-500/10 text-blue-400",
+                    badgeLabel: "Info",
+                  },
+                }[issue.severity];
+                const SevIcon = severityCfg.icon;
+                return (
+                  <div
+                    key={issue.id}
+                    className={cn(
+                      "flex items-start gap-3 rounded-xl border p-3.5",
+                      severityCfg.border,
+                      severityCfg.bg
+                    )}
+                  >
+                    <SevIcon className={cn("mt-0.5 h-4 w-4 shrink-0", severityCfg.iconColor)} />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[12px] font-medium text-foreground/80">
+                          {issue.title}
+                        </p>
+                        <span className={cn("rounded-full px-1.5 py-0.5 text-[9px] font-medium", severityCfg.badge)}>
+                          {severityCfg.badgeLabel}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-[11px] text-muted-foreground/70 line-clamp-2">
+                        {issue.detail}
+                      </p>
+                    </div>
+                    {issue.fixLabel && issue.fixHref && (
+                      <a
+                        href={issue.fixHref}
+                        className="flex shrink-0 items-center gap-1 rounded-lg border border-foreground/[0.08] bg-card px-2.5 py-1.5 text-[11px] font-medium text-foreground/70 transition-colors hover:bg-muted/80 hover:text-foreground"
+                      >
+                        {issue.fixLabel}
+                        <ArrowRight className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Getting Started (newbie rails) ────────── */}
+        {isFreshSetup && issues.length === 0 && (
+          <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.03] p-5">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/15">
+                <Rocket className="h-5 w-5 text-violet-400" />
+              </div>
+              <div>
+                <h3 className="text-[14px] font-semibold text-foreground/90">
+                  Welcome to Mission Control
+                </h3>
+                <p className="mt-1 text-[12px] text-muted-foreground/70">
+                  Your OpenClaw agent is running. Here are some things to try:
+                </p>
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    { label: "Chat with your agent", href: "/?section=chat", desc: "Send a message and see it respond" },
+                    { label: "Create a cron job", href: "/?section=cron", desc: "Schedule tasks like daily briefs" },
+                    { label: "Connect a channel", href: "/?section=agents", desc: "Link Telegram, WhatsApp, etc." },
+                    { label: "Explore skills", href: "/?section=skills", desc: "See what your agent can do" },
+                  ].map((item) => (
+                    <a
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center gap-2.5 rounded-lg border border-foreground/[0.06] bg-card/80 px-3 py-2.5 transition-colors hover:border-violet-500/20 hover:bg-violet-500/[0.04]"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] font-medium text-foreground/80">{item.label}</p>
+                        <p className="text-[10px] text-muted-foreground/60">{item.desc}</p>
+                      </div>
+                      <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+                    </a>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── Main grid: Agents + Cron ──────────────── */}
         <div className="grid gap-5 lg:grid-cols-2">
           {/* Agents */}
@@ -670,7 +890,7 @@ export function DashboardView() {
                     <div
                       className={cn(
                         "h-2 w-2 rounded-full",
-                        Date.now() - agent.lastActivity < 300000
+                        now - agent.lastActivity < 300000
                           ? "bg-emerald-500"
                           : "bg-zinc-600"
                       )}

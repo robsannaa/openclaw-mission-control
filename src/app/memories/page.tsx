@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 
 async function getWorkspaceData() {
   try {
@@ -21,7 +20,7 @@ export default async function MemoriesPage() {
   const memories = data.memories || [];
 
   // Sort by date descending
-  memories.sort((a: any, b: any) => b.date.localeCompare(a.date));
+  memories.sort((a: { date: string }, b: { date: string }) => b.date.localeCompare(a.date));
 
   return (
     <div className="p-6 h-full">
@@ -35,7 +34,7 @@ export default async function MemoriesPage() {
           {memories.length === 0 ? (
             <p className="text-muted-foreground">No memories found</p>
           ) : (
-            memories.map((memory: any) => (
+            memories.map((memory: { date: string; content: string }) => (
               <Card key={memory.date}>
                 <CardHeader className="py-3">
                   <div className="flex items-center justify-between">

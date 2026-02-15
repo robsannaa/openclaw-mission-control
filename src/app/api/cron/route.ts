@@ -81,7 +81,7 @@ async function collectKnownTargets(): Promise<
             origin?: { from?: string; to?: string; surface?: string };
           }
         >;
-        for (const [key, sess] of Object.entries(sessions)) {
+        for (const [_key, sess] of Object.entries(sessions)) {
           // deliveryContext.to is the most reliable source
           if (sess.deliveryContext?.to) {
             const to = sess.deliveryContext.to;
@@ -212,6 +212,94 @@ export async function POST(request: NextRequest) {
         if (params.announce === false) args.push("--no-deliver");
         await runCli(args, 10000);
         return NextResponse.json({ ok: true, action: "edited", id });
+      }
+
+      case "create": {
+        // Build `openclaw cron add` command with all provided params
+        const args = ["cron", "add"];
+
+        // Required: name
+        if (!params.name) return NextResponse.json({ error: "name is required" }, { status: 400 });
+        args.push("--name", String(params.name));
+
+        // Optional description
+        if (params.description) args.push("--description", String(params.description));
+
+        // Agent
+        if (params.agent) args.push("--agent", String(params.agent));
+
+        // Schedule (exactly one of: --cron, --every, --at)
+        if (params.scheduleKind === "cron") {
+          if (!params.cronExpr) return NextResponse.json({ error: "cron expression is required" }, { status: 400 });
+          args.push("--cron", String(params.cronExpr));
+        } else if (params.scheduleKind === "every") {
+          if (!params.everyInterval) return NextResponse.json({ error: "interval is required" }, { status: 400 });
+          args.push("--every", String(params.everyInterval));
+        } else if (params.scheduleKind === "at") {
+          if (!params.atTime) return NextResponse.json({ error: "time is required" }, { status: 400 });
+          args.push("--at", String(params.atTime));
+        } else {
+          return NextResponse.json({ error: "scheduleKind must be cron, every, or at" }, { status: 400 });
+        }
+
+        // Timezone
+        if (params.tz) args.push("--tz", String(params.tz));
+
+        // Session target
+        if (params.sessionTarget === "isolated") {
+          args.push("--session", "isolated");
+        } else {
+          args.push("--session", "main");
+        }
+
+        // Wake mode
+        if (params.wakeMode) args.push("--wake", String(params.wakeMode));
+
+        // Payload kind
+        if (params.payloadKind === "systemEvent") {
+          if (params.message) args.push("--system-event", String(params.message));
+        } else {
+          // Default: agentTurn
+          if (params.message) args.push("--message", String(params.message));
+        }
+
+        // Model override
+        if (params.model) args.push("--model", String(params.model));
+
+        // Thinking level
+        if (params.thinking) args.push("--thinking", String(params.thinking));
+
+        // Delivery
+        if (params.deliveryMode === "announce") {
+          args.push("--announce");
+          if (params.channel) args.push("--channel", String(params.channel));
+          if (params.to) args.push("--to", String(params.to));
+          if (params.bestEffort) args.push("--best-effort-deliver");
+        } else {
+          args.push("--no-deliver");
+        }
+
+        // Delete after run (for one-shot "at" jobs)
+        if (params.deleteAfterRun === true) args.push("--delete-after-run");
+        if (params.deleteAfterRun === false) args.push("--keep-after-run");
+
+        // Start disabled
+        if (params.disabled === true) args.push("--disabled");
+
+        const stdout = await runCli(args, 15000);
+
+        // Try to extract the created job ID from CLI output
+        let createdId: string | null = null;
+        try {
+          const parsed = JSON.parse(stdout);
+          createdId = parsed.id || parsed.jobId || null;
+        } catch {
+          // Try to extract UUID from raw output
+          const match = stdout.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+          if (match) createdId = match[0];
+        }
+
+        return NextResponse.json({ ok: true, action: "created", id: createdId, raw: stdout });
       }
 
       default:

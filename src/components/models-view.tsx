@@ -530,7 +530,7 @@ function ModelPicker({
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData, refreshKey]);
+  useEffect(() => { queueMicrotask(() => fetchData()); }, [fetchData, refreshKey]);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
 

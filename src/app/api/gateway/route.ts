@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { runCliJson, runCli } from "@/lib/openclaw-cli";
-import { getOpenClawBin } from "@/lib/paths";
+import { runCliJson } from "@/lib/openclaw-cli";
+import { getOpenClawBin, getGatewayPort } from "@/lib/paths";
 import { execFile } from "child_process";
 import { promisify } from "util";
 
@@ -70,10 +70,11 @@ export async function POST(req: Request) {
         // pgrep returns exit code 1 if no match
       }
 
-      // Also try lsof on port 18789
+      // Also try lsof on the configured gateway port
       if (!pid) {
         try {
-          const { stdout } = await exec("lsof", ["-i", ":18789", "-t"], {
+          const gwPort = await getGatewayPort();
+          const { stdout } = await exec("lsof", ["-i", `:${gwPort}`, "-t"], {
             timeout: 5000,
           });
           const pids = stdout

@@ -28,10 +28,6 @@ type LogEntry = {
  */
 export const dynamic = "force-dynamic";
 
-// ── Timestamp regex: matches ISO timestamps with optional TZ ──
-// e.g. 2026-02-15T11:42:44.845Z  or  2026-02-15T12:52:56.793+01:00
-const TS_RE = /^(\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2}))/;
-
 // Full structured line: timestamp [source] message
 const STRUCTURED_RE =
   /^(\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2}))\s+\[([^\]]+)\]\s+(.*)/;

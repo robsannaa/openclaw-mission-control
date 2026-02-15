@@ -160,7 +160,12 @@ function PendingRequestCard({
   onApprove: () => void;
   onReject: () => void;
 }) {
-  const isExpired = request.expiresAtMs <= Date.now();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const isExpired = request.expiresAtMs <= now;
 
   return (
     <div
@@ -263,9 +268,15 @@ function PairedDeviceCard({
   const [expanded, setExpanded] = useState(false);
   const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
 
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
   // Most recent token usage
   const lastUsed = Math.max(0, ...device.tokens.map((t) => t.lastUsedAtMs || 0));
-  const isRecent = Date.now() - lastUsed < 300000; // 5 min
+  const isRecent = now - lastUsed < 300000; // 5 min
 
   return (
     <div className="rounded-xl border border-foreground/[0.06] bg-card/80 transition-colors hover:bg-card">

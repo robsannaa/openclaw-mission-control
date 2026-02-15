@@ -376,7 +376,7 @@ export function DocsView() {
   }, []);
 
   useEffect(() => {
-    fetchDocs();
+    queueMicrotask(() => fetchDocs());
   }, [fetchDocs]);
 
   // Close context menu on click outside / escape

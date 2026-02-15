@@ -22,7 +22,7 @@ export default async function TasksPage() {
   const tasks = kanban?.tasks || [];
 
   const getTasksByColumn = (columnId: string) => 
-    tasks.filter((t: any) => t.column === columnId);
+    tasks.filter((t: { column: string }) => t.column === columnId);
 
   return (
     <div className="p-6 h-full">
@@ -33,7 +33,7 @@ export default async function TasksPage() {
 
       <ScrollArea className="h-[calc(100vh-150px)]">
         <div className="flex gap-4 h-full">
-          {columns.map((column: any) => (
+          {columns.map((column: { id: string; title: string; color: string }) => (
             <div 
               key={column.id} 
               className="flex-1 min-w-[250px] max-w-[350px]"
@@ -51,7 +51,7 @@ export default async function TasksPage() {
               </div>
               
               <div className="space-y-3">
-                {getTasksByColumn(column.id).map((task: any) => (
+                {getTasksByColumn(column.id).map((task: { id: string; title: string; description?: string; priority?: string; tags?: string[]; assignee?: string; column: string }) => (
                   <Card key={task.id} className="hover:shadow-md transition-shadow">
                     <CardHeader className="py-3 pb-1">
                       <div className="flex items-start justify-between">

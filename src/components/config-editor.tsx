@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { requestRestart } from "@/lib/restart-store";
 import {
   ChevronDown,
@@ -106,17 +106,6 @@ const SENSITIVE_SECTIONS = new Set(["env", "auth"]);
    Helpers
    ================================================================ */
 
-/** Get a nested value by dot-path from an object */
-function getDeep(obj: unknown, path: string): unknown {
-  const parts = path.split(".");
-  let cur = obj;
-  for (const p of parts) {
-    if (cur == null || typeof cur !== "object") return undefined;
-    cur = (cur as Record<string, unknown>)[p];
-  }
-  return cur;
-}
-
 /** Set a nested value by dot-path (returns a new object) */
 function setDeep(
   obj: Record<string, unknown>,
@@ -137,33 +126,6 @@ function setDeep(
     cur = cur[p] as Record<string, unknown>;
   }
   cur[parts[parts.length - 1]] = value;
-  return result;
-}
-
-/** Delete a nested key by dot-path (returns a new object) */
-function deleteDeep(
-  obj: Record<string, unknown>,
-  path: string
-): Record<string, unknown> {
-  const parts = path.split(".");
-  if (parts.length === 1) {
-    const r = { ...obj };
-    delete r[parts[0]];
-    return r;
-  }
-  const result = { ...obj };
-  let cur: Record<string, unknown> = result;
-  for (let i = 0; i < parts.length - 1; i++) {
-    const p = parts[i];
-    const existing = cur[p];
-    if (existing && typeof existing === "object" && !Array.isArray(existing)) {
-      cur[p] = { ...(existing as Record<string, unknown>) };
-    } else {
-      return result; // path doesn't exist
-    }
-    cur = cur[p] as Record<string, unknown>;
-  }
-  delete cur[parts[parts.length - 1]];
   return result;
 }
 

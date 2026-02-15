@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { MessageCircle, X } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 type ToastItem = {
   id: string;
@@ -75,7 +74,7 @@ export function ChatNotificationToast() {
 
   return (
     <div className="fixed right-2 top-14 z-[100] flex max-w-[calc(100vw-1rem)] flex-col gap-2 sm:right-4">
-      {toasts.map((toast, i) => (
+      {toasts.map((toast) => (
         <div
           key={toast.id}
           className="flex items-center gap-3 rounded-xl border border-violet-500/20 bg-card/95 px-4 py-3 shadow-2xl backdrop-blur-sm animate-in slide-in-from-right-5 fade-in duration-300"

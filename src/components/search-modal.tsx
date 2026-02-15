@@ -7,7 +7,7 @@ import {
   useCallback,
   Fragment,
 } from "react";
-import { Search, FileText, X, Brain, Loader2 } from "lucide-react";
+import { Search, Brain, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* ── types ────────────────────────────────────────── */

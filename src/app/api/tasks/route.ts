@@ -8,11 +8,6 @@ async function getKanbanPath(): Promise<string> {
   return join(ws, "kanban.json");
 }
 
-async function getTasksMemoryPath(): Promise<string> {
-  const ws = await getDefaultWorkspace();
-  return join(ws, "TASKS.md");
-}
-
 const DEFAULT_COLUMNS = [
   { id: "backlog", title: "Backlog", color: "#6b7280" },
   { id: "in-progress", title: "In Progress", color: "#f59e0b" },
@@ -51,7 +46,7 @@ export async function PUT(request: NextRequest) {
     }
     const kanbanPath = await getKanbanPath();
     // Strip internal fields before saving
-    const { _fileExists, ...saveData } = body;
+    const { _fileExists: __fileExists, ...saveData } = body;
     await writeFile(kanbanPath, JSON.stringify(saveData, null, 2), "utf-8");
     return NextResponse.json({ ok: true });
   } catch (err) {

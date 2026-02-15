@@ -35,7 +35,7 @@ export default async function SettingsPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {cronJobs.map((job: any, i: number) => (
+                {cronJobs.map((job: { name: string; schedule: string; enabled?: boolean }, i: number) => (
                   <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
                     <div>
                       <p className="font-medium">{job.name}</p>

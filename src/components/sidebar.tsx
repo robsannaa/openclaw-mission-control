@@ -16,6 +16,7 @@ import {
   Wrench,
   MessageCircle,
   Terminal,
+  SquareTerminal,
   RefreshCw,
   Power,
   Cpu,
@@ -48,6 +49,7 @@ const navItems: {
   { section: "models", label: "Models", icon: Cpu },
   { section: "usage", label: "Usage", icon: BarChart3 },
   { section: "audio", label: "Audio & Voice", icon: Volume2 },
+  { section: "terminal", label: "Terminal", icon: SquareTerminal, dividerAfter: true },
   { section: "logs", label: "Logs", icon: Terminal },
   { section: "config", label: "Config", icon: Settings },
 ];
@@ -129,54 +131,97 @@ function GatewayBadge() {
   const [restarting, setRestarting] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
-  const checkStatus = useCallback(() => {
-    fetch("/api/gateway")
-      .then((r) => r.json())
-      .then((data) => {
-        setStatus(data.status as GatewayStatus);
-      })
-      .catch(() => setStatus("offline"));
-  }, []);
-
   useEffect(() => {
-    checkStatus();
-    const interval = setInterval(checkStatus, 10000);
-    return () => clearInterval(interval);
-  }, [checkStatus]);
+    let active = true;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let fastPollCount = 0;
+
+    const poll = () => {
+      fetch("/api/gateway")
+        .then((r) => r.json())
+        .then((data) => {
+          if (!active) return;
+          const newStatus = data.status as GatewayStatus;
+          setStatus(newStatus);
+          // If we were fast-polling and gateway is back online, revert to normal
+          if (fastPollCount > 0 && newStatus === "online") {
+            fastPollCount = 0;
+            switchToNormalPoll();
+          }
+        })
+        .catch(() => { if (active) setStatus("offline"); });
+    };
+
+    const switchToNormalPoll = () => {
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(poll, 10000);
+    };
+
+    const switchToFastPoll = () => {
+      if (intervalId) clearInterval(intervalId);
+      fastPollCount = 1;
+      intervalId = setInterval(() => {
+        fastPollCount++;
+        if (fastPollCount > 30) switchToNormalPoll();
+        else poll();
+      }, 2000);
+    };
+
+    const handleRestarting = () => {
+      if (active) {
+        setStatus("loading");
+        setRestarting(true);
+        switchToFastPoll();
+        setTimeout(poll, 1500);
+        setTimeout(() => { if (active) setRestarting(false); }, 5000);
+      }
+    };
+
+    window.addEventListener("gateway-restarting", handleRestarting);
+    poll();
+    intervalId = setInterval(poll, 10000);
+
+    return () => {
+      active = false;
+      if (intervalId) clearInterval(intervalId);
+      window.removeEventListener("gateway-restarting", handleRestarting);
+    };
+  }, []);
 
   const handleRestart = useCallback(async () => {
     setRestarting(true);
     setShowMenu(false);
+    // Notify both header and sidebar status badges
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("gateway-restarting"));
+    }
     try {
       await fetch("/api/gateway", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "restart" }),
       });
-      // Wait then recheck
-      setStatus("loading");
-      setTimeout(checkStatus, 5000);
-      setTimeout(checkStatus, 10000);
     } catch {
       // ignore
     }
-    setTimeout(() => setRestarting(false), 3000);
-  }, [checkStatus]);
+  }, []);
 
   const handleStop = useCallback(async () => {
     setShowMenu(false);
+    // Notify both header and sidebar status badges
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("gateway-restarting"));
+    }
     try {
       await fetch("/api/gateway", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "stop" }),
       });
-      setStatus("loading");
-      setTimeout(checkStatus, 3000);
     } catch {
       // ignore
     }
-  }, [checkStatus]);
+  }, []);
 
   return (
     <div className="relative">

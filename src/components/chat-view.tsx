@@ -534,6 +534,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   const [selectedAgent, setSelectedAgent] = useState<string>("main");
   const [agentsLoading, setAgentsLoading] = useState(true);
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Track which agents have been "opened" (we'll mount their ChatPanel forever)
@@ -566,10 +567,15 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   }, [selectedAgent]);
 
   useEffect(() => {
-    fetchAgents();
+    queueMicrotask(() => fetchAgents());
     const interval = setInterval(fetchAgents, 30000);
     return () => clearInterval(interval);
   }, [fetchAgents]);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(id);
+  }, []);
 
   // When user selects an agent, ensure it's in the mounted set
   const selectAgent = useCallback((agentId: string) => {
@@ -666,7 +672,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                               {agent.name}
                             </span>
                             {agent.lastActive &&
-                              Date.now() - agent.lastActive < 300000 && (
+                              now - agent.lastActive < 300000 && (
                                 <Circle className="h-2 w-2 fill-emerald-400 text-emerald-400" />
                               )}
                           </div>

@@ -152,6 +152,58 @@ export function getOpenClawBinSync(): string {
   return _bin || process.env.OPENCLAW_BIN || "openclaw";
 }
 
+// ── Gateway URL ─────────────────────────────────
+
+let _gatewayUrl: string | null = null;
+
+/**
+ * Resolve the gateway URL.
+ * Priority:
+ *   1. OPENCLAW_GATEWAY_URL env var
+ *   2. gateway.port from openclaw.json → http://127.0.0.1:{port}
+ *   3. http://127.0.0.1:18789
+ */
+export async function getGatewayUrl(): Promise<string> {
+  if (_gatewayUrl) return _gatewayUrl;
+
+  // 1. Env var
+  if (process.env.OPENCLAW_GATEWAY_URL) {
+    _gatewayUrl = process.env.OPENCLAW_GATEWAY_URL;
+    return _gatewayUrl;
+  }
+
+  // 2. Read from config
+  try {
+    const { readFile } = await import("fs/promises");
+    const configPath = join(getOpenClawHome(), "openclaw.json");
+    const raw = await readFile(configPath, "utf-8");
+    const config = JSON.parse(raw);
+    const port = config?.gateway?.port;
+    if (port && typeof port === "number") {
+      _gatewayUrl = `http://127.0.0.1:${port}`;
+      return _gatewayUrl;
+    }
+  } catch {
+    // Config doesn't exist or is invalid — fall through
+  }
+
+  // 3. Conventional default
+  _gatewayUrl = "http://127.0.0.1:18789";
+  return _gatewayUrl;
+}
+
+/** Extract the port number from the resolved gateway URL. */
+export async function getGatewayPort(): Promise<number> {
+  const url = await getGatewayUrl();
+  try {
+    const parsed = new URL(url);
+    const port = parseInt(parsed.port, 10);
+    return isNaN(port) ? 18789 : port;
+  } catch {
+    return 18789;
+  }
+}
+
 // ── System skills directory ──────────────────────
 
 let _skills: string | null = null;

@@ -296,7 +296,7 @@ export async function POST(request: NextRequest) {
 
         const updatedList = list2.map((a, i) => {
           if (i !== agentIdx) return a;
-          const { model: _removed, ...rest } = a;
+          const { model: __removed, ...rest } = a;
           return rest;
         });
 

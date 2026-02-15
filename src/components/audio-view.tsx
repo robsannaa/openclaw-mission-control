@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { requestRestart } from "@/lib/restart-store";
 import {
   Volume2,
-  VolumeX,
   Play,
   Pause,
   Mic,
@@ -23,6 +22,8 @@ import {
   Loader2,
   X,
   Ear,
+  Sparkles,
+  RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -328,7 +329,7 @@ function AudioPlayer({
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [ready, setReady] = useState(false);
+  const [_ready, setReady] = useState(false);
 
   const audioUrl = `/api/audio?scope=stream&path=${encodeURIComponent(result.path)}`;
 
@@ -471,34 +472,92 @@ function AudioPlayer({
 /* ── TTS Test Panel ─────────────────────────────── */
 
 function TtsTestPanel({ onTest, testing }: { onTest: (text: string, provider?: string, voice?: string) => void; testing: boolean }) {
-  const [text, setText] = useState("Hello! This is a test of the text to speech system. How does this sound?");
+  const [text, setText] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [personalized, setPersonalized] = useState(false);
+  const hasFetched = useRef(false);
 
-  const handleTest = () => {
-    onTest(text);
-  };
+  // Auto-generate a personalized phrase on mount
+  const generatePhrase = useCallback(async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/audio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generate-phrase" }),
+      });
+      const data = await res.json();
+      if (data.ok && data.phrase) {
+        setText(data.phrase);
+        setPersonalized(true);
+      }
+    } catch {
+      // Fallback if API fails
+      setText("Hello! This is a test of the text to speech system.");
+    }
+    setGenerating(false);
+  }, []);
+
+  useEffect(() => {
+    if (hasFetched.current) return;
+    hasFetched.current = true;
+    queueMicrotask(() => generatePhrase());
+  }, [generatePhrase]);
 
   return (
     <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4 space-y-3">
-      <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90">
-        <Headphones className="h-4 w-4 text-violet-400" />
-        Generate Sample Voice
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90">
+          <Headphones className="h-4 w-4 text-violet-400" />
+          Generate Sample Voice
+        </div>
+        <button
+          type="button"
+          onClick={generatePhrase}
+          disabled={generating}
+          className="flex items-center gap-1 rounded-md px-2 py-1 text-[10px] text-muted-foreground/60 transition-colors hover:bg-foreground/[0.05] hover:text-foreground/80 disabled:opacity-40"
+          title="Generate a new personalized phrase"
+        >
+          {generating ? (
+            <Loader2 className="h-3 w-3 animate-spin" />
+          ) : (
+            <RotateCcw className="h-3 w-3" />
+          )}
+          New phrase
+        </button>
       </div>
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        rows={3}
-        className="w-full rounded-lg border border-foreground/[0.08] bg-muted px-3 py-2 text-[13px] text-foreground/90 placeholder-zinc-600 outline-none focus:border-violet-500/30 resize-none"
-        placeholder="Enter text to convert to speech..."
-      />
+
+      {generating && !text ? (
+        <div className="flex items-center gap-2 rounded-lg border border-foreground/[0.08] bg-muted px-3 py-3 text-[12px] text-muted-foreground/50">
+          <Sparkles className="h-3.5 w-3.5 animate-pulse text-violet-400" />
+          Crafting a personalized message just for you...
+        </div>
+      ) : (
+        <textarea
+          value={text}
+          onChange={(e) => { setText(e.target.value); setPersonalized(false); }}
+          rows={3}
+          className="w-full rounded-lg border border-foreground/[0.08] bg-muted px-3 py-2 text-[13px] text-foreground/90 placeholder-zinc-600 outline-none focus:border-violet-500/30 resize-none"
+          placeholder="Enter text to convert to speech..."
+        />
+      )}
+
+      {personalized && text && (
+        <p className="flex items-center gap-1 text-[10px] text-violet-400/70">
+          <Sparkles className="h-2.5 w-2.5" />
+          Personalized from your profile & agent context
+        </p>
+      )}
+
       <button
-        onClick={handleTest}
-        disabled={testing || !text.trim()}
+        onClick={() => onTest(text)}
+        disabled={testing || !text.trim() || generating}
         className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-[13px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
       >
         {testing ? (
           <>
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Generating...
+            Generating audio...
           </>
         ) : (
           <>
@@ -736,8 +795,10 @@ function TtsSettingsPanel({
 
   // Re-sync local state when props change after a refetch
   useEffect(() => {
-    setSummaryThreshold(prefs?.maxLength?.toString() || "1500");
-    setSummarize(prefs?.summarize !== false);
+    queueMicrotask(() => {
+      setSummaryThreshold(prefs?.maxLength?.toString() || "1500");
+      setSummarize(prefs?.summarize !== false);
+    });
   }, [prefs]);
 
   return (
@@ -756,7 +817,7 @@ function TtsSettingsPanel({
           <span className="rounded-md border border-violet-500/30 bg-violet-500/15 px-2 py-1 text-[12px] font-medium text-violet-300">
             {status.provider}
           </span>
-          {status.fallbackProviders?.map((fp, i) => (
+          {status.fallbackProviders?.map((fp) => (
             <div key={fp} className="flex items-center gap-2">
               <span className="text-[10px] text-muted-foreground/60">→</span>
               <span className="rounded-md border border-foreground/[0.08] bg-foreground/[0.03] px-2 py-1 text-[12px] text-muted-foreground">

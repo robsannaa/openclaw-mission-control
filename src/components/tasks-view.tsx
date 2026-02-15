@@ -10,10 +10,7 @@ import {
   X,
   Check,
   ListChecks,
-  Sparkles,
   FileJson,
-  ArrowRight,
-  Lightbulb,
   Loader2,
   Rocket,
   Bot,
@@ -418,7 +415,7 @@ function TaskCard({
 
   useEffect(() => {
     if (isRenaming) {
-      setRenameValue(task.title);
+      queueMicrotask(() => setRenameValue(task.title));
       setTimeout(() => {
         renameRef.current?.focus();
         renameRef.current?.select();

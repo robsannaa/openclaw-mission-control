@@ -111,7 +111,7 @@ export function LogsView() {
 
   // Initial fetch + auto-refresh
   useEffect(() => {
-    fetchLogs();
+    queueMicrotask(() => fetchLogs());
     if (autoRefresh) {
       timerRef.current = setInterval(fetchLogs, 3000);
     }

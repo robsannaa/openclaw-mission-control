@@ -61,7 +61,7 @@ export function SessionsView() {
   }, []);
 
   useEffect(() => {
-    fetchSessions();
+    queueMicrotask(() => fetchSessions());
   }, [fetchSessions]);
 
   const killSession = useCallback(

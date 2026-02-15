@@ -77,14 +77,14 @@ function formatTimeAgo(dateStr?: string, ms?: number): string {
   return Math.floor(ago / 86400000) + "d ago";
 }
 
-function platformIcon(platform?: string) {
-  if (!platform) return Monitor;
+function PlatformIcon({ platform, className }: { platform?: string; className?: string }) {
+  if (!platform) return <Monitor className={className} />;
   const p = platform.toLowerCase();
   if (p.includes("iphone") || p.includes("ios") || p.includes("android"))
-    return Smartphone;
+    return <Smartphone className={className} />;
   if (p.includes("mac") || p.includes("darwin") || p.includes("linux"))
-    return Monitor;
-  return Globe;
+    return <Monitor className={className} />;
+  return <Globe className={className} />;
 }
 
 /* ── DM Request Card ──────────────────────────────── */
@@ -182,12 +182,11 @@ function DeviceRequestCard({
   onReject: () => void;
   busy: boolean;
 }) {
-  const PlatformIcon = platformIcon(req.platform);
   return (
     <div className="rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] p-3 transition-all hover:border-foreground/[0.1]">
       <div className="flex items-start gap-2.5">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/20 text-amber-400">
-          <PlatformIcon className="h-4 w-4" />
+          <PlatformIcon platform={req.platform} className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">

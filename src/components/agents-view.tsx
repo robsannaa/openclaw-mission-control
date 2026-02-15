@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import Link from "next/link";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -41,6 +42,13 @@ import {
   X,
   Loader2,
   Sparkles,
+  Search,
+  Key,
+  ShieldCheck,
+  Star,
+  ExternalLink,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { requestRestart } from "@/lib/restart-store";
@@ -235,7 +243,7 @@ function ChannelNodeComponent({ data }: NodeProps) {
 
   return (
     <div className="flex items-center gap-2 rounded-lg border border-sky-500/20 bg-sky-950/50 px-3 py-2 min-w-[120px]">
-      <Handle type="target" position={Position.Right} className="!bg-sky-500 !border-sky-400 !w-2 !h-2" />
+      <Handle type="source" position={Position.Right} className="!bg-sky-500 !border-sky-400 !w-2 !h-2" />
       <span className="text-lg">{channelIcon(d.channel)}</span>
       <div>
         <p className="text-[11px] font-semibold text-sky-200 capitalize">
@@ -455,14 +463,13 @@ function buildGraph(
       draggable: true,
     });
 
-    // Channel ← Agent (agent pushes to channel)
-    // Connect the channel to ALL agents that use it
+    // Channel → Agent (channel sends messages into the agent)
     for (const a of agents) {
       if (a.channels.includes(ch)) {
         edges.push({
           id: `ch-${ch}-${a.id}`,
-          source: `agent-${a.id}`,
-          target: nodeId,
+          source: nodeId,
+          target: `agent-${a.id}`,
           type: "default",
           style: { stroke: "#0ea5e9", strokeWidth: 1.5 },
           markerEnd: {
@@ -763,7 +770,7 @@ function CopyBtn({ text }: { text: string }) {
 
 function SummaryBar({ agents }: { agents: Agent[] }) {
   const totalSessions = agents.reduce((s, a) => s + a.sessionCount, 0);
-  const totalTokens = agents.reduce((s, a) => s + a.totalTokens, 0);
+  const _totalTokens = agents.reduce((s, a) => s + a.totalTokens, 0);
   const activeCount = agents.filter((a) => a.status === "active").length;
   const channelSet = new Set(agents.flatMap((a) => a.channels));
 
@@ -913,11 +920,6 @@ function FlowViewInner({
     [onNodesChange]
   );
 
-  // Use onNodesInitialized to fit after nodes are measured
-  const handleNodesInitialized = useCallback(() => {
-    fitView({ padding: 0.15, duration: 250 });
-  }, [fitView]);
-
   return (
     <ReactFlow
       nodes={nodes}
@@ -1007,15 +1009,916 @@ type AvailableModel = {
   contextWindow: number;
 };
 
-const CHANNEL_OPTIONS = [
-  { value: "whatsapp", label: "WhatsApp", icon: "💬", hint: "Phone number or account label" },
-  { value: "telegram", label: "Telegram", icon: "✈️", hint: "Bot username or account ID" },
-  { value: "discord", label: "Discord", icon: "🎮", hint: "Server or account ID" },
-  { value: "slack", label: "Slack", icon: "💼", hint: "Workspace or channel" },
-  { value: "imessage", label: "iMessage", icon: "🍎", hint: "Apple ID or phone" },
-  { value: "mattermost", label: "Mattermost", icon: "📡", hint: "Team or channel" },
-  { value: "web", label: "Web / API", icon: "🌐", hint: "Session label" },
+type AuthProviderInfo = {
+  provider: string;
+  authenticated: boolean;
+  authKind: string | null;
+};
+
+/* ── Provider metadata for display ── */
+
+const PROVIDER_META: Record<string, { label: string; icon: string; color: string; keyUrl?: string; keyHint: string }> = {
+  anthropic: { label: "Anthropic", icon: "🟣", color: "violet", keyUrl: "https://console.anthropic.com/settings/keys", keyHint: "sk-ant-..." },
+  openai: { label: "OpenAI", icon: "🟢", color: "emerald", keyUrl: "https://platform.openai.com/api-keys", keyHint: "sk-..." },
+  google: { label: "Google", icon: "🔵", color: "blue", keyUrl: "https://aistudio.google.com/apikey", keyHint: "AIza..." },
+  openrouter: { label: "OpenRouter", icon: "🟠", color: "orange", keyUrl: "https://openrouter.ai/keys", keyHint: "sk-or-..." },
+  minimax: { label: "MiniMax", icon: "🟡", color: "yellow", keyUrl: "https://platform.minimaxi.com/", keyHint: "eyJ..." },
+  groq: { label: "Groq", icon: "⚡", color: "cyan", keyUrl: "https://console.groq.com/keys", keyHint: "gsk_..." },
+  xai: { label: "xAI", icon: "𝕏", color: "zinc", keyUrl: "https://console.x.ai/", keyHint: "xai-..." },
+  mistral: { label: "Mistral", icon: "🌊", color: "sky", keyUrl: "https://console.mistral.ai/api-keys/", keyHint: "" },
+  zai: { label: "Z.AI", icon: "💎", color: "indigo", keyHint: "" },
+  cerebras: { label: "Cerebras", icon: "🧠", color: "pink", keyHint: "" },
+  ollama: { label: "Ollama (local)", icon: "🦙", color: "lime", keyHint: "Local — no key needed" },
+};
+
+const RECOMMENDED_MODELS = [
+  "anthropic/claude-opus-4-6",
+  "anthropic/claude-sonnet-4-5",
+  "openai/gpt-5.2",
+  "anthropic/claude-sonnet-4",
+  "google/gemini-2.5-pro",
+  "minimax/MiniMax-M2.5",
 ];
+
+/* ── Model Picker: grouped by provider, with auth flow ── */
+
+function ModelPicker({
+  value,
+  onChange,
+  defaultModel,
+  disabled,
+}: {
+  value: string;
+  onChange: (model: string) => void;
+  defaultModel: string;
+  disabled: boolean;
+}) {
+  const [models, setModels] = useState<AvailableModel[]>([]);
+  const [authProviders, setAuthProviders] = useState<AuthProviderInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const [addingProvider, setAddingProvider] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [savingKey, setSavingKey] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const fetchModels = useCallback(async () => {
+    try {
+      const res = await fetch("/api/models?scope=all");
+      const data = await res.json();
+      setModels((data.models || []) as AvailableModel[]);
+      setAuthProviders((data.authProviders || []) as AuthProviderInfo[]);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { queueMicrotask(() => fetchModels()); }, [fetchModels]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as globalThis.Node)) {
+        setOpen(false);
+        setAddingProvider(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  // Focus search when open
+  useEffect(() => {
+    if (open) setTimeout(() => searchRef.current?.focus(), 50);
+  }, [open]);
+
+  // Derive authenticated provider set
+  const authedProviders = useMemo(
+    () => new Set(authProviders.filter((p) => p.authenticated).map((p) => p.provider)),
+    [authProviders]
+  );
+
+  // Split models: available (authed) vs unavailable
+  const { availableModels, groupedAvailable, unauthProviders } = useMemo(() => {
+    const avail = models.filter((m) => m.available || m.local);
+    const unavail = models.filter((m) => !m.available && !m.local);
+
+    // Group available models by provider
+    const grouped: Record<string, AvailableModel[]> = {};
+    for (const m of avail) {
+      const provider = m.key.split("/")[0] || "other";
+      if (!grouped[provider]) grouped[provider] = [];
+      grouped[provider].push(m);
+    }
+    // Sort each group
+    for (const key of Object.keys(grouped)) {
+      grouped[key].sort((a, b) => (a.name || a.key).localeCompare(b.name || b.key));
+    }
+
+    // Find providers that have models but aren't authenticated
+    const unavailProviders = new Set<string>();
+    for (const m of unavail) {
+      const p = m.key.split("/")[0];
+      if (p && !authedProviders.has(p)) unavailProviders.add(p);
+    }
+
+    return {
+      availableModels: avail,
+      groupedAvailable: grouped,
+      unauthProviders: [...unavailProviders].sort(),
+    };
+  }, [models, authedProviders]);
+
+  // Filter by search
+  const filteredGroups = useMemo(() => {
+    if (!search.trim()) return groupedAvailable;
+    const q = search.toLowerCase();
+    const result: Record<string, AvailableModel[]> = {};
+    for (const [provider, items] of Object.entries(groupedAvailable)) {
+      const filtered = items.filter(
+        (m) =>
+          m.key.toLowerCase().includes(q) ||
+          (m.name || "").toLowerCase().includes(q) ||
+          provider.toLowerCase().includes(q)
+      );
+      if (filtered.length > 0) result[provider] = filtered;
+    }
+    return result;
+  }, [groupedAvailable, search]);
+
+  // Provider order: prioritize recommended providers
+  const providerOrder = useMemo(() => {
+    const priority = ["anthropic", "openai", "google", "minimax", "ollama"];
+    const keys = Object.keys(filteredGroups);
+    const sorted = [
+      ...priority.filter((p) => keys.includes(p)),
+      ...keys.filter((p) => !priority.includes(p)).sort(),
+    ];
+    return sorted;
+  }, [filteredGroups]);
+
+  // Selected model display
+  const selectedModel = models.find((m) => m.key === value);
+  const displayLabel = value
+    ? selectedModel
+      ? `${selectedModel.name || selectedModel.key.split("/").pop()}`
+      : value
+    : `Use default (${defaultModel.split("/").pop() || defaultModel})`;
+  const selectedProvider = value ? value.split("/")[0] : null;
+  const selectedMeta = selectedProvider ? PROVIDER_META[selectedProvider] : null;
+
+  // Save API key
+  const handleSaveKey = useCallback(async () => {
+    if (!addingProvider || !apiKey.trim()) return;
+    setSavingKey(true);
+    try {
+      const res = await fetch("/api/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "auth-provider", provider: addingProvider, token: apiKey.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSaveSuccess(addingProvider);
+        setApiKey("");
+        setAddingProvider(null);
+        // Refresh models
+        setLoading(true);
+        await fetchModels();
+        setTimeout(() => setSaveSuccess(null), 3000);
+      }
+    } catch { /* ignore */ }
+    setSavingKey(false);
+  }, [addingProvider, apiKey, fetchModels]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-foreground/[0.08] bg-foreground/[0.02] px-3 py-2.5 text-[12px] text-muted-foreground/50">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        Loading available models...
+      </div>
+    );
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      {/* ── Trigger button ── */}
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        disabled={disabled}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-[13px] transition-colors",
+          open
+            ? "border-violet-500/30 bg-foreground/[0.03]"
+            : "border-foreground/[0.08] bg-foreground/[0.02] hover:border-foreground/[0.15]",
+          disabled && "opacity-40 cursor-not-allowed"
+        )}
+      >
+        {selectedMeta && <span className="text-sm">{selectedMeta.icon}</span>}
+        <span className={cn("flex-1 truncate", !value && "text-muted-foreground/60")}>
+          {displayLabel}
+        </span>
+        {value && authedProviders.has(value.split("/")[0]) && (
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+        )}
+        <ChevronDown className={cn("h-3.5 w-3.5 text-muted-foreground/50 transition-transform", open && "rotate-180")} />
+      </button>
+
+      {/* ── Success toast ── */}
+      {saveSuccess && (
+        <div className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-2.5 py-1.5 text-[11px] text-emerald-400 animate-in fade-in slide-in-from-top-1">
+          <CheckCircle className="h-3 w-3 shrink-0" />
+          {PROVIDER_META[saveSuccess]?.label || saveSuccess} connected! Models are now available.
+        </div>
+      )}
+
+      {/* ── Dropdown ── */}
+      {open && (
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 flex max-h-[50vh] flex-col overflow-hidden rounded-xl border border-foreground/[0.1] bg-card shadow-2xl">
+          {/* Search */}
+          <div className="flex items-center gap-2 border-b border-foreground/[0.06] px-3 py-2">
+            <Search className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+            <input
+              ref={searchRef}
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search models..."
+              className="flex-1 bg-transparent text-[12px] text-foreground/90 placeholder:text-muted-foreground/40 outline-none"
+            />
+            {search && (
+              <button type="button" onClick={() => setSearch("")} className="text-muted-foreground/40 hover:text-foreground/60">
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {/* Default option */}
+            {!search && (
+              <button
+                type="button"
+                onClick={() => { onChange(""); setOpen(false); }}
+                className={cn(
+                  "flex w-full items-center gap-2.5 px-3 py-2 text-left text-[12px] transition-colors hover:bg-violet-500/[0.06]",
+                  !value && "bg-violet-500/[0.08] text-violet-400"
+                )}
+              >
+                <Star className="h-3.5 w-3.5 text-amber-400" />
+                <span className="font-medium">Use default</span>
+                <span className="text-[10px] text-muted-foreground/50">({defaultModel.split("/").pop()})</span>
+              </button>
+            )}
+
+            {/* Recommended section */}
+            {!search && (
+              <>
+                <div className="px-3 pt-2.5 pb-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40">
+                  Recommended
+                </div>
+                {RECOMMENDED_MODELS.map((key) => {
+                  const m = models.find((x) => x.key === key);
+                  if (!m) return null;
+                  const provider = key.split("/")[0];
+                  const isAuthed = authedProviders.has(provider);
+                  const meta = PROVIDER_META[provider];
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => {
+                        if (!isAuthed) {
+                          setAddingProvider(provider);
+                          return;
+                        }
+                        onChange(key);
+                        setOpen(false);
+                      }}
+                      className={cn(
+                        "flex w-full items-center gap-2.5 px-3 py-2 text-left text-[12px] transition-colors",
+                        value === key ? "bg-violet-500/[0.08] text-violet-400" : "hover:bg-foreground/[0.03]",
+                        !isAuthed && "opacity-60"
+                      )}
+                    >
+                      <span className="text-[11px]">{meta?.icon || "🤖"}</span>
+                      <span className="flex-1 font-medium">{m.name || key.split("/").pop()}</span>
+                      {isAuthed ? (
+                        <ShieldCheck className="h-3 w-3 text-emerald-500" />
+                      ) : (
+                        <span className="flex items-center gap-1 rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-amber-400">
+                          <Key className="h-2.5 w-2.5" />
+                          Needs key
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+                <div className="mx-3 my-1.5 h-px bg-foreground/[0.05]" />
+              </>
+            )}
+
+            {/* Grouped available models */}
+            {providerOrder.map((provider) => {
+              const items = filteredGroups[provider];
+              if (!items) return null;
+              const meta = PROVIDER_META[provider];
+              const isAuthed = authedProviders.has(provider);
+              return (
+                <div key={provider}>
+                  <div className="flex items-center gap-2 px-3 pt-2.5 pb-1">
+                    <span className="text-[10px]">{meta?.icon || "🤖"}</span>
+                    <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40">
+                      {meta?.label || provider}
+                    </span>
+                    {isAuthed && <ShieldCheck className="h-2.5 w-2.5 text-emerald-500" />}
+                    <span className="text-[9px] text-muted-foreground/30">{items.length}</span>
+                  </div>
+                  {items.map((m) => (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => { onChange(m.key); setOpen(false); }}
+                      className={cn(
+                        "flex w-full items-center gap-2.5 px-3 py-1.5 pl-7 text-left text-[12px] transition-colors",
+                        value === m.key
+                          ? "bg-violet-500/[0.08] text-violet-400"
+                          : "text-foreground/80 hover:bg-foreground/[0.03]"
+                      )}
+                    >
+                      <span className="flex-1 truncate">{m.name || m.key.split("/").pop()}</span>
+                      {m.local && (
+                        <span className="rounded-full bg-lime-500/10 px-1.5 py-0.5 text-[9px] font-medium text-lime-400">LOCAL</span>
+                      )}
+                      {RECOMMENDED_MODELS.includes(m.key) && (
+                        <Star className="h-2.5 w-2.5 text-amber-400" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+
+            {Object.keys(filteredGroups).length === 0 && search && (
+              <div className="px-3 py-6 text-center text-[12px] text-muted-foreground/50">
+                No models match &ldquo;{search}&rdquo;
+              </div>
+            )}
+
+            {/* ── Add a Provider section ── */}
+            {!search && unauthProviders.length > 0 && (
+              <>
+                <div className="mx-3 my-1.5 h-px bg-foreground/[0.05]" />
+                <div className="px-3 pt-2 pb-1 text-[9px] font-bold uppercase tracking-wider text-muted-foreground/40">
+                  Connect a new provider
+                </div>
+                <div className="px-3 pb-2 grid grid-cols-2 gap-1.5">
+                  {unauthProviders.slice(0, 8).map((p) => {
+                    const meta = PROVIDER_META[p];
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setAddingProvider(p)}
+                        className="flex items-center gap-1.5 rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] px-2 py-1.5 text-[10px] text-muted-foreground/70 transition-colors hover:border-violet-500/20 hover:text-foreground/80"
+                      >
+                        <span>{meta?.icon || "🤖"}</span>
+                        <span className="truncate font-medium">{meta?.label || p}</span>
+                        <Plus className="ml-auto h-2.5 w-2.5 text-muted-foreground/30" />
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ── Inline Add Provider flow ── */}
+          {addingProvider && (
+            <div className="border-t border-foreground/[0.08] bg-foreground/[0.02] px-3 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-sm">{PROVIDER_META[addingProvider]?.icon || "🤖"}</span>
+                <span className="text-[12px] font-semibold text-foreground/80">
+                  Connect {PROVIDER_META[addingProvider]?.label || addingProvider}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setAddingProvider(null); setApiKey(""); setShowKey(false); }}
+                  className="ml-auto rounded p-0.5 text-muted-foreground/40 hover:text-foreground/60"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+              <div className="flex gap-1.5">
+                <div className="relative flex-1">
+                  <input
+                    type={showKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSaveKey(); } }}
+                    placeholder={PROVIDER_META[addingProvider]?.keyHint || "Paste API key..."}
+                    className="w-full rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 pr-8 text-[11px] font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-violet-500/30 focus:outline-none"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowKey(!showKey)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/40 hover:text-foreground/60"
+                  >
+                    {showKey ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSaveKey}
+                  disabled={!apiKey.trim() || savingKey}
+                  className="shrink-0 rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                >
+                  {savingKey ? <Loader2 className="h-3 w-3 animate-spin" /> : "Connect"}
+                </button>
+              </div>
+              <div className="mt-1.5 flex items-center gap-1.5 text-[10px] text-muted-foreground/50">
+                <Key className="h-2.5 w-2.5" />
+                <span>Stored securely in OpenClaw. Never leaves your machine.</span>
+                {PROVIDER_META[addingProvider]?.keyUrl && (
+                  <a
+                    href={PROVIDER_META[addingProvider].keyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-auto flex items-center gap-0.5 text-violet-400 hover:text-violet-300"
+                  >
+                    Get a key <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Footer summary */}
+          <div className="border-t border-foreground/[0.06] bg-foreground/[0.01] px-3 py-1.5">
+            <p className="text-[10px] text-muted-foreground/40">
+              {availableModels.length} models ready from {Object.keys(groupedAvailable).length} providers
+              {unauthProviders.length > 0 && ` · ${unauthProviders.length} more providers available`}
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Status text */}
+      {!open && availableModels.length === 0 && (
+        <p className="mt-1.5 text-[10px] text-amber-400">
+          No authenticated models found. Click above to connect a provider.
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ── Channel info fetched from backend ── */
+
+type ChannelInfo = {
+  channel: string;
+  label: string;
+  icon: string;
+  setupType: "qr" | "token" | "cli" | "auto";
+  setupCommand: string;
+  setupHint: string;
+  configHint: string;
+  tokenLabel?: string;
+  tokenPlaceholder?: string;
+  docsUrl: string;
+  enabled: boolean;
+  configured: boolean;
+  accounts: string[];
+  statuses: { channel: string; account: string; status: string; linked?: boolean; connected?: boolean; error?: string }[];
+};
+
+/* ── Channel Binding Picker: live status, inline setup ── */
+
+function ChannelBindingPicker({
+  bindings,
+  onAdd,
+  onRemove,
+  disabled,
+}: {
+  bindings: string[];
+  onAdd: (binding: string) => void;
+  onRemove: (binding: string) => void;
+  disabled: boolean;
+}) {
+  const [channels, setChannels] = useState<ChannelInfo[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedChannel, setSelectedChannel] = useState<ChannelInfo | null>(null);
+  const [setupMode, setSetupMode] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
+  const [appTokenInput, setAppTokenInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [setupSuccess, setSetupSuccess] = useState<string | null>(null);
+  const [accountId, setAccountId] = useState("");
+
+  const fetchChannels = useCallback(async () => {
+    try {
+      const res = await fetch("/api/channels?scope=all");
+      const data = await res.json();
+      setChannels((data.channels || []) as ChannelInfo[]);
+    } catch { /* ignore */ }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { queueMicrotask(() => fetchChannels()); }, [fetchChannels]);
+
+  // Derive channel status
+  const getStatus = useCallback((ch: ChannelInfo): { text: string; color: string; ready: boolean } => {
+    if (ch.setupType === "auto") return { text: "Always available", color: "emerald", ready: true };
+    if (!ch.configured && !ch.enabled) return { text: "Not set up", color: "zinc", ready: false };
+    if (ch.enabled) {
+      const hasConnected = ch.statuses.some((s) => s.connected || s.linked);
+      if (hasConnected) return { text: "Connected", color: "emerald", ready: true };
+      const hasError = ch.statuses.some((s) => s.error);
+      if (hasError) return { text: "Error", color: "red", ready: false };
+      return { text: "Enabled", color: "amber", ready: true };
+    }
+    return { text: "Configured", color: "amber", ready: true };
+  }, []);
+
+  const handleSetupToken = useCallback(async () => {
+    if (!selectedChannel || !tokenInput.trim()) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "add",
+          channel: selectedChannel.channel,
+          token: tokenInput.trim(),
+          appToken: appTokenInput.trim() || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setSetupSuccess(selectedChannel.channel);
+        setTokenInput("");
+        setAppTokenInput("");
+        setSetupMode(false);
+        // Refresh channels
+        await fetchChannels();
+        setTimeout(() => setSetupSuccess(null), 4000);
+      }
+    } catch { /* ignore */ }
+    setSaving(false);
+  }, [selectedChannel, tokenInput, appTokenInput, fetchChannels]);
+
+  const handleBindChannel = useCallback((ch: ChannelInfo) => {
+    const binding = accountId.trim()
+      ? `${ch.channel}:${accountId.trim()}`
+      : ch.channel;
+    onAdd(binding);
+    setSelectedChannel(null);
+    setAccountId("");
+    setSetupMode(false);
+  }, [accountId, onAdd]);
+
+  // Split channels: ready vs needs setup
+  const { readyChannels, setupChannels } = useMemo(() => {
+    const ready: ChannelInfo[] = [];
+    const setup: ChannelInfo[] = [];
+    for (const ch of channels) {
+      const status = getStatus(ch);
+      if (status.ready) ready.push(ch);
+      else setup.push(ch);
+    }
+    return { readyChannels: ready, setupChannels: setup };
+  }, [channels, getStatus]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 py-2 text-[11px] text-muted-foreground/50">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Checking available channels...
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {/* Existing bindings chips */}
+      {bindings.length > 0 && (
+        <div className="mb-2.5 flex flex-wrap gap-1.5">
+          {bindings.map((b) => {
+            const chKey = b.split(":")[0];
+            const chInfo = channels.find((c) => c.channel === chKey);
+            const status = chInfo ? getStatus(chInfo) : null;
+            return (
+              <span key={b} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/[0.06] px-2.5 py-1 text-[11px] text-violet-400">
+                <span>{chInfo?.icon || "📡"}</span>
+                <span className="font-medium">{b}</span>
+                {status && (
+                  <span className={cn(
+                    "h-1.5 w-1.5 rounded-full",
+                    status.color === "emerald" ? "bg-emerald-400" : status.color === "amber" ? "bg-amber-400" : "bg-zinc-500"
+                  )} />
+                )}
+                <button
+                  type="button"
+                  onClick={() => onRemove(b)}
+                  className="ml-0.5 rounded text-violet-400/60 hover:text-violet-200"
+                  disabled={disabled}
+                >
+                  <X className="h-2.5 w-2.5" />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Success toast */}
+      {setupSuccess && (
+        <div className="mb-2 flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.06] px-2.5 py-1.5 text-[11px] text-emerald-400 animate-in fade-in slide-in-from-top-1">
+          <CheckCircle className="h-3 w-3 shrink-0" />
+          {channels.find((c) => c.channel === setupSuccess)?.label || setupSuccess} connected! You can now bind it.
+        </div>
+      )}
+
+      {/* Channel picker or setup */}
+      {!selectedChannel ? (
+        <div>
+          {/* Ready channels */}
+          {readyChannels.length > 0 && (
+            <>
+              <p className="mb-1.5 text-[10px] text-muted-foreground/60">
+                Connected channels — click to bind:
+              </p>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                {readyChannels.map((ch) => {
+                  const status = getStatus(ch);
+                  const alreadyBound = bindings.some((b) => b.split(":")[0] === ch.channel);
+                  return (
+                    <button
+                      key={ch.channel}
+                      type="button"
+                      onClick={() => {
+                        if (alreadyBound) return;
+                        setSelectedChannel(ch);
+                      }}
+                      disabled={disabled || alreadyBound}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-[11px] transition-colors",
+                        alreadyBound
+                          ? "border-violet-500/20 bg-violet-500/[0.05] text-violet-400 opacity-60 cursor-not-allowed"
+                          : "border-foreground/[0.06] bg-foreground/[0.02] text-foreground/70 hover:border-violet-500/20 hover:bg-violet-500/[0.05] hover:text-violet-400 disabled:opacity-40"
+                      )}
+                    >
+                      <span className="text-base">{ch.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium block truncate">{ch.label}</span>
+                        <span className={cn(
+                          "text-[9px]",
+                          status.color === "emerald" ? "text-emerald-400" : "text-amber-400"
+                        )}>
+                          {alreadyBound ? "Bound" : status.text}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Channels that need setup */}
+          {setupChannels.length > 0 && (
+            <>
+              <div className={cn(readyChannels.length > 0 && "mt-3")}>
+                <p className="mb-1.5 text-[10px] text-muted-foreground/40">
+                  More channels — needs one-time setup:
+                </p>
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                  {setupChannels.map((ch) => (
+                    <button
+                      key={ch.channel}
+                      type="button"
+                      onClick={() => { setSelectedChannel(ch); setSetupMode(true); }}
+                      disabled={disabled}
+                      className="flex items-center gap-2 rounded-lg border border-dashed border-foreground/[0.06] bg-transparent px-3 py-2 text-left text-[11px] text-muted-foreground/50 transition-colors hover:border-foreground/[0.12] hover:text-foreground/60 disabled:opacity-40"
+                    >
+                      <span className="text-base opacity-60">{ch.icon}</span>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-medium block truncate">{ch.label}</span>
+                        <span className="text-[9px] text-muted-foreground/30">Set up</span>
+                      </div>
+                      <Plus className="h-2.5 w-2.5 text-muted-foreground/30" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {channels.length === 0 && (
+            <p className="py-3 text-center text-[11px] text-muted-foreground/40">
+              Could not fetch channels. Is the Gateway running?
+            </p>
+          )}
+        </div>
+      ) : (
+        /* Selected channel: bind or set up */
+        <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.03] p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-base">{selectedChannel.icon}</span>
+              <span className="text-[12px] font-semibold text-foreground/80">{selectedChannel.label}</span>
+              {getStatus(selectedChannel).ready && (
+                <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-medium text-emerald-400">
+                  <ShieldCheck className="h-2.5 w-2.5" /> Connected
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => { setSelectedChannel(null); setSetupMode(false); setTokenInput(""); setAppTokenInput(""); setAccountId(""); }}
+              className="rounded p-0.5 text-muted-foreground/40 hover:text-foreground/70"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+
+          {/* If channel is ready — just bind */}
+          {getStatus(selectedChannel).ready && !setupMode ? (
+            <div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={accountId}
+                  onChange={(e) => setAccountId(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleBindChannel(selectedChannel); } }}
+                  placeholder="Account ID (optional — leave empty for all)"
+                  className="flex-1 rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-[12px] text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                  autoFocus
+                  disabled={disabled}
+                />
+                <button
+                  type="button"
+                  onClick={() => handleBindChannel(selectedChannel)}
+                  disabled={disabled}
+                  className="shrink-0 rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                >
+                  Bind
+                </button>
+              </div>
+              <p className="mt-1.5 text-[10px] text-muted-foreground/50">
+                Leave empty to route all {selectedChannel.label} messages to this agent.
+                {selectedChannel.accounts.length > 1 && (
+                  <> Accounts: {selectedChannel.accounts.join(", ")}</>
+                )}
+              </p>
+            </div>
+          ) : (
+            /* Channel needs setup */
+            <div>
+              <p className="mb-2 text-[11px] text-foreground/60">
+                {selectedChannel.setupHint}
+              </p>
+
+              {/* Token-based setup (Telegram, Discord, Slack, etc.) */}
+              {selectedChannel.setupType === "token" && (
+                <div className="space-y-2">
+                  <div>
+                    <label className="mb-1 block text-[10px] font-medium text-muted-foreground/60">
+                      {selectedChannel.tokenLabel || "Token"}
+                    </label>
+                    <input
+                      type="password"
+                      value={tokenInput}
+                      onChange={(e) => setTokenInput(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && tokenInput.trim()) { e.preventDefault(); handleSetupToken(); } }}
+                      placeholder={selectedChannel.tokenPlaceholder || "Paste token here..."}
+                      className="w-full rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-[11px] font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-violet-500/30 focus:outline-none"
+                      autoFocus
+                      disabled={saving}
+                    />
+                  </div>
+                  {selectedChannel.channel === "slack" && (
+                    <div>
+                      <label className="mb-1 block text-[10px] font-medium text-muted-foreground/60">
+                        App Token (Socket Mode)
+                      </label>
+                      <input
+                        type="password"
+                        value={appTokenInput}
+                        onChange={(e) => setAppTokenInput(e.target.value)}
+                        placeholder="xapp-..."
+                        className="w-full rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-[11px] font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-violet-500/30 focus:outline-none"
+                        disabled={saving}
+                      />
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSetupToken}
+                      disabled={!tokenInput.trim() || saving}
+                      className="rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                    >
+                      {saving ? (
+                        <span className="flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" /> Connecting...</span>
+                      ) : (
+                        "Connect & Save"
+                      )}
+                    </button>
+                    <a
+                      href={selectedChannel.docsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-violet-400 hover:text-violet-300 flex items-center gap-0.5"
+                    >
+                      Setup guide <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/40">
+                    Token is stored securely in OpenClaw credentials. Never leaves your machine.
+                  </p>
+                </div>
+              )}
+
+              {/* QR-based setup (WhatsApp) */}
+              {selectedChannel.setupType === "qr" && (
+                <div className="space-y-2">
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.05] px-3 py-2">
+                    <p className="text-[11px] font-medium text-amber-400 mb-1">Interactive setup required</p>
+                    <p className="text-[10px] text-muted-foreground/60">
+                      {selectedChannel.label} requires scanning a QR code. Open the Terminal and run:
+                    </p>
+                    <code className="mt-1.5 block rounded bg-black/30 px-2 py-1.5 text-[10px] font-mono text-emerald-400">
+                      {selectedChannel.setupCommand}
+                    </code>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href="/?section=terminal"
+                      className="rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-medium text-white transition-colors hover:bg-violet-500 inline-flex items-center gap-1.5"
+                    >
+                      Open Terminal
+                    </Link>
+                    <a
+                      href={selectedChannel.docsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-violet-400 hover:text-violet-300 flex items-center gap-0.5"
+                    >
+                      Setup guide <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {/* CLI-based setup */}
+              {selectedChannel.setupType === "cli" && (
+                <div className="space-y-2">
+                  <div className="rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] px-3 py-2">
+                    <p className="text-[10px] text-muted-foreground/60 mb-1">
+                      Run this command in the Terminal:
+                    </p>
+                    <code className="block rounded bg-black/30 px-2 py-1.5 text-[10px] font-mono text-emerald-400">
+                      {selectedChannel.setupCommand}
+                    </code>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Link
+                      href="/?section=terminal"
+                      className="rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-medium text-white transition-colors hover:bg-violet-500 inline-flex items-center gap-1.5"
+                    >
+                      Open Terminal
+                    </Link>
+                    <a
+                      href={selectedChannel.docsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] text-violet-400 hover:text-violet-300 flex items-center gap-0.5"
+                    >
+                      Docs <ExternalLink className="h-2.5 w-2.5" />
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {selectedChannel.configHint && (
+                <p className="mt-1 text-[10px] text-muted-foreground/40 italic">
+                  {selectedChannel.configHint}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function AddAgentModal({
   onClose,
@@ -1036,29 +1939,9 @@ function AddAgentModal({
   const [success, setSuccess] = useState(false);
   const nameRef = useRef<HTMLInputElement>(null);
 
-  // ── Fetch available models ──
-  const [models, setModels] = useState<AvailableModel[]>([]);
-  const [modelsLoading, setModelsLoading] = useState(true);
+  // Model is now handled by ModelPicker component
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/models?scope=all");
-        const data = await res.json();
-        const all = (data.models || []) as AvailableModel[];
-        // Only show available (authenticated) models, sorted by name
-        const avail = all
-          .filter((m) => m.available || m.local)
-          .sort((a, b) => (a.name || a.key).localeCompare(b.name || b.key));
-        setModels(avail);
-      } catch { /* ignore */ }
-      setModelsLoading(false);
-    })();
-  }, []);
-
-  // ── Channel binding wizard state ──
-  const [bindChannel, setBindChannel] = useState<string | null>(null);
-  const [bindAccountId, setBindAccountId] = useState("");
+  // Channel bindings are now handled by ChannelBindingPicker
 
   useEffect(() => { nameRef.current?.focus(); }, []);
 
@@ -1069,17 +1952,11 @@ function AddAgentModal({
     return () => window.removeEventListener("keydown", handler);
   }, [onClose, busy]);
 
-  const addBinding = useCallback(() => {
-    if (!bindChannel) return;
-    const binding = bindAccountId.trim()
-      ? `${bindChannel}:${bindAccountId.trim()}`
-      : bindChannel;
+  const addBinding = useCallback((binding: string) => {
     if (!bindings.includes(binding)) {
       setBindings((prev) => [...prev, binding]);
     }
-    setBindChannel(null);
-    setBindAccountId("");
-  }, [bindChannel, bindAccountId, bindings]);
+  }, [bindings]);
 
   const removeBinding = useCallback((b: string) => {
     setBindings((prev) => prev.filter((x) => x !== b));
@@ -1121,8 +1998,6 @@ function AddAgentModal({
     }
     setBusy(false);
   }, [name, model, workspace, bindings, onCreated, onClose]);
-
-  const selectedChannelMeta = CHANNEL_OPTIONS.find((c) => c.value === bindChannel);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-[5vh] sm:pt-[8vh]">
@@ -1166,139 +2041,31 @@ function AddAgentModal({
             </p>
           </div>
 
-          {/* ── 2. Model (select) ── */}
+          {/* ── 2. Model (picker) ── */}
           <div>
             <label className="mb-1.5 block text-[11px] font-semibold text-foreground/70">
               Model
             </label>
-            {modelsLoading ? (
-              <div className="flex items-center gap-2 rounded-lg border border-foreground/[0.08] bg-foreground/[0.02] px-3 py-2.5 text-[12px] text-muted-foreground/50">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Loading available models...
-              </div>
-            ) : (
-              <select
-                value={model}
-                onChange={(e) => setModel(e.target.value)}
-                disabled={busy}
-                className="w-full appearance-none rounded-lg border border-foreground/[0.08] bg-foreground/[0.02] px-3 py-2.5 text-[13px] text-foreground/90 focus:border-violet-500/30 focus:outline-none disabled:opacity-40"
-              >
-                <option value="">Use default ({defaultModel.split("/").pop() || defaultModel})</option>
-                {models.map((m) => (
-                  <option key={m.key} value={m.key}>
-                    {m.name || m.key.split("/").pop()} — {m.key.split("/")[0]}{m.local ? " (local)" : ""}
-                  </option>
-                ))}
-              </select>
-            )}
-            {!modelsLoading && models.length === 0 && (
-              <p className="mt-1.5 text-[10px] text-amber-400">
-                No authenticated models found.{" "}
-                <a href="/?section=models" className="underline hover:text-amber-300">
-                  Go to Models
-                </a>{" "}
-                to connect a provider.
-              </p>
-            )}
-            {!modelsLoading && models.length > 0 && (
-              <p className="mt-1 text-[10px] text-muted-foreground/50">
-                Showing {models.length} authenticated models.{" "}
-                <a href="/?section=models" className="text-violet-400 hover:text-violet-300">
-                  Add more providers →
-                </a>
-              </p>
-            )}
+            <ModelPicker
+              value={model}
+              onChange={setModel}
+              defaultModel={defaultModel}
+              disabled={busy}
+            />
           </div>
 
-          {/* ── 3. Channel Bindings (wizard) ── */}
+          {/* ── 3. Channel Bindings (live) ── */}
           <div>
             <label className="mb-1.5 block text-[11px] font-semibold text-foreground/70">
               Channel Bindings
               <span className="ml-1 text-[10px] font-normal text-muted-foreground/40">optional</span>
             </label>
-
-            {/* Existing bindings chips */}
-            {bindings.length > 0 && (
-              <div className="mb-2.5 flex flex-wrap gap-1.5">
-                {bindings.map((b) => {
-                  const chKey = b.split(":")[0];
-                  const chMeta = CHANNEL_OPTIONS.find((c) => c.value === chKey);
-                  return (
-                    <span key={b} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/[0.06] px-2.5 py-1 text-[11px] text-violet-400">
-                      <span>{chMeta?.icon || "📡"}</span>
-                      <span className="font-medium">{b}</span>
-                      <button type="button" onClick={() => removeBinding(b)} className="ml-0.5 rounded text-violet-400/60 hover:text-violet-200" disabled={busy}>
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Channel binding wizard */}
-            {bindChannel === null ? (
-              /* Step 1: Pick a channel */
-              <div>
-                <p className="mb-2 text-[10px] text-muted-foreground/60">
-                  Route messages from a channel to this agent:
-                </p>
-                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                  {CHANNEL_OPTIONS.map((ch) => (
-                    <button
-                      key={ch.value}
-                      type="button"
-                      onClick={() => setBindChannel(ch.value)}
-                      disabled={busy}
-                      className="flex items-center gap-2 rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] px-3 py-2 text-left text-[11px] text-foreground/70 transition-colors hover:border-violet-500/20 hover:bg-violet-500/[0.05] hover:text-violet-400 disabled:opacity-40"
-                    >
-                      <span className="text-base">{ch.icon}</span>
-                      <span className="font-medium">{ch.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              /* Step 2: Enter account ID */
-              <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.03] p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">{selectedChannelMeta?.icon}</span>
-                    <span className="text-[12px] font-semibold text-foreground/80">{selectedChannelMeta?.label}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => { setBindChannel(null); setBindAccountId(""); }}
-                    className="rounded p-0.5 text-muted-foreground/40 hover:text-foreground/70"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={bindAccountId}
-                    onChange={(e) => setBindAccountId(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addBinding(); } }}
-                    placeholder={selectedChannelMeta?.hint || "Account ID (optional)"}
-                    className="flex-1 rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-[12px] text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
-                    autoFocus
-                    disabled={busy}
-                  />
-                  <button
-                    type="button"
-                    onClick={addBinding}
-                    disabled={busy}
-                    className="shrink-0 rounded-lg bg-violet-600 px-3 py-2 text-[11px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
-                  >
-                    Add
-                  </button>
-                </div>
-                <p className="mt-1.5 text-[10px] text-muted-foreground/50">
-                  Leave empty to bind all {selectedChannelMeta?.label} messages, or enter an account ID for specific routing.
-                </p>
-              </div>
-            )}
+            <ChannelBindingPicker
+              bindings={bindings}
+              onAdd={addBinding}
+              onRemove={removeBinding}
+              disabled={busy}
+            />
           </div>
 
           {/* ── 4. Advanced (collapsible) ── */}
@@ -1396,7 +2163,7 @@ function EditAgentModal({
   idx,
   allAgents,
   defaultModel,
-  defaultFallbacks,
+  defaultFallbacks: _defaultFallbacks,
   onClose,
   onSaved,
 }: {
@@ -1449,9 +2216,6 @@ function EditAgentModal({
   }, []);
 
   /* ── Channel binding wizard state ── */
-  const [bindChannel, setBindChannel] = useState<string | null>(null);
-  const [bindAccountId, setBindAccountId] = useState("");
-
   /* ── Keyboard ── */
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -1461,17 +2225,11 @@ function EditAgentModal({
     return () => window.removeEventListener("keydown", handler);
   }, [onClose, busy]);
 
-  const addBinding = useCallback(() => {
-    if (!bindChannel) return;
-    const binding = bindAccountId.trim()
-      ? `${bindChannel}:${bindAccountId.trim()}`
-      : bindChannel;
+  const addBinding = useCallback((binding: string) => {
     if (!bindings.includes(binding)) {
       setBindings((prev) => [...prev, binding]);
     }
-    setBindChannel(null);
-    setBindAccountId("");
-  }, [bindChannel, bindAccountId, bindings]);
+  }, [bindings]);
 
   const removeBinding = useCallback((b: string) => {
     setBindings((prev) => prev.filter((x) => x !== b));
@@ -1529,9 +2287,6 @@ function EditAgentModal({
   }, [agent.id, model, fallbacks, subagents, bindings, onSaved, onClose]);
 
   const sc = STATUS_COLORS[agent.status] || STATUS_COLORS.unknown;
-  const selectedChannelMeta = CHANNEL_OPTIONS.find(
-    (c) => c.value === bindChannel
-  );
   const otherAgents = allAgents.filter((a) => a.id !== agent.id);
 
   return (
@@ -1625,12 +2380,12 @@ function EditAgentModal({
             {!modelsLoading && models.length > 0 && (
               <p className="mt-1 text-[10px] text-muted-foreground/50">
                 {models.length} authenticated models.{" "}
-                <a
+                <Link
                   href="/?section=models"
                   className="text-violet-400 hover:text-violet-300"
                 >
                   Manage providers →
-                </a>
+                </Link>
               </p>
             )}
           </div>
@@ -1766,112 +2521,12 @@ function EditAgentModal({
             <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold text-foreground/70">
               <Globe className="h-3 w-3 text-blue-400" /> Channel Bindings
             </label>
-
-            {/* Existing binding chips */}
-            {bindings.length > 0 && (
-              <div className="mb-2.5 flex flex-wrap gap-1.5">
-                {bindings.map((b) => {
-                  const chKey = b.split(":")[0];
-                  const chMeta = CHANNEL_OPTIONS.find(
-                    (c) => c.value === chKey
-                  );
-                  return (
-                    <span
-                      key={b}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-blue-500/20 bg-blue-500/[0.06] px-2.5 py-1 text-[11px] text-blue-400"
-                    >
-                      <span>{chMeta?.icon || "📡"}</span>
-                      <span className="font-medium">{b}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeBinding(b)}
-                        className="ml-0.5 rounded text-blue-400/60 hover:text-blue-200"
-                        disabled={busy}
-                      >
-                        <X className="h-2.5 w-2.5" />
-                      </button>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Channel wizard */}
-            {bindChannel === null ? (
-              <div>
-                <p className="mb-2 text-[10px] text-muted-foreground/60">
-                  Route messages from a channel to this agent:
-                </p>
-                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                  {CHANNEL_OPTIONS.map((ch) => (
-                    <button
-                      key={ch.value}
-                      type="button"
-                      onClick={() => setBindChannel(ch.value)}
-                      disabled={busy}
-                      className="flex items-center gap-2 rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] px-3 py-2 text-left text-[11px] text-foreground/70 transition-colors hover:border-blue-500/20 hover:bg-blue-500/[0.05] hover:text-blue-400 disabled:opacity-40"
-                    >
-                      <span className="text-base">{ch.icon}</span>
-                      <span className="font-medium">{ch.label}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.03] p-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">
-                      {selectedChannelMeta?.icon}
-                    </span>
-                    <span className="text-[12px] font-semibold text-foreground/80">
-                      {selectedChannelMeta?.label}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBindChannel(null);
-                      setBindAccountId("");
-                    }}
-                    className="rounded p-0.5 text-muted-foreground/40 hover:text-foreground/70"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={bindAccountId}
-                    onChange={(e) => setBindAccountId(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addBinding();
-                      }
-                    }}
-                    placeholder={
-                      selectedChannelMeta?.hint || "Account ID (optional)"
-                    }
-                    className="flex-1 rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-[12px] text-foreground/90 placeholder:text-muted-foreground/40 focus:border-blue-500/30 focus:outline-none"
-                    autoFocus
-                    disabled={busy}
-                  />
-                  <button
-                    type="button"
-                    onClick={addBinding}
-                    disabled={busy}
-                    className="shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-[11px] font-medium text-white transition-colors hover:bg-blue-500 disabled:opacity-40"
-                  >
-                    Add
-                  </button>
-                </div>
-                <p className="mt-1.5 text-[10px] text-muted-foreground/50">
-                  Leave empty for all {selectedChannelMeta?.label} messages, or
-                  enter an account ID for specific routing.
-                </p>
-              </div>
-            )}
+            <ChannelBindingPicker
+              bindings={bindings}
+              onAdd={addBinding}
+              onRemove={removeBinding}
+              disabled={busy}
+            />
           </div>
 
           {/* Workspace (read-only) */}

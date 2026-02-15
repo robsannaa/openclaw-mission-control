@@ -98,18 +98,71 @@ export type PingChatState = {
   unread: number;
 };
 
+/* ── localStorage persistence ── */
+
+const STORAGE_KEY = "openclaw-ping-chat";
+const MAX_PERSISTED_MESSAGES = 200; // keep last 200 messages
+const MAX_MESSAGE_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+type PersistedState = {
+  messages: ChatMessage[];
+  agentId: string;
+  unread: number;
+};
+
+function loadPersistedState(): Partial<PersistedState> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as PersistedState;
+    // Prune old messages (older than 7 days)
+    const cutoff = Date.now() - MAX_MESSAGE_AGE_MS;
+    const messages = (parsed.messages || []).filter(
+      (m) => m.timestamp > cutoff
+    );
+    return {
+      messages,
+      agentId: parsed.agentId || "",
+      unread: parsed.unread || 0,
+    };
+  } catch {
+    return {};
+  }
+}
+
+function persistState(state: PingChatState): void {
+  if (typeof window === "undefined") return;
+  try {
+    const toSave: PersistedState = {
+      messages: state.messages.slice(-MAX_PERSISTED_MESSAGES),
+      agentId: state.agentId,
+      unread: state.unread,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  } catch {
+    // localStorage full or unavailable — silently ignore
+  }
+}
+
+/* ── State initialization ── */
+
+const persisted = loadPersistedState();
+
 let pingState: PingChatState = {
-  messages: [],
-  agentId: "",
+  messages: persisted.messages || [],
+  agentId: persisted.agentId || "",
   sending: false,
   open: false,
-  unread: 0,
+  unread: persisted.unread || 0,
 };
 
 const pingListeners = new Set<Listener>();
 
 function emitPing() {
   pingListeners.forEach((fn) => { try { fn(); } catch { /* */ } });
+  // Persist on every state change (debounced writes are overkill for this size)
+  persistState(pingState);
 }
 
 export const chatStore = {

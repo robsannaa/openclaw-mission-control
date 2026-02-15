@@ -18,6 +18,7 @@ import { AudioView } from "@/components/audio-view";
 import { VectorView } from "@/components/vector-view";
 import { AgentsView } from "@/components/agents-view";
 import { UsageView } from "@/components/usage-view";
+import { TerminalView } from "@/components/terminal-view";
 import { setChatActive } from "@/lib/chat-store";
 
 function SectionContent({ section }: { section: string }) {
@@ -52,6 +53,8 @@ function SectionContent({ section }: { section: string }) {
       return <LogsView />;
     case "usage":
       return <UsageView />;
+    case "terminal":
+      return <TerminalView />;
     default:
       return <DashboardView />;
   }

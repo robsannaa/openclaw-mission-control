@@ -8,6 +8,7 @@ import {
   dismissRestart,
   setRestarting,
 } from "@/lib/restart-store";
+import { notifyGatewayRestarting } from "@/components/header";
 import { AlertTriangle, RefreshCw, X, Loader2 } from "lucide-react";
 
 /**
@@ -23,6 +24,8 @@ export function RestartAnnouncementBar() {
 
   const handleRestart = useCallback(async () => {
     setRestarting(true);
+    // Immediately tell the gateway status badge to show "loading" and fast-poll
+    notifyGatewayRestarting();
     try {
       const res = await fetch("/api/gateway", {
         method: "POST",

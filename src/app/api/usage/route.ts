@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readFile, readdir, stat } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
-import { runCliJson, gatewayCall } from "@/lib/openclaw-cli";
+import { runCliJson } from "@/lib/openclaw-cli";
 
 const OPENCLAW_HOME = getOpenClawHome();
 
@@ -25,17 +25,6 @@ type SessionEntry = {
   abortedLastRun?: boolean;
   percentUsed?: number;
   remainingTokens?: number;
-};
-
-type GatewayStatusData = {
-  sessions?: {
-    count: number;
-    defaults: { model: string; contextTokens: number };
-    recent: SessionEntry[];
-  };
-  heartbeat?: {
-    agents: { agentId: string; enabled: boolean; every: string; everyMs: number | null }[];
-  };
 };
 
 type ModelStatusData = {

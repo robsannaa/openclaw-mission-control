@@ -25,9 +25,8 @@ import {
   FileText,
   Timer,
   AlertTriangle,
-  Copy,
-  ExternalLink,
   Info,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { requestRestart } from "@/lib/restart-store";
@@ -316,10 +315,10 @@ function EditCronForm({
   useEffect(() => {
     if (!targetsLoading && to && filteredTargets.length > 0) {
       const found = filteredTargets.some((t) => t.target === to);
-      if (!found) setCustomTo(true);
+      if (!found) queueMicrotask(() => setCustomTo(true));
     }
     if (!targetsLoading && filteredTargets.length === 0) {
-      setCustomTo(true);
+      queueMicrotask(() => setCustomTo(true));
     }
   }, [targetsLoading, to, filteredTargets]);
 
@@ -637,6 +636,670 @@ function EditCronForm({
   );
 }
 
+/* ── Cron presets for quick creation ──────────────── */
+
+const CRON_PRESETS = [
+  { label: "Every morning at 8am", expr: "0 8 * * *", kind: "cron" as const },
+  { label: "Every evening at 6pm", expr: "0 18 * * *", kind: "cron" as const },
+  { label: "Every Monday at 9am", expr: "0 9 * * 1", kind: "cron" as const },
+  { label: "Every hour", interval: "1h", kind: "every" as const },
+  { label: "Every 30 minutes", interval: "30m", kind: "every" as const },
+  { label: "Every 5 minutes", interval: "5m", kind: "every" as const },
+  { label: "Twice a day (8am & 8pm)", expr: "0 8,20 * * *", kind: "cron" as const },
+  { label: "Weekdays at noon", expr: "0 12 * * 1-5", kind: "cron" as const },
+];
+
+/* ── Timezone suggestions ────────────────────────── */
+
+const TZ_SUGGESTIONS = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Warsaw",
+  "Europe/Rome",
+  "Asia/Tokyo",
+  "Asia/Shanghai",
+  "Asia/Kolkata",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+];
+
+/* ── Create Cron Job Form ────────────────────────── */
+
+function CreateCronForm({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: () => void;
+  onCancel: () => void;
+}) {
+  // ── Step management ──
+  const [step, setStep] = useState(1); // 1=basics, 2=schedule, 3=payload, 4=delivery, 5=review
+  const totalSteps = 5;
+
+  // ── Form state ──
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [agent, setAgent] = useState("main");
+  const [scheduleKind, setScheduleKind] = useState<"cron" | "every" | "at">("cron");
+  const [cronExpr, setCronExpr] = useState("0 8 * * *");
+  const [everyInterval, setEveryInterval] = useState("1h");
+  const [atTime, setAtTime] = useState("");
+  const [tz, setTz] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [sessionTarget, setSessionTarget] = useState<"main" | "isolated">("isolated");
+  const [payloadKind, setPayloadKind] = useState<"agentTurn" | "systemEvent">("agentTurn");
+  const [message, setMessage] = useState("");
+  const [model, setModel] = useState("");
+  const [thinking, setThinking] = useState("");
+  const [deliveryMode, setDeliveryMode] = useState<"announce" | "none">("announce");
+  const [channel, setChannel] = useState("");
+  const [to, setTo] = useState("");
+  const [bestEffort, setBestEffort] = useState(true);
+  const [deleteAfterRun, setDeleteAfterRun] = useState(false);
+  const [customTo, setCustomTo] = useState(false);
+
+  // ── Data loading ──
+  const [agents, setAgents] = useState<{ id: string; name?: string }[]>([]);
+  const [knownTargets, setKnownTargets] = useState<KnownTarget[]>([]);
+  const [targetsLoading, setTargetsLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch agents and delivery targets on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/agents");
+        const data = await res.json();
+        const agentList = (data.agents || []).map((a: Record<string, unknown>) => ({
+          id: a.id as string,
+          name: a.name as string | undefined,
+        }));
+        setAgents(agentList);
+        if (agentList.length === 1) setAgent(agentList[0].id);
+      } catch { /* ignore */ }
+    })();
+    (async () => {
+      try {
+        const res = await fetch("/api/cron?action=targets");
+        const data = await res.json();
+        setKnownTargets(data.targets || []);
+      } catch { /* ignore */ }
+      setTargetsLoading(false);
+    })();
+  }, []);
+
+  // Filter targets by selected channel
+  const filteredTargets = useMemo(() => {
+    if (!channel) return knownTargets;
+    return knownTargets.filter((t) => t.channel === channel || !t.channel);
+  }, [knownTargets, channel]);
+
+  // Auto-set deleteAfterRun for "at" schedules
+  useEffect(() => {
+    if (scheduleKind === "at") setDeleteAfterRun(true);
+  }, [scheduleKind]);
+
+  // Auto-set session + delivery when payload kind changes
+  useEffect(() => {
+    if (payloadKind === "systemEvent") {
+      setSessionTarget("main");
+      setDeliveryMode("none");
+    }
+  }, [payloadKind]);
+
+  const canAdvance = (): boolean => {
+    switch (step) {
+      case 1: return name.trim().length > 0;
+      case 2:
+        if (scheduleKind === "cron") return cronExpr.trim().length > 0;
+        if (scheduleKind === "every") return everyInterval.trim().length > 0;
+        if (scheduleKind === "at") return atTime.trim().length > 0;
+        return false;
+      case 3: return message.trim().length > 0;
+      case 4: return true; // delivery is optional
+      default: return true;
+    }
+  };
+
+  const submit = async () => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/cron", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "create",
+          name: name.trim(),
+          description: description.trim() || undefined,
+          agent,
+          scheduleKind,
+          cronExpr: scheduleKind === "cron" ? cronExpr.trim() : undefined,
+          everyInterval: scheduleKind === "every" ? everyInterval.trim() : undefined,
+          atTime: scheduleKind === "at" ? atTime.trim() : undefined,
+          tz: tz || undefined,
+          sessionTarget,
+          payloadKind,
+          message: message.trim(),
+          model: model.trim() || undefined,
+          thinking: thinking || undefined,
+          deliveryMode,
+          channel: deliveryMode === "announce" ? channel || undefined : undefined,
+          to: deliveryMode === "announce" ? to || undefined : undefined,
+          bestEffort: deliveryMode === "announce" ? bestEffort : undefined,
+          deleteAfterRun: scheduleKind === "at" ? deleteAfterRun : undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        onCreated();
+      } else {
+        setError(data.error || "Failed to create cron job");
+      }
+    } catch (err) {
+      setError(String(err));
+    }
+    setSubmitting(false);
+  };
+
+  return (
+    <div className="rounded-xl border border-violet-500/20 bg-card/90 overflow-hidden">
+      {/* Wizard header */}
+      <div className="flex items-center justify-between border-b border-foreground/[0.06] bg-violet-500/[0.04] px-4 py-3">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-violet-400" />
+          <h3 className="text-[13px] font-semibold text-foreground">New Cron Job</h3>
+        </div>
+        <div className="flex items-center gap-3">
+          {/* Step indicator */}
+          <div className="flex items-center gap-1">
+            {Array.from({ length: totalSteps }, (_, i) => (
+              <div
+                key={i}
+                className={cn(
+                  "h-1.5 rounded-full transition-all",
+                  i + 1 === step ? "w-4 bg-violet-500" : i + 1 < step ? "w-1.5 bg-violet-500/60" : "w-1.5 bg-foreground/10"
+                )}
+              />
+            ))}
+          </div>
+          <span className="text-[10px] text-muted-foreground/60">Step {step}/{totalSteps}</span>
+          <button type="button" onClick={onCancel} className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70">
+            <X className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="px-4 py-4 space-y-4">
+        {/* ── Step 1: Basics ── */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-[12px] font-medium text-foreground/80 mb-1">What should we call this job?</h4>
+              <p className="text-[10px] text-muted-foreground/60 mb-3">Give it a descriptive name so you can easily find it later.</p>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Morning Brief, Daily Sync, Weekly Report..."
+                className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2.5 text-[13px] text-foreground/90 outline-none focus:border-violet-500/30"
+                autoFocus
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                Description <span className="font-normal normal-case">(optional)</span>
+              </label>
+              <input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Brief description of what this job does..."
+                className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none focus:border-violet-500/30"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Agent</label>
+              <select
+                value={agent}
+                onChange={(e) => setAgent(e.target.value)}
+                className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none"
+              >
+                {agents.length === 0 && <option value="main">main</option>}
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>{a.name || a.id}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 2: Schedule ── */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-[12px] font-medium text-foreground/80 mb-1">When should it run?</h4>
+              <p className="text-[10px] text-muted-foreground/60 mb-3">Pick a schedule type or use a quick preset.</p>
+            </div>
+
+            {/* Quick presets */}
+            <div>
+              <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Quick Presets</label>
+              <div className="flex flex-wrap gap-1.5">
+                {CRON_PRESETS.map((p) => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => {
+                      setScheduleKind(p.kind);
+                      if (p.kind === "cron" && p.expr) setCronExpr(p.expr);
+                      if (p.kind === "every" && p.interval) setEveryInterval(p.interval);
+                    }}
+                    className={cn(
+                      "rounded-lg border px-2.5 py-1.5 text-[10px] transition-colors",
+                      (scheduleKind === "cron" && p.kind === "cron" && cronExpr === p.expr) ||
+                        (scheduleKind === "every" && p.kind === "every" && everyInterval === p.interval)
+                        ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                        : "border-foreground/[0.06] bg-muted/50 text-muted-foreground/70 hover:bg-muted/80 hover:text-foreground/70"
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Schedule type + expression */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Type</label>
+                <select
+                  value={scheduleKind}
+                  onChange={(e) => setScheduleKind(e.target.value as "cron" | "every" | "at")}
+                  className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none"
+                >
+                  <option value="cron">Cron Expression (recurring)</option>
+                  <option value="every">Fixed Interval (every X)</option>
+                  <option value="at">One-Shot (run once)</option>
+                </select>
+              </div>
+              <div>
+                {scheduleKind === "cron" && (
+                  <>
+                    <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Cron Expression</label>
+                    <input
+                      value={cronExpr}
+                      onChange={(e) => setCronExpr(e.target.value)}
+                      placeholder="0 8 * * *"
+                      className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 font-mono text-[12px] text-foreground/70 outline-none focus:border-violet-500/30"
+                    />
+                    <p className="mt-1 text-[9px] text-muted-foreground/40">min hour day month weekday (e.g. &quot;0 8 * * *&quot; = 8am daily)</p>
+                  </>
+                )}
+                {scheduleKind === "every" && (
+                  <>
+                    <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Interval</label>
+                    <input
+                      value={everyInterval}
+                      onChange={(e) => setEveryInterval(e.target.value)}
+                      placeholder="5m, 1h, 30s"
+                      className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 font-mono text-[12px] text-foreground/70 outline-none focus:border-violet-500/30"
+                    />
+                    <p className="mt-1 text-[9px] text-muted-foreground/40">Use s/m/h (e.g. &quot;30m&quot;, &quot;2h&quot;, &quot;45s&quot;)</p>
+                  </>
+                )}
+                {scheduleKind === "at" && (
+                  <>
+                    <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Run At</label>
+                    <input
+                      type="datetime-local"
+                      value={atTime}
+                      onChange={(e) => setAtTime(e.target.value)}
+                      className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none focus:border-violet-500/30"
+                    />
+                    <p className="mt-1 text-[9px] text-muted-foreground/40">Or use a duration like &quot;20m&quot; for 20 minutes from now</p>
+                  </>
+                )}
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Timezone</label>
+                <select
+                  value={tz}
+                  onChange={(e) => setTz(e.target.value)}
+                  className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none"
+                >
+                  {TZ_SUGGESTIONS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                  {!TZ_SUGGESTIONS.includes(tz) && tz && (
+                    <option value={tz}>{tz}</option>
+                  )}
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 3: Payload ── */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-[12px] font-medium text-foreground/80 mb-1">What should the agent do?</h4>
+              <p className="text-[10px] text-muted-foreground/60 mb-3">Write a prompt for the agent. Be specific about what you want.</p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Payload Type</label>
+                <select
+                  value={payloadKind}
+                  onChange={(e) => setPayloadKind(e.target.value as "agentTurn" | "systemEvent")}
+                  className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none"
+                >
+                  <option value="agentTurn">Agent Turn (isolated task)</option>
+                  <option value="systemEvent">System Event (main session)</option>
+                </select>
+                <p className="mt-1 text-[9px] text-muted-foreground/40">
+                  {payloadKind === "agentTurn"
+                    ? "Runs in an isolated session — best for tasks with delivery"
+                    : "Runs in the main session — best for internal updates"}
+                </p>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Session</label>
+                <select
+                  value={sessionTarget}
+                  onChange={(e) => setSessionTarget(e.target.value as "main" | "isolated")}
+                  disabled={payloadKind === "systemEvent"}
+                  className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none disabled:opacity-40"
+                >
+                  <option value="isolated">Isolated (recommended)</option>
+                  <option value="main">Main</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                {payloadKind === "agentTurn" ? "Agent Prompt" : "System Event Text"}
+              </label>
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                rows={5}
+                placeholder={
+                  payloadKind === "agentTurn"
+                    ? "e.g. Summarize the latest news and send me a brief update..."
+                    : "e.g. Time to run the daily health check."
+                }
+                className="w-full resize-y rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2.5 text-[12px] leading-5 text-foreground/70 outline-none focus:border-violet-500/30"
+                autoFocus
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="mb-1 flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                  <Cpu className="h-3 w-3" />
+                  Model Override <span className="font-normal normal-case">(optional)</span>
+                </label>
+                <input
+                  value={model}
+                  onChange={(e) => setModel(e.target.value)}
+                  placeholder="Leave blank for default model"
+                  className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 font-mono text-[12px] text-foreground/70 outline-none focus:border-violet-500/30"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                  Thinking Level <span className="font-normal normal-case">(optional)</span>
+                </label>
+                <select
+                  value={thinking}
+                  onChange={(e) => setThinking(e.target.value)}
+                  className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none"
+                >
+                  <option value="">Default</option>
+                  <option value="off">Off</option>
+                  <option value="minimal">Minimal</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="xhigh">Extra High</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Step 4: Delivery ── */}
+        {step === 4 && (
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-[12px] font-medium text-foreground/80 mb-1">Where should results be delivered?</h4>
+              <p className="text-[10px] text-muted-foreground/60 mb-3">
+                {sessionTarget === "isolated"
+                  ? "Isolated jobs can announce results to a messaging channel."
+                  : "Main session jobs usually don't need delivery. You can skip this step."}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Mode</label>
+                <select
+                  value={deliveryMode}
+                  onChange={(e) => setDeliveryMode(e.target.value as "announce" | "none")}
+                  className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none"
+                >
+                  <option value="announce">Announce (send summary)</option>
+                  <option value="none">No delivery</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Channel</label>
+                <select
+                  value={channel}
+                  onChange={(e) => setChannel(e.target.value)}
+                  disabled={deliveryMode === "none"}
+                  className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none disabled:opacity-40"
+                >
+                  <option value="">Auto-detect</option>
+                  <option value="telegram">Telegram</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="discord">Discord</option>
+                  <option value="slack">Slack</option>
+                  <option value="signal">Signal</option>
+                  <option value="last">Last used channel</option>
+                </select>
+              </div>
+              <div>
+                <label className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
+                  Recipient
+                </label>
+                {deliveryMode === "none" ? (
+                  <input disabled value="" placeholder="—" className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 font-mono text-[12px] text-foreground/70 outline-none disabled:opacity-40" />
+                ) : targetsLoading ? (
+                  <div className="flex h-[38px] items-center rounded-lg border border-foreground/[0.08] bg-muted/80 px-3">
+                    <Loader2 className="h-3 w-3 animate-spin text-muted-foreground/60" />
+                    <span className="ml-2 text-[11px] text-muted-foreground/40">Loading targets...</span>
+                  </div>
+                ) : !customTo && filteredTargets.length > 0 ? (
+                  <div className="space-y-1.5">
+                    <select
+                      value={to}
+                      onChange={(e) => {
+                        if (e.target.value === "__custom__") { setCustomTo(true); }
+                        else { setTo(e.target.value); }
+                      }}
+                      className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 font-mono text-[12px] text-foreground/70 outline-none focus:border-violet-500/30"
+                    >
+                      <option value="">Select a target...</option>
+                      {filteredTargets.map((t) => (
+                        <option key={t.target} value={t.target}>{t.target} ({t.source})</option>
+                      ))}
+                      <option value="__custom__">Enter manually...</option>
+                    </select>
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    <input
+                      value={to}
+                      onChange={(e) => setTo(e.target.value)}
+                      placeholder={channel === "telegram" ? "telegram:CHAT_ID" : channel === "discord" ? "discord:CHANNEL_ID" : channel === "whatsapp" ? "+15555550123" : "telegram:CHAT_ID"}
+                      className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 font-mono text-[12px] text-foreground/70 outline-none focus:border-violet-500/30"
+                    />
+                    {filteredTargets.length > 0 && (
+                      <button type="button" onClick={() => setCustomTo(false)} className="text-[10px] text-violet-400 hover:text-violet-300">
+                        ← Pick from known targets
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {deliveryMode === "announce" && (
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={bestEffort}
+                  onChange={(e) => setBestEffort(e.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-foreground/20 bg-muted/80 text-violet-500 focus:ring-violet-500/30"
+                />
+                <span className="text-[11px] text-muted-foreground/70">Best effort delivery (don&apos;t fail the job if delivery fails)</span>
+              </label>
+            )}
+
+            {deliveryMode === "announce" && !to && (
+              <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+                <p className="text-[10px] text-amber-300/70">
+                  No recipient set. The job will run but delivery may fail unless you set a target or use &quot;last&quot; channel.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Step 5: Review ── */}
+        {step === 5 && (
+          <div className="space-y-4">
+            <div>
+              <h4 className="text-[12px] font-medium text-foreground/80 mb-1">Review &amp; Create</h4>
+              <p className="text-[10px] text-muted-foreground/60 mb-3">Double-check everything looks good before creating.</p>
+            </div>
+
+            <div className="rounded-lg border border-foreground/[0.04] bg-muted/40 divide-y divide-foreground/[0.04]">
+              {/* Name */}
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <span className="text-[10px] text-muted-foreground/60">Name</span>
+                <span className="text-[12px] font-medium text-foreground/80">{name}</span>
+              </div>
+              {/* Agent */}
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <span className="text-[10px] text-muted-foreground/60">Agent</span>
+                <span className="text-[12px] text-foreground/70">{agent}</span>
+              </div>
+              {/* Schedule */}
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <span className="text-[10px] text-muted-foreground/60">Schedule</span>
+                <span className="text-[12px] font-mono text-foreground/70">
+                  {scheduleKind === "cron" && cronExpr}
+                  {scheduleKind === "every" && `every ${everyInterval}`}
+                  {scheduleKind === "at" && atTime}
+                  {tz && <span className="text-muted-foreground/50"> ({tz})</span>}
+                </span>
+              </div>
+              {/* Session */}
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <span className="text-[10px] text-muted-foreground/60">Session</span>
+                <span className="text-[12px] text-foreground/70">{sessionTarget}</span>
+              </div>
+              {/* Prompt */}
+              <div className="px-3 py-2.5">
+                <span className="text-[10px] text-muted-foreground/60">Prompt</span>
+                <p className="mt-1 whitespace-pre-wrap rounded bg-muted/60 p-2 text-[11px] leading-5 text-foreground/60">{message}</p>
+              </div>
+              {/* Model */}
+              {model && (
+                <div className="flex items-center justify-between px-3 py-2.5">
+                  <span className="text-[10px] text-muted-foreground/60">Model Override</span>
+                  <span className="text-[12px] font-mono text-violet-400">{model}</span>
+                </div>
+              )}
+              {/* Delivery */}
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <span className="text-[10px] text-muted-foreground/60">Delivery</span>
+                <span className="text-[12px] text-foreground/70">
+                  {deliveryMode === "none" ? (
+                    "No delivery"
+                  ) : (
+                    <>
+                      {channel || "auto"} → {to || <span className="text-amber-400">not set</span>}
+                    </>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 rounded-lg border border-red-500/15 bg-red-500/[0.06] px-3 py-2.5">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
+                <p className="text-[11px] text-red-300">{error}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Navigation ── */}
+        <div className="flex items-center gap-2 pt-2 border-t border-foreground/[0.04]">
+          {step > 1 && (
+            <button
+              type="button"
+              onClick={() => setStep(step - 1)}
+              className="rounded px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground/70"
+            >
+              ← Back
+            </button>
+          )}
+          <div className="flex-1" />
+          {step < totalSteps ? (
+            <button
+              type="button"
+              onClick={() => setStep(step + 1)}
+              disabled={!canAdvance()}
+              className="flex items-center gap-1 rounded bg-violet-600 px-4 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              Next →
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={submit}
+              disabled={submitting}
+              className="flex items-center gap-1 rounded bg-emerald-600 px-4 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-70"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-3 w-3 animate-spin" /> Creating...
+                </>
+              ) : (
+                <>
+                  <Check className="h-3 w-3" /> Create Cron Job
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Main CronView ───────────────────────────────── */
 
 export function CronView() {
@@ -650,6 +1313,7 @@ export function CronView() {
   const [editing, setEditing] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didAutoExpand = useRef(false);
 
@@ -674,7 +1338,7 @@ export function CronView() {
   }, []);
 
   useEffect(() => {
-    fetchJobs();
+    queueMicrotask(() => fetchJobs());
   }, [fetchJobs]);
 
   const fetchRuns = useCallback(async (jobId: string) => {
@@ -697,9 +1361,9 @@ export function CronView() {
       const firstError = jobs.find((j) => j.state.lastStatus === "error");
       if (firstError) {
         didAutoExpand.current = true;
-        setExpanded(firstError.id);
+        queueMicrotask(() => setExpanded(firstError.id));
         if (!runs[firstError.id]) {
-          fetchRuns(firstError.id);
+          queueMicrotask(() => fetchRuns(firstError.id));
         }
         setTimeout(() => {
           const el = document.getElementById(`cron-job-${firstError.id}`);
@@ -776,19 +1440,57 @@ export function CronView() {
             )}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => {
-            setLoading(true);
-            fetchJobs();
-          }}
-          className="flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted/80"
-        >
-          <RefreshCw className="h-3 w-3" /> Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowCreate(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-violet-500"
+          >
+            <Plus className="h-3 w-3" /> New Cron Job
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLoading(true);
+              fetchJobs();
+            }}
+            className="flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted/80"
+          >
+            <RefreshCw className="h-3 w-3" /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 space-y-3 overflow-y-auto px-4 md:px-6 pb-6">
+        {/* Create form */}
+        {showCreate && (
+          <CreateCronForm
+            onCreated={() => {
+              setShowCreate(false);
+              flash("Cron job created!");
+              fetchJobs();
+              requestRestart("New cron job was created.");
+            }}
+            onCancel={() => setShowCreate(false)}
+          />
+        )}
+
+        {/* Empty state */}
+        {jobs.length === 0 && !showCreate && (
+          <div className="flex flex-col items-center justify-center py-16">
+            <Calendar className="mx-auto h-10 w-10 text-zinc-700 mb-3" />
+            <p className="text-sm text-muted-foreground/60 mb-1">No cron jobs yet</p>
+            <p className="text-[11px] text-muted-foreground/40 mb-4">Create your first scheduled task to get started.</p>
+            <button
+              type="button"
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500"
+            >
+              <Plus className="h-4 w-4" /> Create Cron Job
+            </button>
+          </div>
+        )}
+
         {jobs.map((job) => {
           const isExpanded = expanded === job.id;
           const isEditing = editing === job.id;

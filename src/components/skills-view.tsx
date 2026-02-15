@@ -3,11 +3,11 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { requestRestart } from "@/lib/restart-store";
 import {
-  CheckCircle, XCircle, ExternalLink, Search, RefreshCw,
-  AlertTriangle, ChevronRight, X, Loader2, Check, Download,
-  Settings2, Package, Shield, Cpu,
-  FileText, Terminal, FolderOpen, Globe, Wrench, ArrowLeft,
-  Zap, Info, CircleStop, RotateCcw,
+  CheckCircle, XCircle, Search, RefreshCw,
+  AlertTriangle, X, Loader2, Check, Download,
+  Settings2, Package, Cpu,
+  FileText, Terminal, Globe, Wrench, ArrowLeft,
+  Info, CircleStop,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -654,7 +654,7 @@ export function SkillsView() {
     setLoading(false);
   }, []);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { queueMicrotask(() => fetchAll()); }, [fetchAll]);
 
   const filtered = useMemo(() => skills.filter((s) => {
     if (search) {

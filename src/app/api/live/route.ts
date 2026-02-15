@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { readFile, readdir, stat } from "fs/promises";
+import { readFile, readdir } from "fs/promises";
 import { join } from "path";
-import { getOpenClawHome } from "@/lib/paths";
+import { getOpenClawHome, getGatewayUrl, getGatewayPort } from "@/lib/paths";
 
 const OPENCLAW_HOME = getOpenClawHome();
 
@@ -28,9 +28,10 @@ async function checkGatewayHealth(): Promise<{
 }> {
   const start = Date.now();
   try {
+    const gwUrl = await getGatewayUrl();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch("http://127.0.0.1:18789/", {
+    const res = await fetch(`${gwUrl}/`, {
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -93,11 +94,13 @@ export async function GET() {
     );
     const meta = (config.meta || {}) as Record<string, unknown>;
 
+    const gwPort = await getGatewayPort();
+
     return NextResponse.json({
       timestamp: Date.now(),
       gateway: {
         ...gateway,
-        port: 18789,
+        port: gwPort,
         version: (meta.lastTouchedVersion as string) || "unknown",
       },
       cron: cronData,

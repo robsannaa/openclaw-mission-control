@@ -1,9 +1,22 @@
 import { getOpenClawHome, getDefaultWorkspaceSync } from "@/lib/paths";
-import { cpus, totalmem, freemem, loadavg, uptime, hostname, platform, arch, type } from "os";
+import { cpus, totalmem, freemem, loadavg, uptime, hostname, platform, arch } from "os";
 import { statfs, readdir, stat, readFile } from "fs/promises";
 import { join } from "path";
 
 export const dynamic = "force-dynamic";
+
+/* ── TTL Cache ───────────────────────────────────── */
+
+type CacheEntry<T> = { value: T; expiresAt: number };
+const cache = new Map<string, CacheEntry<unknown>>();
+
+async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const existing = cache.get(key) as CacheEntry<T> | undefined;
+  if (existing && Date.now() < existing.expiresAt) return existing.value;
+  const value = await fn();
+  cache.set(key, { value, expiresAt: Date.now() + ttlMs });
+  return value;
+}
 
 /* ── Helpers ─────────────────────────────────────── */
 
@@ -49,10 +62,10 @@ function formatUptime(secs: number): string {
   return `${m}m`;
 }
 
-/** CPU usage measured over a ~500ms window. */
+/** CPU usage measured over a ~200ms window. */
 async function measureCpuUsage(): Promise<number> {
   const start = cpuSnapshot();
-  await new Promise((r) => setTimeout(r, 500));
+  await new Promise((r) => setTimeout(r, 200));
   const end = cpuSnapshot();
 
   const idleDiff = end.idle - start.idle;
@@ -167,7 +180,7 @@ async function buildSnapshot(home: string) {
   // CPU usage (measured over 500ms)
   const cpuUsage = await measureCpuUsage();
 
-  // OpenClaw specific stats (run in parallel)
+  // OpenClaw specific stats (run in parallel, with TTL caching)
   const [
     workspaceSize,
     sessionsSize,
@@ -176,12 +189,12 @@ async function buildSnapshot(home: string) {
     sessionCount,
     processCount,
   ] = await Promise.all([
-    dirSizeBytes(getDefaultWorkspaceSync(), 3),
-    dirSizeBytes(join(home, "agents"), 2),
-    countFiles(getDefaultWorkspaceSync()),
-    getLogFileSize(home),
-    getSessionCount(home),
-    getProcessCount(),
+    cached("workspaceSize", 60_000, () => dirSizeBytes(getDefaultWorkspaceSync(), 3)),
+    cached("sessionsSize", 60_000, () => dirSizeBytes(join(home, "agents"), 2)),
+    cached("fileCount", 60_000, () => countFiles(getDefaultWorkspaceSync())),
+    cached("logSize", 30_000, () => getLogFileSize(home)),
+    cached("sessionCount", 30_000, () => getSessionCount(home)),
+    cached("processCount", 15_000, () => getProcessCount()),
   ]);
 
   return {
@@ -263,7 +276,7 @@ export async function GET() {
         send({ error: String(err) });
       }
 
-      // Then send updates every 3 seconds
+      // Then send updates every 5 seconds
       const interval = setInterval(async () => {
         if (closed) {
           clearInterval(interval);
@@ -275,7 +288,7 @@ export async function GET() {
         } catch {
           // skip this tick
         }
-      }, 3000);
+      }, 5000);
 
       // Cleanup when client disconnects
       // The controller.close() or an error will set closed = true

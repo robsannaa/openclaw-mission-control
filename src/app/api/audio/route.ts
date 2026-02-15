@@ -1,42 +1,113 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gatewayCall, runCli } from "@/lib/openclaw-cli";
 import { readFile, stat } from "fs/promises";
-import { extname } from "path";
+import { extname, join } from "path";
+import { getOpenClawHome } from "@/lib/paths";
+
+/* ── Gather personal context for TTS test phrase generation ── */
+
+async function gatherContext(): Promise<string> {
+  const home = getOpenClawHome();
+  const contextParts: string[] = [];
+
+  // Try to read USER.md (human's profile)
+  for (const wsDir of ["workspace", "workspace-gilfoyle"]) {
+    try {
+      const userMd = await readFile(join(home, wsDir, "USER.md"), "utf-8");
+      if (userMd.trim()) {
+        contextParts.push(`USER PROFILE:\n${userMd.trim()}`);
+        break; // Only need one
+      }
+    } catch { /* file not found — skip */ }
+  }
+
+  // Try to read IDENTITY.md (agent's personality)
+  try {
+    const identityMd = await readFile(join(home, "workspace", "IDENTITY.md"), "utf-8");
+    if (identityMd.trim()) {
+      contextParts.push(`AGENT IDENTITY:\n${identityMd.trim()}`);
+    }
+  } catch { /* skip */ }
+
+  // Try to read openclaw.json for agent names, model info
+  try {
+    const configRaw = await readFile(join(home, "openclaw.json"), "utf-8");
+    const config = JSON.parse(configRaw);
+    const agents = config?.agents?.list;
+    if (Array.isArray(agents) && agents.length > 0) {
+      const agentNames = agents.map((a: Record<string, unknown>) => a.name || a.id).join(", ");
+      contextParts.push(`AGENTS: ${agentNames}`);
+    }
+    const model = config?.agents?.defaults?.model?.primary;
+    if (model) contextParts.push(`MODEL: ${model}`);
+  } catch { /* skip */ }
+
+  // Current time for temporal awareness
+  const now = new Date();
+  const hour = now.getHours();
+  const timeOfDay = hour < 12 ? "morning" : hour < 17 ? "afternoon" : "evening";
+  const dayName = now.toLocaleDateString("en-US", { weekday: "long" });
+  contextParts.push(`TIME: ${dayName} ${timeOfDay}, ${now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`);
+
+  return contextParts.join("\n\n");
+}
 
 /**
- * Ask the OpenClaw agent to generate a short, unique TTS test phrase.
- * Falls back to a dynamic template if the agent is unavailable.
+ * Ask the OpenClaw agent to generate a personalized TTS test phrase.
+ * Uses USER.md, IDENTITY.md, and config context to make it unique.
+ * Falls back to personalized templates if the agent is unavailable.
  */
 async function generateTestPhrase(): Promise<string> {
+  const context = await gatherContext();
+
+  // Try agent-generated phrase first
   try {
+    const prompt = [
+      "You are generating a single short TTS demo sentence (15-25 words).",
+      "This sentence will be spoken out loud to test text-to-speech.",
+      "Make it DEEPLY PERSONAL to the user and the moment. Reference their name,",
+      "the time of day, their projects, or something specific from their profile.",
+      "Be warm, witty, and natural — like a friend greeting them.",
+      "Speak AS the AI assistant (use the agent's name if you know it).",
+      "Do NOT add quotes, labels, or explanation. Just output the sentence.",
+      "",
+      "CONTEXT:",
+      context,
+    ].join("\n");
+
     const output = await runCli(
-      [
-        "agent", "--agent", "main", "--message",
-        "Generate a single short sentence (max 20 words) for me to test my text-to-speech system. " +
-        "Make it fun, unique, and self-aware — you're an AI assistant named OpenClaw. " +
-        "Don't add quotes or explanation, just the sentence.",
-      ],
+      ["agent", "--agent", "main", "--message", prompt],
       15000
     );
-    const phrase = output.trim();
-    // Sanity check: should be a short phrase, not an essay
-    if (phrase && phrase.length > 5 && phrase.length < 300) {
+    const phrase = output.trim().replace(/^["']|["']$/g, ""); // strip wrapping quotes
+    if (phrase && phrase.length > 10 && phrase.length < 300) {
       return phrase;
     }
   } catch {
-    // Agent unavailable — fall through to template
+    // Agent unavailable — fall through to personalized template
   }
 
-  // Fallback: dynamic rotating phrases
+  // Fallback: build a personalized phrase from gathered context
+  // Extract user name from context
+  const nameMatch = context.match(/\*\*(?:What to call them|Name):\*\*\s*(\w+)/i);
+  const userName = nameMatch?.[1] || "boss";
+
+  const agentMatch = context.match(/\*\*Name:\*\*\s*(\w+)/);
+  const agentName = agentMatch?.[1] || "OpenClaw";
+
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+
   const phrases = [
-    "Hey there, it's OpenClaw. I can talk now — isn't that something?",
-    "This is your friendly neighborhood AI, doing a quick voice check. Sounding good?",
-    "OpenClaw online and speaking. If you can hear this, we're in business.",
-    "Voice systems nominal. This is OpenClaw, live and in stereo.",
-    "Greetings from the other side of the speaker. OpenClaw, at your service.",
-    "Testing, testing, one two three. OpenClaw's got its voice on.",
-    "If I sound this good on a test, imagine what I'll sound like with something important to say.",
-    "This is OpenClaw. I've read the docs so you don't have to. You're welcome.",
+    `${greeting}, ${userName}! It's ${agentName}. Voice systems are online — how do I sound?`,
+    `Hey ${userName}, ${agentName} here. Just wanted to say — your AI setup is looking sharp today.`,
+    `${userName}, it's your assistant ${agentName}. If you can hear this, we're officially talking.`,
+    `${greeting}, ${userName}. ${agentName} speaking. Ready to help with whatever you need today.`,
+    `This is ${agentName}, checking in with you, ${userName}. Voice is live and I'm here for you.`,
+    `Hey ${userName}! ${agentName} just found its voice. Pretty cool, right?`,
+    `${greeting}, ${userName}. It's ${agentName} on the mic. Let's get things done today.`,
+    `${userName}, your AI assistant ${agentName} is now speaking. How's that for a personal touch?`,
   ];
   return phrases[Math.floor(Math.random() * phrases.length)];
 }
@@ -198,7 +269,7 @@ export async function POST(request: NextRequest) {
             15000
           );
           return NextResponse.json({ ok: true, action, mode });
-        } catch (err) {
+        } catch (_err) {
           return NextResponse.json(
             { ok: false, error: "Could not update auto-TTS mode. Is the gateway running?" },
             { status: 502 }
@@ -274,6 +345,12 @@ export async function POST(request: NextRequest) {
             );
           }
         }
+      }
+
+      case "generate-phrase": {
+        // Just generate a personalized phrase (no TTS conversion)
+        const phrase = await generateTestPhrase();
+        return NextResponse.json({ ok: true, phrase });
       }
 
       case "test": {
