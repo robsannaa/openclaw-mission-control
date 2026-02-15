@@ -3,9 +3,8 @@
 import { useSyncExternalStore, useCallback } from "react";
 import {
   subscribeRestartStore,
-  isRestartNeeded,
-  getRestartReason,
-  isRestarting as getIsRestarting,
+  getRestartSnapshot,
+  getServerSnapshot,
   dismissRestart,
   setRestarting,
 } from "@/lib/restart-store";
@@ -14,14 +13,13 @@ import { AlertTriangle, RefreshCw, X, Loader2 } from "lucide-react";
 /**
  * Global announcement bar shown when a config change requires a gateway restart.
  * Mounted in layout.tsx so it's visible across all views.
- *
- * Uses individual primitive snapshots to avoid the "getServerSnapshot must be cached"
- * error that occurs when returning new objects from useSyncExternalStore.
  */
 export function RestartAnnouncementBar() {
-  const needed = useSyncExternalStore(subscribeRestartStore, isRestartNeeded, () => false);
-  const reason = useSyncExternalStore(subscribeRestartStore, getRestartReason, () => "");
-  const restarting = useSyncExternalStore(subscribeRestartStore, getIsRestarting, () => false);
+  const { needed, reason, restarting } = useSyncExternalStore(
+    subscribeRestartStore,
+    getRestartSnapshot,
+    getServerSnapshot,
+  );
 
   const handleRestart = useCallback(async () => {
     setRestarting(true);

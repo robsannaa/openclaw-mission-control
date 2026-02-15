@@ -5,27 +5,24 @@
  * it calls `requestRestart()` to signal that a gateway restart is needed.
  * The global RestartAnnouncementBar subscribes and renders a prompt.
  *
- * Uses the same useSyncExternalStore pattern as chat-store.ts.
+ * The snapshot object is cached at module level and only recreated when
+ * data changes — this is required by useSyncExternalStore which uses
+ * Object.is to compare snapshots (new object = always "changed" = infinite loop).
  */
 
 type Listener = () => void;
+type Snapshot = { needed: boolean; reason: string; restarting: boolean };
 
 let _restartNeeded = false;
 let _reason = "";
 let _restarting = false;
 const _listeners = new Set<Listener>();
 
-export function isRestartNeeded(): boolean {
-  return _restartNeeded;
-}
+/** Cached snapshot — only replaced inside _notify() when state changes */
+let _snapshot: Snapshot = { needed: false, reason: "", restarting: false };
 
-export function getRestartReason(): string {
-  return _reason;
-}
-
-export function isRestarting(): boolean {
-  return _restarting;
-}
+/** Stable server-side snapshot (never changes) */
+const _serverSnapshot: Snapshot = { needed: false, reason: "", restarting: false };
 
 export function requestRestart(reason: string): void {
   if (_restartNeeded) return; // already showing
@@ -52,16 +49,19 @@ export function subscribeRestartStore(listener: Listener): () => void {
   return () => _listeners.delete(listener);
 }
 
-/** Snapshot function for useSyncExternalStore */
-export function getRestartSnapshot(): {
-  needed: boolean;
-  reason: string;
-  restarting: boolean;
-} {
-  return { needed: _restartNeeded, reason: _reason, restarting: _restarting };
+/** Client snapshot for useSyncExternalStore — returns cached reference */
+export function getRestartSnapshot(): Snapshot {
+  return _snapshot;
+}
+
+/** Server snapshot for useSyncExternalStore — always the same reference */
+export function getServerSnapshot(): Snapshot {
+  return _serverSnapshot;
 }
 
 function _notify(): void {
+  // Create a new snapshot reference so useSyncExternalStore detects the change
+  _snapshot = { needed: _restartNeeded, reason: _reason, restarting: _restarting };
   for (const l of _listeners) {
     try {
       l();

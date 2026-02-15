@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runCli, runCliJson, gatewayCall } from "@/lib/openclaw-cli";
+import { runCli, runCliJson } from "@/lib/openclaw-cli";
+import { getOpenClawHome } from "@/lib/paths";
+import { readFile, readdir } from "fs/promises";
+import { join } from "path";
 
 export const dynamic = "force-dynamic";
 
@@ -39,8 +42,9 @@ type CronRunEntry = {
 };
 
 /**
- * Extract known delivery targets from sessions + existing cron jobs.
- * Session keys often follow the pattern `channel:chatId:agentId`.
+ * Extract known delivery targets from:
+ *   1. Existing cron jobs that already have `delivery.to` set
+ *   2. Session files on disk (deliveryContext.to and origin.to fields)
  */
 async function collectKnownTargets(): Promise<
   { target: string; channel: string; source: string }[]
@@ -60,17 +64,43 @@ async function collectKnownTargets(): Promise<
     /* ignore */
   }
 
-  // 2. Extract from active sessions (keys contain channel:id patterns)
+  // 2. Scan agent session files for deliveryContext.to
   try {
-    const data = await gatewayCall<{
-      sessions: { key: string }[];
-    }>("sessions.list", undefined, 10000);
-    for (const sess of data.sessions || []) {
-      const parsed = parseSessionKey(sess.key);
-      if (parsed) {
-        if (!targets.has(parsed.target)) {
-          targets.set(parsed.target, { channel: parsed.channel, source: "active session" });
+    const home = getOpenClawHome();
+    const agentsDir = join(home, "agents");
+    const agents = await readdir(agentsDir).catch(() => [] as string[]);
+
+    for (const agentId of agents) {
+      const sessPath = join(agentsDir, agentId, "sessions", "sessions.json");
+      try {
+        const raw = await readFile(sessPath, "utf-8");
+        const sessions = JSON.parse(raw) as Record<
+          string,
+          {
+            deliveryContext?: { channel?: string; to?: string };
+            origin?: { from?: string; to?: string; surface?: string };
+          }
+        >;
+        for (const [key, sess] of Object.entries(sessions)) {
+          // deliveryContext.to is the most reliable source
+          if (sess.deliveryContext?.to) {
+            const to = sess.deliveryContext.to;
+            const ch = sess.deliveryContext.channel || detectChannel(to);
+            if (!targets.has(to)) {
+              targets.set(to, { channel: ch, source: `session (${agentId})` });
+            }
+          }
+          // Also check origin.from for additional targets
+          if (sess.origin?.from && sess.origin.from !== sess.deliveryContext?.to) {
+            const from = sess.origin.from;
+            const ch = sess.origin.surface || detectChannel(from);
+            if (!targets.has(from)) {
+              targets.set(from, { channel: ch, source: `session (${agentId})` });
+            }
+          }
         }
+      } catch {
+        // Session file doesn't exist or isn't valid JSON — skip
       }
     }
   } catch {
@@ -89,27 +119,6 @@ function detectChannel(to: string): string {
   if (to.startsWith("discord:")) return "discord";
   if (to.startsWith("+")) return "whatsapp";
   return "";
-}
-
-function parseSessionKey(key: string): { target: string; channel: string } | null {
-  // Session keys: "telegram:1386366527:main", "discord:123456:main", etc.
-  const channels = ["telegram", "whatsapp", "discord"];
-  for (const ch of channels) {
-    if (key.startsWith(`${ch}:`)) {
-      const parts = key.split(":");
-      if (parts.length >= 2 && parts[1]) {
-        return { target: `${ch}:${parts[1]}`, channel: ch };
-      }
-    }
-  }
-  // WhatsApp sessions might start with +
-  if (key.startsWith("+")) {
-    const parts = key.split(":");
-    if (parts[0]) {
-      return { target: parts[0], channel: "whatsapp" };
-    }
-  }
-  return null;
 }
 
 export async function GET(request: NextRequest) {
