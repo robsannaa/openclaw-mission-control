@@ -1,0 +1,178 @@
+"use client";
+
+import React from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/utils";
+
+const baseComponents = {
+  h1: ({ children, ...props }: React.ComponentPropsWithoutRef<"h1">) => (
+    <h1
+      className="mb-3 mt-6 text-lg font-semibold text-zinc-100 first:mt-0"
+      {...props}
+    >
+      {children}
+    </h1>
+  ),
+  h2: ({ children, ...props }: React.ComponentPropsWithoutRef<"h2">) => (
+    <h2
+      className="mb-2 mt-5 text-base font-semibold text-violet-300 first:mt-0"
+      {...props}
+    >
+      {children}
+    </h2>
+  ),
+  h3: ({ children, ...props }: React.ComponentPropsWithoutRef<"h3">) => (
+    <h3
+      className="mb-2 mt-4 text-sm font-semibold text-zinc-200 first:mt-0"
+      {...props}
+    >
+      {children}
+    </h3>
+  ),
+  h4: ({ children, ...props }: React.ComponentPropsWithoutRef<"h4">) => (
+    <h4
+      className="mb-1.5 mt-3 text-sm font-medium text-zinc-300 first:mt-0"
+      {...props}
+    >
+      {children}
+    </h4>
+  ),
+  p: ({ children, ...props }: React.ComponentPropsWithoutRef<"p">) => (
+    <p className="mb-2 text-sm leading-7 text-zinc-400" {...props}>
+      {children}
+    </p>
+  ),
+  ul: ({ children, ...props }: React.ComponentPropsWithoutRef<"ul">) => (
+    <ul
+      className="my-2 list-inside list-disc space-y-1 text-zinc-400"
+      {...props}
+    >
+      {children}
+    </ul>
+  ),
+  ol: ({ children, ...props }: React.ComponentPropsWithoutRef<"ol">) => (
+    <ol
+      className="my-2 list-inside list-decimal space-y-1 text-zinc-400"
+      {...props}
+    >
+      {children}
+    </ol>
+  ),
+  li: ({ children, ...props }: React.ComponentPropsWithoutRef<"li">) => (
+    <li className="text-sm text-zinc-400" {...props}>
+      {children}
+    </li>
+  ),
+  hr: (props: React.ComponentPropsWithoutRef<"hr">) => (
+    <hr className="my-4 border-white/[0.06]" {...props} />
+  ),
+  strong: ({ children, ...props }: React.ComponentPropsWithoutRef<"strong">) => (
+    <strong className="font-semibold text-zinc-200" {...props}>
+      {children}
+    </strong>
+  ),
+  em: ({ children, ...props }: React.ComponentPropsWithoutRef<"em">) => (
+    <em className="italic text-zinc-300" {...props}>
+      {children}
+    </em>
+  ),
+  code: ({ children, ...props }: React.ComponentPropsWithoutRef<"code">) => (
+    <code
+      className="rounded bg-zinc-800/80 px-1.5 py-0.5 font-mono text-[13px] text-zinc-300"
+      {...props}
+    >
+      {children}
+    </code>
+  ),
+  pre: ({ children, ...props }: React.ComponentPropsWithoutRef<"pre">) => (
+    <pre
+      className="my-3 overflow-x-auto rounded-lg bg-zinc-800/60 p-4 text-sm text-zinc-300"
+      {...props}
+    >
+      {children}
+    </pre>
+  ),
+  blockquote: ({
+    children,
+    ...props
+  }: React.ComponentPropsWithoutRef<"blockquote">) => (
+    <blockquote
+      className="my-2 border-l-2 border-violet-500/40 pl-4 italic text-zinc-500"
+      {...props}
+    >
+      {children}
+    </blockquote>
+  ),
+  a: ({
+    href,
+    children,
+    ...props
+  }: React.ComponentPropsWithoutRef<"a">) => (
+    <a
+      href={href}
+      className="text-violet-400 hover:underline"
+      target="_blank"
+      rel="noopener noreferrer"
+      {...props}
+    >
+      {children}
+    </a>
+  ),
+  table: ({ children, ...props }: React.ComponentPropsWithoutRef<"table">) => (
+    <div className="my-4 overflow-x-auto">
+      <table
+        className="min-w-full border-collapse border border-white/[0.06] text-sm text-zinc-400"
+        {...props}
+      >
+        {children}
+      </table>
+    </div>
+  ),
+  th: ({ children, ...props }: React.ComponentPropsWithoutRef<"th">) => (
+    <th
+      className="border border-white/[0.06] bg-zinc-800/40 px-3 py-2 text-left text-[13px] font-medium text-zinc-200"
+      {...props}
+    >
+      {children}
+    </th>
+  ),
+  td: ({ children, ...props }: React.ComponentPropsWithoutRef<"td">) => (
+    <td className="border border-white/[0.06] px-3 py-2 text-[13px]" {...props}>
+      {children}
+    </td>
+  ),
+  tr: ({ children, ...props }: React.ComponentPropsWithoutRef<"tr">) => (
+    <tr className="border-b border-white/[0.06]" {...props}>
+      {children}
+    </tr>
+  ),
+};
+
+export function MarkdownContent({
+  content,
+  className,
+}: {
+  content: string;
+  className?: string;
+}) {
+  const source = typeof content === "string" ? content : "";
+  if (!source.trim()) {
+    return (
+      <p className={cn("text-sm italic text-zinc-600", className)}>
+        No content
+      </p>
+    );
+  }
+  return (
+    <div className={cn("space-y-1", className)}>
+      <ReactMarkdown
+        key={source.length}
+        remarkPlugins={[remarkGfm]}
+        components={baseComponents}
+      >
+        {source}
+      </ReactMarkdown>
+    </div>
+  );
+}

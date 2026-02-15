@@ -1,0 +1,17 @@
+# Dev / test files
+.cursor/
+.git/
+.github/
+*.test.ts
+*.test.tsx
+*.spec.ts
+playwright.config.ts
+tests/
+test-*.js
+
+# Build cache (will be rebuilt on first run)
+.next/
+
+# OS junk
+.DS_Store
+Thumbs.db

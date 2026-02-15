@@ -1,0 +1,919 @@
+@import "tailwindcss";
+@import "../../node_modules/tw-animate-css/dist/tw-animate.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --radius-3xl: calc(var(--radius) + 12px);
+  --radius-4xl: calc(var(--radius) + 16px);
+}
+
+/* ═══════════════════════════════════════════════════
+   DESIGN TOKENS
+   Semantic color roles that adapt to light/dark.
+   Components should migrate to these over time.
+   ═══════════════════════════════════════════════════ */
+
+/* ── Light mode (default) ───────────────────────── */
+:root {
+  --radius: 0.625rem;
+
+  /* Core backgrounds */
+  --background: #f8f8fa;
+  --foreground: #18181b;
+  --card: #ffffff;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --secondary: #f0f0f3;
+  --secondary-foreground: #18181b;
+  --muted: #f0f0f3;
+  --muted-foreground: #71717a;
+  --accent: #f0f0f3;
+  --accent-foreground: #18181b;
+  --destructive: #dc2626;
+
+  /* Borders & inputs */
+  --border: rgba(0, 0, 0, 0.08);
+  --input: rgba(0, 0, 0, 0.10);
+  --ring: rgba(0, 0, 0, 0.15);
+
+  /* Charts */
+  --chart-1: #6366f1;
+  --chart-2: #0891b2;
+  --chart-3: #d97706;
+  --chart-4: #9333ea;
+  --chart-5: #dc2626;
+
+  /* Sidebar */
+  --sidebar: #f0f0f5;
+  --sidebar-foreground: #18181b;
+  --sidebar-primary: #7c3aed;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8e8f0;
+  --sidebar-accent-foreground: #18181b;
+  --sidebar-border: rgba(0, 0, 0, 0.08);
+  --sidebar-ring: rgba(0, 0, 0, 0.15);
+
+  /* ── Semantic surface tokens ── */
+  --surface-0: #ffffff;                   /* Flat card / panel */
+  --surface-1: rgba(0, 0, 0, 0.02);      /* Subtle raised */
+  --surface-2: rgba(0, 0, 0, 0.04);      /* Elevated card */
+  --surface-3: rgba(0, 0, 0, 0.06);      /* Input / pill / tag */
+  --surface-inset: rgba(0, 0, 0, 0.03);  /* Recessed area inside a card */
+  --surface-overlay: rgba(255, 255, 255, 0.95); /* Dropdown, popover */
+  --surface-header: rgba(255, 255, 255, 0.8);   /* Header / toolbar */
+
+  /* ── Semantic border tokens ── */
+  --border-subtle: rgba(0, 0, 0, 0.04);
+  --border-default: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.12);
+  --border-accent: rgba(0, 0, 0, 0.16);
+
+  /* ── Semantic text tokens ── */
+  --text-primary: #18181b;
+  --text-secondary: #3f3f46;
+  --text-tertiary: #71717a;
+  --text-quaternary: #a1a1aa;
+  --text-placeholder: #a1a1aa;
+}
+
+/* ── Dark mode ──────────────────────────────────── */
+.dark {
+  --background: #050508;
+  --foreground: #f4f4f5;
+  --card: #111114;
+  --card-foreground: #f4f4f5;
+  --popover: #111114;
+  --popover-foreground: #f4f4f5;
+  --primary: #e4e4e7;
+  --primary-foreground: #18181b;
+  --secondary: #1e1e22;
+  --secondary-foreground: #f4f4f5;
+  --muted: #1e1e22;
+  --muted-foreground: #71717a;
+  --accent: #1e1e22;
+  --accent-foreground: #f4f4f5;
+  --destructive: #dc2626;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: rgba(255, 255, 255, 0.2);
+  --chart-1: #6366f1;
+  --chart-2: #22d3ee;
+  --chart-3: #f59e0b;
+  --chart-4: #a855f7;
+  --chart-5: #ef4444;
+  --sidebar: #0a0a0e;
+  --sidebar-foreground: #f4f4f5;
+  --sidebar-primary: #7c3aed;
+  --sidebar-primary-foreground: #f4f4f5;
+  --sidebar-accent: #1e1e22;
+  --sidebar-accent-foreground: #f4f4f5;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: rgba(255, 255, 255, 0.2);
+
+  --surface-0: #111114;
+  --surface-1: rgba(255, 255, 255, 0.02);
+  --surface-2: rgba(255, 255, 255, 0.04);
+  --surface-3: rgba(255, 255, 255, 0.06);
+  --surface-inset: rgba(255, 255, 255, 0.02);
+  --surface-overlay: rgba(17, 17, 20, 0.97);
+  --surface-header: rgba(12, 12, 16, 0.6);
+
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-accent: rgba(255, 255, 255, 0.16);
+
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --text-quaternary: #52525b;
+  --text-placeholder: #52525b;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Space background — dark mode only */
+body {
+  position: relative;
+  min-height: 100vh;
+  background-color: var(--background);
+  transition: background-color 0.3s ease;
+}
+
+.dark body {
+  background-color: #040408;
+  background-image:
+    radial-gradient(ellipse at 15% 85%, rgba(6, 95, 70, 0.12) 0%, transparent 45%),
+    radial-gradient(ellipse at 80% 20%, rgba(30, 58, 138, 0.10) 0%, transparent 45%),
+    radial-gradient(ellipse at 50% 50%, rgba(20, 30, 48, 0.15) 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 70%, rgba(15, 50, 40, 0.06) 0%, transparent 40%);
+}
+
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  background-image:
+    radial-gradient(1.2px 1.2px at 10% 15%, rgba(255,255,255,0.45), transparent),
+    radial-gradient(0.8px 0.8px at 20% 40%, rgba(255,255,255,0.25), transparent),
+    radial-gradient(1.5px 1.5px at 35% 8%, rgba(255,255,255,0.55), transparent),
+    radial-gradient(1px 1px at 48% 62%, rgba(255,255,255,0.35), transparent),
+    radial-gradient(0.8px 0.8px at 55% 28%, rgba(255,255,255,0.20), transparent),
+    radial-gradient(1.5px 1.5px at 65% 78%, rgba(255,255,255,0.50), transparent),
+    radial-gradient(1px 1px at 72% 42%, rgba(255,255,255,0.30), transparent),
+    radial-gradient(0.8px 0.8px at 82% 58%, rgba(255,255,255,0.20), transparent),
+    radial-gradient(1.5px 1.5px at 92% 22%, rgba(255,255,255,0.55), transparent),
+    radial-gradient(1px 1px at 15% 75%, rgba(255,255,255,0.35), transparent),
+    radial-gradient(0.8px 0.8px at 38% 88%, rgba(255,255,255,0.20), transparent),
+    radial-gradient(1.5px 1.5px at 58% 5%, rgba(255,255,255,0.50), transparent),
+    radial-gradient(1px 1px at 78% 92%, rgba(255,255,255,0.30), transparent),
+    radial-gradient(0.8px 0.8px at 5% 48%, rgba(255,255,255,0.20), transparent),
+    radial-gradient(1.5px 1.5px at 88% 72%, rgba(255,255,255,0.50), transparent),
+    radial-gradient(0.6px 0.6px at 25% 55%, rgba(255,255,255,0.15), transparent),
+    radial-gradient(1px 1px at 45% 35%, rgba(255,255,255,0.30), transparent),
+    radial-gradient(0.6px 0.6px at 62% 12%, rgba(255,255,255,0.15), transparent),
+    radial-gradient(1.2px 1.2px at 85% 45%, rgba(255,255,255,0.40), transparent),
+    radial-gradient(0.6px 0.6px at 95% 85%, rgba(255,255,255,0.15), transparent);
+  background-size: 220px 220px;
+}
+
+.dark body::before {
+  opacity: 1;
+}
+
+/* Custom scrollbar — adapts to theme */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.22);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Ensure content sits above the star layer */
+body > * {
+  position: relative;
+  z-index: 1;
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIGHT MODE CLASS OVERRIDES
+   ─────────────────────────────────────────────────────────────────
+   These COMPREHENSIVELY invert all hardcoded dark-mode utility
+   classes used across every component.
+   
+   In dark mode (default design), components use:
+     bg-zinc-800/60   → dark translucent card surface
+     bg-zinc-900/80   → dark opaque panel
+     border-white/... → light borders on dark bg
+     text-zinc-100    → near-white text
+   
+   In light mode these need to become:
+     bg-zinc-800/60   → light translucent surface
+     bg-zinc-900/80   → near-white panel
+     border-white/... → dark borders on light bg
+     text-zinc-100    → near-black text
+     
+   The :root:not(.dark) selector targets ONLY light mode.
+   ═══════════════════════════════════════════════════════════════════ */
+
+
+/* ── 1. BACKGROUND: Hardcoded hex values ──────────────────────── */
+
+:root:not(.dark) .bg-\[\#040408\],
+:root:not(.dark) .bg-\[\#050508\],
+:root:not(.dark) .bg-\[\#08080c\],
+:root:not(.dark) .bg-\[\#0a0a0e\],
+:root:not(.dark) .bg-\[\#0c0c10\],
+:root:not(.dark) .bg-\[\#111114\] {
+  background-color: var(--card) !important;
+}
+
+:root:not(.dark) .bg-\[\#08080c\]\/40,
+:root:not(.dark) .bg-\[\#0a0a0e\]\/40 {
+  background-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+:root:not(.dark) .bg-\[\#08080c\]\/60,
+:root:not(.dark) .bg-\[\#0a0a0e\]\/60,
+:root:not(.dark) .bg-\[\#0c0c10\]\/60 {
+  background-color: var(--surface-header) !important;
+}
+
+:root:not(.dark) .bg-\[\#0a0a0e\]\/80,
+:root:not(.dark) .bg-\[\#0c0c10\]\/80 {
+  background-color: rgba(255, 255, 255, 0.85) !important;
+}
+
+
+/* ── 2. BACKGROUND: zinc-700 ──────────────────────────────────── */
+
+:root:not(.dark) .bg-zinc-700 {
+  background-color: #e4e4e7 !important;
+}
+:root:not(.dark) .bg-zinc-700\/30 {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+:root:not(.dark) .bg-zinc-700\/50 {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+:root:not(.dark) .bg-zinc-700\/60 {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+
+/* ── 3. BACKGROUND: zinc-800 ──────────────────────────────────── */
+
+:root:not(.dark) .bg-zinc-800 {
+  background-color: #e8e8ec !important;
+}
+:root:not(.dark) .bg-zinc-800\/20 {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+:root:not(.dark) .bg-zinc-800\/30 {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+:root:not(.dark) .bg-zinc-800\/40 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+:root:not(.dark) .bg-zinc-800\/50 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+:root:not(.dark) .bg-zinc-800\/60 {
+  background-color: rgba(0, 0, 0, 0.025) !important;
+}
+:root:not(.dark) .bg-zinc-800\/80 {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+
+/* ── 4. BACKGROUND: zinc-900 ──────────────────────────────────── */
+/* In dark mode these are card/panel surfaces. In light = white.  */
+
+:root:not(.dark) .bg-zinc-900 {
+  background-color: var(--card) !important;
+}
+:root:not(.dark) .bg-zinc-900\/20 {
+  background-color: rgba(255, 255, 255, 0.6) !important;
+}
+:root:not(.dark) .bg-zinc-900\/30 {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+}
+:root:not(.dark) .bg-zinc-900\/40 {
+  background-color: rgba(255, 255, 255, 0.75) !important;
+}
+:root:not(.dark) .bg-zinc-900\/50 {
+  background-color: var(--card) !important;
+}
+:root:not(.dark) .bg-zinc-900\/60 {
+  background-color: var(--card) !important;
+}
+:root:not(.dark) .bg-zinc-900\/80 {
+  background-color: var(--card) !important;
+}
+:root:not(.dark) .bg-zinc-900\/95 {
+  background-color: rgba(255, 255, 255, 0.97) !important;
+}
+:root:not(.dark) .bg-zinc-900\/98 {
+  background-color: rgba(255, 255, 255, 0.98) !important;
+}
+
+
+/* ── 5. BACKGROUND: zinc-950 ──────────────────────────────────── */
+
+:root:not(.dark) .bg-zinc-950 {
+  background-color: #f0f0f3 !important;
+}
+:root:not(.dark) .bg-zinc-950\/50,
+:root:not(.dark) .bg-zinc-950\/60 {
+  background-color: rgba(255, 255, 255, 0.6) !important;
+}
+
+
+/* ── 6. BACKGROUND: white/alpha (invisible on light bg → use dark alpha) ── */
+
+:root:not(.dark) .bg-white\/\[0\.01\] {
+  background-color: rgba(0, 0, 0, 0.01) !important;
+}
+:root:not(.dark) .bg-white\/\[0\.02\] {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+:root:not(.dark) .bg-white\/\[0\.03\] {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+:root:not(.dark) .bg-white\/\[0\.04\] {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+:root:not(.dark) .bg-white\/\[0\.05\] {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+:root:not(.dark) .bg-white\/\[0\.06\] {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+:root:not(.dark) .bg-white\/\[0\.08\] {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+:root:not(.dark) .bg-white\/\[0\.1\] {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+:root:not(.dark) .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+:root:not(.dark) .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+
+/* ── 7. BORDER: white/alpha → dark/alpha in light mode ────────── */
+
+:root:not(.dark) .border-white\/\[0\.01\] {
+  border-color: rgba(0, 0, 0, 0.02) !important;
+}
+:root:not(.dark) .border-white\/\[0\.02\] {
+  border-color: rgba(0, 0, 0, 0.03) !important;
+}
+:root:not(.dark) .border-white\/\[0\.03\] {
+  border-color: rgba(0, 0, 0, 0.04) !important;
+}
+:root:not(.dark) .border-white\/\[0\.04\] {
+  border-color: rgba(0, 0, 0, 0.05) !important;
+}
+:root:not(.dark) .border-white\/\[0\.06\] {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+:root:not(.dark) .border-white\/\[0\.08\] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+:root:not(.dark) .border-white\/\[0\.1\] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+:root:not(.dark) .border-white\/\[0\.12\] {
+  border-color: rgba(0, 0, 0, 0.10) !important;
+}
+:root:not(.dark) .border-white\/\[0\.15\] {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+:root:not(.dark) .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+
+/* ── 8. TEXT: zinc scale inversion ────────────────────────────── */
+/*    In dark mode, zinc-100 = brightest. In light mode, flip.    */
+
+:root:not(.dark) .text-zinc-100 {
+  color: #18181b !important;
+}
+:root:not(.dark) .text-zinc-200 {
+  color: #27272a !important;
+}
+:root:not(.dark) .text-zinc-300 {
+  color: #3f3f46 !important;
+}
+:root:not(.dark) .text-zinc-400 {
+  color: #52525b !important;
+}
+:root:not(.dark) .text-zinc-500 {
+  color: #71717a !important;
+}
+:root:not(.dark) .text-zinc-600 {
+  color: #a1a1aa !important;
+}
+:root:not(.dark) .text-zinc-700 {
+  color: #d4d4d8 !important;
+}
+
+/* Hover text */
+:root:not(.dark) .hover\:text-zinc-100:hover {
+  color: #18181b !important;
+}
+:root:not(.dark) .hover\:text-zinc-200:hover {
+  color: #27272a !important;
+}
+:root:not(.dark) .hover\:text-zinc-300:hover {
+  color: #3f3f46 !important;
+}
+:root:not(.dark) .hover\:text-zinc-400:hover {
+  color: #52525b !important;
+}
+
+/* Placeholder text */
+:root:not(.dark) .placeholder\:text-zinc-600::placeholder {
+  color: #a1a1aa !important;
+}
+:root:not(.dark) .placeholder\:text-zinc-700::placeholder {
+  color: #c4c4cc !important;
+}
+
+
+/* ── 9. HOVER BACKGROUNDS ─────────────────────────────────────── */
+
+:root:not(.dark) .hover\:bg-zinc-700:hover {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+:root:not(.dark) .hover\:bg-zinc-700\/60:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+:root:not(.dark) .hover\:bg-zinc-800:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+:root:not(.dark) .hover\:bg-zinc-800\/30:hover {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+:root:not(.dark) .hover\:bg-zinc-800\/40:hover {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+:root:not(.dark) .hover\:bg-zinc-800\/60:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+:root:not(.dark) .hover\:bg-zinc-800\/80:hover {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+:root:not(.dark) .hover\:bg-zinc-900\/10:hover {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+
+/* Hover bg-white/alpha */
+:root:not(.dark) .hover\:bg-white\/5:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+:root:not(.dark) .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+:root:not(.dark) .hover\:bg-white\/\[0\.02\]:hover {
+  background-color: rgba(0, 0, 0, 0.02) !important;
+}
+:root:not(.dark) .hover\:bg-white\/\[0\.04\]:hover {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+:root:not(.dark) .hover\:bg-white\/\[0\.06\]:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+:root:not(.dark) .hover\:bg-white\/\[0\.1\]:hover {
+  background-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+
+/* ── 10. FOCUS-WITHIN states ──────────────────────────────────── */
+/* Violet focus rings work in both modes, no override needed */
+
+
+/* ── 11. RING / OUTLINE zinc patterns ──────────────────────────── */
+
+:root:not(.dark) .ring-zinc-500\/30 {
+  --tw-ring-color: rgba(113, 113, 122, 0.2) !important;
+}
+:root:not(.dark) .ring-white\/10 {
+  --tw-ring-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+
+/* ── 12. GRADIENT stops ───────────────────────────────────────── */
+
+:root:not(.dark) .from-zinc-500 {
+  --tw-gradient-from: #a1a1aa !important;
+}
+:root:not(.dark) .to-zinc-600 {
+  --tw-gradient-to: #a1a1aa !important;
+}
+
+
+/* ── 13. ACCENT-COLORED BACKGROUNDS with alpha ────────────────── */
+/* These generally work fine in both modes, but some dark-only    */
+/* variants (violet on dark bg) need slightly more opacity for    */
+/* visibility on white.                                           */
+
+:root:not(.dark) .bg-violet-500\/10 {
+  background-color: rgba(139, 92, 246, 0.08) !important;
+}
+:root:not(.dark) .bg-violet-600\/20 {
+  background-color: rgba(124, 58, 237, 0.10) !important;
+}
+:root:not(.dark) .bg-emerald-500\/10 {
+  background-color: rgba(16, 185, 129, 0.08) !important;
+}
+:root:not(.dark) .bg-amber-500\/10 {
+  background-color: rgba(245, 158, 11, 0.08) !important;
+}
+:root:not(.dark) .bg-red-500\/10 {
+  background-color: rgba(239, 68, 68, 0.08) !important;
+}
+:root:not(.dark) .bg-blue-500\/10 {
+  background-color: rgba(59, 130, 246, 0.08) !important;
+}
+:root:not(.dark) .bg-cyan-500\/10 {
+  background-color: rgba(6, 182, 212, 0.08) !important;
+}
+
+/* Accent text colors — boost contrast in light mode */
+:root:not(.dark) .text-violet-300 {
+  color: #7c3aed !important;
+}
+:root:not(.dark) .text-violet-400 {
+  color: #7c3aed !important;
+}
+:root:not(.dark) .text-violet-400\/40 {
+  color: rgba(124, 58, 237, 0.5) !important;
+}
+:root:not(.dark) .text-emerald-300 {
+  color: #059669 !important;
+}
+:root:not(.dark) .text-emerald-400 {
+  color: #059669 !important;
+}
+:root:not(.dark) .text-amber-300 {
+  color: #b45309 !important;
+}
+:root:not(.dark) .text-amber-400 {
+  color: #b45309 !important;
+}
+:root:not(.dark) .text-red-300 {
+  color: #dc2626 !important;
+}
+:root:not(.dark) .text-red-400 {
+  color: #dc2626 !important;
+}
+:root:not(.dark) .text-blue-300 {
+  color: #2563eb !important;
+}
+:root:not(.dark) .text-blue-400 {
+  color: #2563eb !important;
+}
+:root:not(.dark) .text-cyan-300 {
+  color: #0891b2 !important;
+}
+:root:not(.dark) .text-cyan-400 {
+  color: #0891b2 !important;
+}
+:root:not(.dark) .text-rose-400\/60 {
+  color: rgba(225, 29, 72, 0.7) !important;
+}
+
+/* Accent border colors */
+:root:not(.dark) .border-violet-500\/20 {
+  border-color: rgba(124, 58, 237, 0.15) !important;
+}
+:root:not(.dark) .border-violet-500\/30 {
+  border-color: rgba(124, 58, 237, 0.20) !important;
+}
+:root:not(.dark) .border-emerald-500\/20 {
+  border-color: rgba(5, 150, 105, 0.15) !important;
+}
+:root:not(.dark) .border-emerald-500\/30 {
+  border-color: rgba(5, 150, 105, 0.20) !important;
+}
+:root:not(.dark) .border-amber-500\/20 {
+  border-color: rgba(180, 83, 9, 0.15) !important;
+}
+:root:not(.dark) .border-red-500\/20 {
+  border-color: rgba(220, 38, 38, 0.15) !important;
+}
+
+/* Accent fill colors (for small dots/indicators) */
+:root:not(.dark) .fill-emerald-400 {
+  fill: #059669 !important;
+}
+
+/* Accent hover variants */
+:root:not(.dark) .hover\:text-violet-300:hover {
+  color: #6d28d9 !important;
+}
+:root:not(.dark) .hover\:text-violet-200:hover {
+  color: #6d28d9 !important;
+}
+:root:not(.dark) .hover\:bg-violet-500\/10:hover {
+  background-color: rgba(124, 58, 237, 0.10) !important;
+}
+:root:not(.dark) .hover\:bg-violet-600\/30:hover {
+  background-color: rgba(124, 58, 237, 0.15) !important;
+}
+:root:not(.dark) .hover\:bg-red-500\/10:hover {
+  background-color: rgba(220, 38, 38, 0.08) !important;
+}
+
+
+/* ── 14. React Flow internal styles ────────────────────────────── */
+
+:root:not(.dark) .react-flow__node {
+  color: var(--foreground);
+}
+:root:not(.dark) .react-flow__edge-path {
+  stroke: rgba(0, 0, 0, 0.2);
+}
+:root:not(.dark) .react-flow__edge.animated path {
+  stroke: rgba(124, 58, 237, 0.4);
+}
+
+/* ── 15. Code block backgrounds in message bubbles ────────────── */
+:root:not(.dark) .bg-zinc-900\/80 pre,
+:root:not(.dark) pre.bg-zinc-900\/80 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+
+/* ═══════════════════════════════════════════════════
+   MARKDOWN EDITOR TYPOGRAPHY
+   ═══════════════════════════════════════════════════ */
+
+.md-editor {
+  line-height: 1.7;
+  color: #52525b;
+  font-size: 0.875rem;
+}
+
+.dark .md-editor {
+  color: #a1a1aa;
+}
+
+.md-editor:empty::before {
+  content: attr(data-placeholder);
+  color: #52525b;
+  pointer-events: none;
+}
+
+.md-editor .empty-placeholder {
+  color: #52525b;
+  font-style: italic;
+}
+
+.md-editor h1 {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.md-editor h1:first-child { margin-top: 0; }
+
+.md-editor h2 {
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #6d28d9;
+  line-height: 1.4;
+}
+.dark .md-editor h2 {
+  color: #c4b5fd;
+}
+.md-editor h2:first-child { margin-top: 0; }
+
+.md-editor h3 {
+  margin-top: 1rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+.md-editor h3:first-child { margin-top: 0; }
+
+.md-editor h4 {
+  margin-top: 0.75rem;
+  margin-bottom: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.md-editor h4:first-child { margin-top: 0; }
+
+.md-editor p {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.75rem;
+  color: var(--text-tertiary);
+}
+
+.md-editor ul {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
+  list-style-type: disc;
+  color: var(--text-tertiary);
+}
+
+.md-editor ol {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+  padding-left: 1.5rem;
+  list-style-type: decimal;
+  color: var(--text-tertiary);
+}
+
+.md-editor li {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  margin-bottom: 0.25rem;
+}
+
+.md-editor hr {
+  margin: 1rem 0;
+  border-color: var(--border);
+}
+
+.md-editor strong {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.md-editor em {
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+.md-editor a {
+  color: #7c3aed;
+  text-decoration: none;
+}
+.dark .md-editor a {
+  color: #a78bfa;
+}
+.md-editor a:hover {
+  text-decoration: underline;
+}
+
+.md-editor code {
+  background: var(--surface-3);
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.md-editor pre {
+  margin: 0.75rem 0;
+  overflow-x: auto;
+  border-radius: 0.5rem;
+  background: var(--surface-2);
+  padding: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.md-editor pre code {
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: inherit;
+}
+
+.md-editor blockquote {
+  margin: 0.5rem 0;
+  border-left: 2px solid rgba(124, 58, 237, 0.4);
+  padding-left: 1rem;
+  font-style: italic;
+  color: var(--text-tertiary);
+}
+
+.md-editor table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1rem 0;
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border);
+}
+
+.md-editor th {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.md-editor td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+}
+
+.md-editor tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.md-editor del, .md-editor s {
+  text-decoration: line-through;
+  color: var(--text-tertiary);
+}
+
+.md-editor {
+  caret-color: #7c3aed;
+}
+.dark .md-editor {
+  caret-color: #a78bfa;
+}
