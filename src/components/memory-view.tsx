@@ -373,15 +373,15 @@ export function MemoryView() {
   return (
     <>
       {/* Left panel: search + memory list */}
-      <div className="flex w-[340px] shrink-0 flex-col overflow-hidden border-r border-white/[0.06] bg-[#0c0c10]/60">
+      <div className="flex w-[340px] shrink-0 flex-col overflow-hidden border-r border-foreground/[0.06] bg-card/60">
         <div className="shrink-0 p-3">
-          <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-zinc-900/80 px-3 py-2 text-sm text-zinc-400">
-            <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+          <div className="flex items-center gap-2 rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-sm text-muted-foreground">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
             <input
               placeholder="Search memory..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-600"
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
             />
           </div>
         </div>
@@ -414,7 +414,7 @@ export function MemoryView() {
                 <Brain className="h-4 w-4" />
                 <span className="text-sm font-medium">Long-Term Memory</span>
               </div>
-              <span className="text-[11px] text-zinc-500">
+              <span className="text-[11px] text-muted-foreground">
                 {memoryMd.words} words &bull; {formatAgo(memoryMd.mtime) || "Updated recently"}
               </span>
             </button>
@@ -422,26 +422,26 @@ export function MemoryView() {
 
           {/* Daily Journal section */}
           <div className="flex items-center gap-2 px-1">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-600">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
               Daily Journal
             </span>
-            <span className="rounded bg-zinc-800/60 px-1.5 py-0.5 text-[10px] text-zinc-500">
+            <span className="rounded bg-muted/80 px-1.5 py-0.5 text-[10px] text-muted-foreground">
               {filteredDaily.length}
             </span>
           </div>
 
           {loading ? (
-            <p className="mt-4 px-1 text-sm text-zinc-600">Loading...</p>
+            <p className="mt-4 px-1 text-sm text-muted-foreground/60">Loading...</p>
           ) : (
             <div className="mt-2 space-y-0">
               {periodGroups.map(({ key, entries: entriesInGroup }) => {
                 const expanded = isExpanded(key);
                 return (
-                  <div key={key} className="border-b border-white/[0.04] last:border-0">
+                  <div key={key} className="border-b border-foreground/[0.04] last:border-0">
                     <button
                       type="button"
                       onClick={() => togglePeriod(key)}
-                      className="flex w-full items-center gap-1.5 py-2 text-left text-[11px] font-medium text-zinc-500 hover:text-zinc-400"
+                      className="flex w-full items-center gap-1.5 py-2 text-left text-[11px] font-medium text-muted-foreground hover:text-muted-foreground"
                     >
                       {expanded ? (
                         <ChevronDown className="h-3.5 w-3.5 shrink-0" />
@@ -478,7 +478,7 @@ export function MemoryView() {
                                 <button
                                   type="button"
                                   onClick={() => setConfirmDelete(null)}
-                                  className="text-[10px] text-zinc-500 hover:text-zinc-300"
+                                  className="text-[10px] text-muted-foreground hover:text-foreground/70"
                                 >
                                   Cancel
                                 </button>
@@ -490,7 +490,7 @@ export function MemoryView() {
                             return (
                               <div
                                 key={e.name}
-                                className="flex items-center gap-2 rounded-lg border border-violet-500/30 bg-zinc-900/80 px-3 py-1.5"
+                                className="flex items-center gap-2 rounded-lg border border-violet-500/30 bg-card px-3 py-1.5"
                               >
                                 <Pencil className="h-3 w-3 shrink-0 text-violet-400" />
                                 <input
@@ -505,7 +505,7 @@ export function MemoryView() {
                                       setRenaming(null);
                                   }}
                                   onBlur={() => renameEntry(e, renameValue)}
-                                  className="flex-1 bg-transparent text-[13px] text-zinc-200 outline-none"
+                                  className="flex-1 bg-transparent text-[13px] text-foreground/90 outline-none"
                                   autoFocus
                                 />
                               </div>
@@ -523,8 +523,8 @@ export function MemoryView() {
                               className={cn(
                                 "flex w-full justify-between rounded-lg px-3 py-1.5 text-left text-sm transition-colors",
                                 selected === e.name
-                                  ? "bg-zinc-800/80 text-violet-300"
-                                  : "text-zinc-400 hover:bg-zinc-800/40 hover:text-zinc-300"
+                                  ? "bg-muted text-violet-300"
+                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground/70"
                               )}
                             >
                               <span className="text-[13px]">
@@ -539,7 +539,7 @@ export function MemoryView() {
                                       });
                                 })()}
                               </span>
-                              <span className="text-[11px] text-zinc-600">
+                              <span className="text-[11px] text-muted-foreground/60">
                                 {e.words ?? 0}w
                               </span>
                             </button>
@@ -556,17 +556,17 @@ export function MemoryView() {
       </div>
 
       {/* Right panel: memory content */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-[#08080c]/40">
+      <div className="flex flex-1 flex-col overflow-hidden bg-background/40">
         {detailMeta ? (
           <>
-            <div className="shrink-0 border-b border-white/[0.06] px-6 py-4">
+            <div className="shrink-0 border-b border-foreground/[0.06] px-6 py-4">
               <div className="flex items-center gap-3">
                 <Brain className="h-4 w-4 text-violet-400" />
-                <h2 className="text-base font-semibold text-zinc-100">
+                <h2 className="text-base font-semibold text-foreground">
                   {detailMeta.title}
                 </h2>
                 {saveStatus === "saving" && (
-                  <span className="text-[11px] text-zinc-500">Saving...</span>
+                  <span className="text-[11px] text-muted-foreground">Saving...</span>
                 )}
                 {saveStatus === "saved" && (
                   <span className="text-[11px] text-emerald-500">Saved</span>
@@ -575,11 +575,11 @@ export function MemoryView() {
                   <span className="text-[11px] text-amber-500">Unsaved</span>
                 )}
               </div>
-              <p className="mt-1 text-[12px] text-zinc-600">
+              <p className="mt-1 text-[12px] text-muted-foreground/60">
                 {detailMeta.words != null && `${detailMeta.words} words`}
                 {detailMeta.size != null && ` \u2022 ${formatBytes(detailMeta.size)}`}
                 {" \u2022 Click to edit \u2022 "}
-                <kbd className="rounded bg-zinc-800/80 px-1 py-0.5 text-[9px] font-mono text-zinc-500">
+                <kbd className="rounded bg-muted px-1 py-0.5 text-[9px] font-mono text-muted-foreground">
                   &#8984;S
                 </kbd>{" "}
                 to save
@@ -598,7 +598,7 @@ export function MemoryView() {
             </div>
           </>
         ) : !loading ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
             Select a memory entry
           </div>
         ) : null}
@@ -608,7 +608,7 @@ export function MemoryView() {
       {ctxMenu && (
         <div
           ref={ctxRef}
-          className="fixed z-50 min-w-[180px] overflow-hidden rounded-lg border border-white/[0.08] bg-zinc-900/95 py-1 shadow-xl backdrop-blur-sm"
+          className="fixed z-50 min-w-[180px] overflow-hidden rounded-lg border border-foreground/[0.08] bg-card/95 py-1 shadow-xl backdrop-blur-sm"
           style={{
             left: Math.min(ctxMenu.x, window.innerWidth - 200),
             top: Math.min(ctxMenu.y, window.innerHeight - 220),
@@ -616,51 +616,51 @@ export function MemoryView() {
         >
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               loadFile(ctxMenu.entry.name, ctxMenu.entry.date);
               setCtxMenu(null);
             }}
           >
-            <ExternalLink className="h-3.5 w-3.5 text-zinc-500" />
+            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
             Open
           </button>
-          <div className="mx-2 my-1 h-px bg-white/[0.06]" />
+          <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               setRenaming(ctxMenu.entry);
               setRenameValue(ctxMenu.entry.name);
               setCtxMenu(null);
             }}
           >
-            <Pencil className="h-3.5 w-3.5 text-zinc-500" />
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
             Rename
           </button>
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               duplicateEntry(ctxMenu.entry);
               setCtxMenu(null);
             }}
           >
-            <Copy className="h-3.5 w-3.5 text-zinc-500" />
+            <Copy className="h-3.5 w-3.5 text-muted-foreground" />
             Duplicate
           </button>
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               copyEntryName(ctxMenu.entry);
               setCtxMenu(null);
             }}
           >
-            <ClipboardCopy className="h-3.5 w-3.5 text-zinc-500" />
+            <ClipboardCopy className="h-3.5 w-3.5 text-muted-foreground" />
             Copy Filename
           </button>
-          <div className="mx-2 my-1 h-px bg-white/[0.06]" />
+          <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
           <button
             type="button"
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"

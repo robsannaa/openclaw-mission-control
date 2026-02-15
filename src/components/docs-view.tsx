@@ -80,7 +80,7 @@ const WORKSPACE_ICONS: Record<string, string> = {
 
 const TAG_COLORS: Record<string, string> = {
   Journal: "bg-amber-500/20 text-amber-300 border-amber-500/30",
-  Other: "bg-zinc-600/20 text-zinc-400 border-zinc-500/30",
+  Other: "bg-zinc-600/20 text-muted-foreground border-zinc-500/30",
   Notes: "bg-blue-500/20 text-blue-300 border-blue-500/30",
   Content: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
   Newsletters: "bg-purple-500/20 text-purple-300 border-purple-500/30",
@@ -365,16 +365,16 @@ export function DocsView() {
   return (
     <>
       {/* Left panel */}
-      <div className="flex w-[360px] shrink-0 flex-col overflow-hidden border-r border-white/[0.06] bg-[#0c0c10]/60">
+      <div className="flex w-[360px] shrink-0 flex-col overflow-hidden border-r border-foreground/[0.06] bg-card/60">
         <div className="shrink-0 space-y-3 p-3">
           {/* Search */}
-          <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-zinc-900/80 px-3 py-2 text-sm text-zinc-400">
-            <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+          <div className="flex items-center gap-2 rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-sm text-muted-foreground">
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
             <input
               placeholder="Search documents..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-zinc-600"
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
             />
           </div>
 
@@ -389,7 +389,7 @@ export function DocsView() {
                   "rounded-md border px-2 py-1 text-[11px] font-medium transition-colors",
                   tagFilter === tag
                     ? TAG_COLORS[tag] || TAG_COLORS.Other
-                    : "border-white/[0.06] bg-zinc-800/50 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-400"
+                    : "border-foreground/[0.06] bg-muted/70 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
                 )}
               >
                 {tag}
@@ -399,7 +399,7 @@ export function DocsView() {
 
           {/* File type chips */}
           <div className="flex flex-wrap gap-1.5">
-            <Hash className="h-3.5 w-3.5 text-zinc-600" />
+            <Hash className="h-3.5 w-3.5 text-muted-foreground/60" />
             {allExts.map((ext) => (
               <button
                 key={ext}
@@ -409,7 +409,7 @@ export function DocsView() {
                   "rounded border px-2 py-0.5 text-[11px] font-mono transition-colors",
                   extFilter === ext
                     ? "border-violet-500/30 bg-violet-500/15 text-violet-300"
-                    : "border-white/[0.06] bg-zinc-800/40 text-zinc-500 hover:text-zinc-400"
+                    : "border-foreground/[0.06] bg-muted/60 text-muted-foreground hover:text-muted-foreground"
                 )}
               >
                 {ext}
@@ -421,9 +421,9 @@ export function DocsView() {
         {/* Document list grouped by workspace */}
         <div className="flex-1 overflow-y-auto px-2 pb-3">
           {loading ? (
-            <p className="px-3 py-4 text-sm text-zinc-600">Loading...</p>
+            <p className="px-3 py-4 text-sm text-muted-foreground/60">Loading...</p>
           ) : workspaceGroups.length === 0 ? (
-            <p className="px-3 py-4 text-sm text-zinc-600">
+            <p className="px-3 py-4 text-sm text-muted-foreground/60">
               No documents found
             </p>
           ) : (
@@ -437,18 +437,18 @@ export function DocsView() {
                     <button
                       type="button"
                       onClick={() => toggleCollapse(ws.name)}
-                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left transition-colors hover:bg-zinc-800/40"
+                      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left transition-colors hover:bg-muted/60"
                     >
                       {isCollapsed ? (
-                        <ChevronRight className="h-3.5 w-3.5 text-zinc-600" />
+                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
                       ) : (
-                        <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
+                        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
                       <span className="text-base">{icon}</span>
-                      <span className="text-[12px] font-semibold text-zinc-300">
+                      <span className="text-[12px] font-semibold text-foreground/70">
                         {ws.label}
                       </span>
-                      <span className="text-[11px] text-zinc-600">
+                      <span className="text-[11px] text-muted-foreground/60">
                         {ws.docs.length}
                       </span>
                     </button>
@@ -487,7 +487,7 @@ export function DocsView() {
                                 <button
                                   type="button"
                                   onClick={() => setConfirmDelete(null)}
-                                  className="text-[10px] text-zinc-500 hover:text-zinc-300"
+                                  className="text-[10px] text-muted-foreground hover:text-foreground/70"
                                 >
                                   Cancel
                                 </button>
@@ -499,7 +499,7 @@ export function DocsView() {
                             return (
                               <div
                                 key={doc.path}
-                                className="flex items-center gap-2 rounded-lg border border-violet-500/30 bg-zinc-900/80 px-3 py-2"
+                                className="flex items-center gap-2 rounded-lg border border-violet-500/30 bg-card px-3 py-2"
                               >
                                 <Pencil className="h-3 w-3 shrink-0 text-violet-400" />
                                 <input
@@ -516,7 +516,7 @@ export function DocsView() {
                                   onBlur={() =>
                                     renameDoc(doc, renameValue)
                                   }
-                                  className="flex-1 bg-transparent text-[13px] text-zinc-200 outline-none"
+                                  className="flex-1 bg-transparent text-[13px] text-foreground/90 outline-none"
                                   autoFocus
                                 />
                               </div>
@@ -534,24 +534,24 @@ export function DocsView() {
                               className={cn(
                                 "flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors",
                                 isSelected
-                                  ? "bg-zinc-800/80 ring-1 ring-white/[0.06]"
-                                  : "hover:bg-zinc-800/40"
+                                  ? "bg-muted ring-1 ring-white/[0.06]"
+                                  : "hover:bg-muted/60"
                               )}
                             >
-                              <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-zinc-600" />
+                              <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
                               <div className="min-w-0 flex-1">
                                 <span
                                   className={cn(
                                     "block truncate text-[13px] font-medium",
                                     isSelected
-                                      ? "text-zinc-100"
-                                      : "text-zinc-300"
+                                      ? "text-foreground"
+                                      : "text-foreground/70"
                                   )}
                                 >
                                   {doc.name}
                                 </span>
                                 {showSubpath && (
-                                  <span className="block truncate text-[10px] text-zinc-600">
+                                  <span className="block truncate text-[10px] text-muted-foreground/60">
                                     {relPath}
                                   </span>
                                 )}
@@ -564,7 +564,7 @@ export function DocsView() {
                                   >
                                     {doc.tag}
                                   </span>
-                                  <span className="text-[10px] text-zinc-600">
+                                  <span className="text-[10px] text-muted-foreground/60">
                                     {formatAgo(doc.mtime)}
                                   </span>
                                 </div>
@@ -583,16 +583,16 @@ export function DocsView() {
       </div>
 
       {/* Right panel: preview / editor */}
-      <div className="flex flex-1 flex-col overflow-hidden bg-[#08080c]/40">
+      <div className="flex flex-1 flex-col overflow-hidden bg-background/40">
         {selected ? (
           <>
             {/* Header */}
-            <div className="shrink-0 border-b border-white/[0.06] px-6 py-4">
+            <div className="shrink-0 border-b border-foreground/[0.06] px-6 py-4">
               <div className="flex items-center gap-3">
                 <span className="text-base">
                   {WORKSPACE_ICONS[selected.workspace] || "📁"}
                 </span>
-                <h2 className="text-base font-semibold text-zinc-100">
+                <h2 className="text-base font-semibold text-foreground">
                   {selected.name}
                 </h2>
                 <span
@@ -604,7 +604,7 @@ export function DocsView() {
                   {selected.tag}
                 </span>
                 {saveStatus === "saving" && (
-                  <span className="text-[11px] text-zinc-500">Saving...</span>
+                  <span className="text-[11px] text-muted-foreground">Saving...</span>
                 )}
                 {saveStatus === "saved" && (
                   <span className="text-[11px] text-emerald-500">Saved</span>
@@ -613,13 +613,13 @@ export function DocsView() {
                   <span className="text-[11px] text-amber-500">Unsaved</span>
                 )}
               </div>
-              <p className="mt-1 flex items-center gap-2 text-[12px] text-zinc-600">
-                <span className="rounded bg-zinc-800/50 px-1.5 py-0.5 text-[10px] text-zinc-500">
+              <p className="mt-1 flex items-center gap-2 text-[12px] text-muted-foreground/60">
+                <span className="rounded bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   {workspaceLabel(selected.workspace)}
                 </span>
                 {formatBytes(selected.size)} &bull; {words} words &bull;
                 Modified {formatAgo(selected.mtime)} &bull;
-                <kbd className="rounded bg-zinc-800/80 px-1 py-0.5 text-[9px] font-mono text-zinc-500">
+                <kbd className="rounded bg-muted px-1 py-0.5 text-[9px] font-mono text-muted-foreground">
                   &#8984;S
                 </kbd>{" "}
                 to save
@@ -637,17 +637,17 @@ export function DocsView() {
                   placeholder="Click to start writing..."
                 />
               ) : (
-                <div className="flex items-center justify-center py-12 text-sm text-zinc-600">
+                <div className="flex items-center justify-center py-12 text-sm text-muted-foreground/60">
                   Loading...
                 </div>
               )}
             </div>
           </>
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-zinc-600">
-            <FolderOpen className="h-8 w-8 text-zinc-700" />
+          <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground/60">
+            <FolderOpen className="h-8 w-8 text-muted-foreground/40" />
             <p className="text-sm">Select a document</p>
-            <p className="text-[11px] text-zinc-700">
+            <p className="text-[11px] text-muted-foreground/40">
               Documents are grouped by workspace/agent
             </p>
           </div>
@@ -658,7 +658,7 @@ export function DocsView() {
       {ctxMenu && (
         <div
           ref={ctxRef}
-          className="fixed z-50 min-w-[180px] overflow-hidden rounded-lg border border-white/[0.08] bg-zinc-900/95 py-1 shadow-xl backdrop-blur-sm"
+          className="fixed z-50 min-w-[180px] overflow-hidden rounded-lg border border-foreground/[0.08] bg-card/95 py-1 shadow-xl backdrop-blur-sm"
           style={{
             left: Math.min(ctxMenu.x, window.innerWidth - 200),
             top: Math.min(ctxMenu.y, window.innerHeight - 260),
@@ -666,51 +666,51 @@ export function DocsView() {
         >
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               loadDoc(ctxMenu.doc);
               setCtxMenu(null);
             }}
           >
-            <ExternalLink className="h-3.5 w-3.5 text-zinc-500" />
+            <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
             Open
           </button>
-          <div className="mx-2 my-1 h-px bg-white/[0.06]" />
+          <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               setRenaming(ctxMenu.doc);
               setRenameValue(ctxMenu.doc.name);
               setCtxMenu(null);
             }}
           >
-            <Pencil className="h-3.5 w-3.5 text-zinc-500" />
+            <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
             Rename
           </button>
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               duplicateDoc(ctxMenu.doc);
               setCtxMenu(null);
             }}
           >
-            <Copy className="h-3.5 w-3.5 text-zinc-500" />
+            <Copy className="h-3.5 w-3.5 text-muted-foreground" />
             Duplicate
           </button>
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               copyPath(ctxMenu.doc);
               setCtxMenu(null);
             }}
           >
-            <ClipboardCopy className="h-3.5 w-3.5 text-zinc-500" />
+            <ClipboardCopy className="h-3.5 w-3.5 text-muted-foreground" />
             Copy Path
           </button>
-          <div className="mx-2 my-1 h-px bg-white/[0.06]" />
+          <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
           <button
             type="button"
             className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"

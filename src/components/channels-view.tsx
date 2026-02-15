@@ -132,7 +132,7 @@ function getDeviceIcon(device: { clientId: string; platform: string }) {
   for (const [key, icon] of Object.entries(PLATFORM_ICONS)) {
     if (platform.includes(key)) return icon;
   }
-  return <Smartphone className="h-5 w-5 text-zinc-500" />;
+  return <Smartphone className="h-5 w-5 text-muted-foreground" />;
 }
 
 const MODE_LABELS: Record<string, string> = {
@@ -167,7 +167,7 @@ function PendingRequestCard({
       className={cn(
         "rounded-xl border p-4 transition-colors",
         isExpired
-          ? "border-zinc-800/50 bg-zinc-900/20 opacity-60"
+          ? "border-zinc-800/50 bg-card/60 opacity-60"
           : "border-amber-500/20 bg-amber-500/[0.04]"
       )}
     >
@@ -180,7 +180,7 @@ function PendingRequestCard({
         {/* Info */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-zinc-200">
+            <span className="text-sm font-medium text-foreground/90">
               {request.displayName || request.platform || "Unknown device"}
             </span>
             {isExpired && (
@@ -190,7 +190,7 @@ function PendingRequestCard({
             )}
           </div>
 
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-zinc-500">
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
             <span>{MODE_LABELS[request.clientMode] || request.clientMode}</span>
             <span>{request.platform}</span>
             <span>
@@ -210,7 +210,7 @@ function PendingRequestCard({
               {request.requestedScopes.map((s) => (
                 <span
                   key={s}
-                  className="rounded bg-zinc-800/60 px-1.5 py-0.5 text-[9px] text-zinc-500"
+                  className="rounded bg-muted/80 px-1.5 py-0.5 text-[9px] text-muted-foreground"
                 >
                   {s}
                 </span>
@@ -218,7 +218,7 @@ function PendingRequestCard({
             </div>
           )}
 
-          <div className="mt-1 text-[10px] text-zinc-700">
+          <div className="mt-1 text-[10px] text-muted-foreground/40">
             ID: {shortId(request.requestId || request.deviceId)}
           </div>
         </div>
@@ -268,7 +268,7 @@ function PairedDeviceCard({
   const isRecent = Date.now() - lastUsed < 300000; // 5 min
 
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-zinc-900/40 transition-colors hover:bg-zinc-900/60">
+    <div className="rounded-xl border border-foreground/[0.06] bg-card/80 transition-colors hover:bg-card">
       {/* Main row */}
       <button
         type="button"
@@ -276,14 +276,14 @@ function PairedDeviceCard({
         className="flex w-full items-center gap-4 px-4 py-3 text-left"
       >
         {/* Icon */}
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/[0.03]">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-foreground/[0.03]">
           {getDeviceIcon(device)}
         </div>
 
         {/* Info */}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-zinc-200">
+            <span className="text-[13px] font-medium text-foreground/90">
               {device.displayName || device.platform}
             </span>
             {/* Online indicator */}
@@ -292,12 +292,12 @@ function PairedDeviceCard({
                 "h-1.5 w-1.5 rounded-full",
                 isRecent
                   ? "bg-emerald-400 shadow-[0_0_4px] shadow-emerald-400/50"
-                  : "bg-zinc-700"
+                  : "bg-muted"
               )}
               title={isRecent ? "Active recently" : "Inactive"}
             />
           </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-zinc-500">
+          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
             <span>{MODE_LABELS[device.clientMode] || device.clientMode}</span>
             <span>{device.platform}</span>
             <span>Last seen {formatAgo(lastUsed)}</span>
@@ -311,7 +311,7 @@ function PairedDeviceCard({
               key={r}
               className={cn(
                 "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                ROLE_COLORS[r] || "bg-zinc-800/50 text-zinc-400 border-zinc-700"
+                ROLE_COLORS[r] || "bg-muted/70 text-muted-foreground border-zinc-700"
               )}
             >
               {r === "node" ? (
@@ -326,46 +326,46 @@ function PairedDeviceCard({
 
         {/* Expand toggle */}
         {expanded ? (
-          <ChevronUp className="h-4 w-4 shrink-0 text-zinc-600" />
+          <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground/60" />
         ) : (
-          <ChevronDown className="h-4 w-4 shrink-0 text-zinc-600" />
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground/60" />
         )}
       </button>
 
       {/* Expanded details */}
       {expanded && (
-        <div className="border-t border-white/[0.04] px-4 py-3">
+        <div className="border-t border-foreground/[0.04] px-4 py-3">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-[11px]">
             <div>
-              <span className="text-zinc-600">Device ID</span>
-              <p className="mt-0.5 font-mono text-[10px] text-zinc-400">
+              <span className="text-muted-foreground/60">Device ID</span>
+              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
                 {device.deviceId}
               </p>
             </div>
             <div>
-              <span className="text-zinc-600">Client</span>
-              <p className="mt-0.5 text-zinc-400">{device.clientId}</p>
+              <span className="text-muted-foreground/60">Client</span>
+              <p className="mt-0.5 text-muted-foreground">{device.clientId}</p>
             </div>
             <div>
-              <span className="text-zinc-600">Paired on</span>
-              <p className="mt-0.5 text-zinc-400">
+              <span className="text-muted-foreground/60">Paired on</span>
+              <p className="mt-0.5 text-muted-foreground">
                 {formatDate(device.approvedAtMs || device.createdAtMs)}
               </p>
             </div>
             <div>
-              <span className="text-zinc-600">Scopes</span>
+              <span className="text-muted-foreground/60">Scopes</span>
               <div className="mt-0.5 flex flex-wrap gap-1">
                 {device.scopes.length > 0 ? (
                   device.scopes.map((s) => (
                     <span
                       key={s}
-                      className="rounded bg-zinc-800/60 px-1.5 py-0.5 text-[9px] text-zinc-500"
+                      className="rounded bg-muted/80 px-1.5 py-0.5 text-[9px] text-muted-foreground"
                     >
                       {s}
                     </span>
                   ))
                 ) : (
-                  <span className="text-zinc-600">none</span>
+                  <span className="text-muted-foreground/60">none</span>
                 )}
               </div>
             </div>
@@ -373,32 +373,32 @@ function PairedDeviceCard({
 
           {/* Tokens */}
           <div className="mt-3">
-            <h4 className="mb-2 text-[11px] font-medium text-zinc-500">
+            <h4 className="mb-2 text-[11px] font-medium text-muted-foreground">
               Tokens ({device.tokens.length})
             </h4>
             <div className="space-y-1.5">
               {device.tokens.map((tok) => (
                 <div
                   key={tok.role}
-                  className="flex items-center gap-3 rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2"
+                  className="flex items-center gap-3 rounded-lg border border-foreground/[0.04] bg-foreground/[0.02] px-3 py-2"
                 >
-                  <Key className="h-3 w-3 shrink-0 text-zinc-600" />
+                  <Key className="h-3 w-3 shrink-0 text-muted-foreground/60" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span
                         className={cn(
                           "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium",
                           ROLE_COLORS[tok.role] ||
-                            "bg-zinc-800/50 text-zinc-400 border-zinc-700"
+                            "bg-muted/70 text-muted-foreground border-zinc-700"
                         )}
                       >
                         {tok.role}
                       </span>
-                      <span className="text-[10px] text-zinc-600">
+                      <span className="text-[10px] text-muted-foreground/60">
                         Last used {formatAgo(tok.lastUsedAtMs)}
                       </span>
                       {tok.rotatedAtMs && (
-                        <span className="text-[10px] text-zinc-700">
+                        <span className="text-[10px] text-muted-foreground/40">
                           · Rotated {formatAgo(tok.rotatedAtMs)}
                         </span>
                       )}
@@ -408,7 +408,7 @@ function PairedDeviceCard({
                         {tok.scopes.map((s) => (
                           <span
                             key={s}
-                            className="rounded bg-zinc-800/40 px-1 py-0.5 text-[9px] text-zinc-600"
+                            className="rounded bg-muted/60 px-1 py-0.5 text-[9px] text-muted-foreground/60"
                           >
                             {s}
                           </span>
@@ -435,7 +435,7 @@ function PairedDeviceCard({
                       <button
                         type="button"
                         onClick={() => setConfirmRevoke(null)}
-                        className="rounded px-1.5 py-0.5 text-[10px] text-zinc-500 transition-colors hover:bg-zinc-800"
+                        className="rounded px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted"
                       >
                         No
                       </button>
@@ -445,7 +445,7 @@ function PairedDeviceCard({
                       type="button"
                       onClick={() => setConfirmRevoke(tok.role)}
                       disabled={busy}
-                      className="shrink-0 rounded-lg p-1.5 text-zinc-700 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100 disabled:opacity-40"
+                      className="shrink-0 rounded-lg p-1.5 text-muted-foreground/40 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100 disabled:opacity-40"
                       title={`Revoke ${tok.role} token`}
                       style={{ opacity: 1 }}
                     >
@@ -507,7 +507,7 @@ function UnpairButton({
         <button
           type="button"
           onClick={() => setConfirming(false)}
-          className="rounded-lg px-2 py-1 text-[11px] text-zinc-500 transition-colors hover:bg-zinc-800"
+          className="rounded-lg px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted"
         >
           Cancel
         </button>
@@ -639,7 +639,7 @@ export function ChannelsView() {
 
   if (loading && devicesLoading) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
         Loading...
       </div>
     );
@@ -656,14 +656,14 @@ export function ChannelsView() {
           <section>
             <div className="mb-3 flex items-center gap-2">
               <Bell className="h-4 w-4 text-amber-400" />
-              <h2 className="text-sm font-semibold text-zinc-200">
+              <h2 className="text-sm font-semibold text-foreground/90">
                 Pairing Requests
               </h2>
               <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">
                 {pendingRequests.length}
               </span>
             </div>
-            <p className="mb-3 text-[11px] text-zinc-600">
+            <p className="mb-3 text-[11px] text-muted-foreground/60">
               Devices requesting to pair with your OpenClaw Gateway. Approve to
               grant access or reject to deny. Requests expire after 5 minutes.
             </p>
@@ -690,10 +690,10 @@ export function ChannelsView() {
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-violet-400" />
-              <h2 className="text-sm font-semibold text-zinc-200">
+              <h2 className="text-sm font-semibold text-foreground/90">
                 Paired Devices
               </h2>
-              <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                 {pairedDevices.length}
               </span>
             </div>
@@ -704,7 +704,7 @@ export function ChannelsView() {
                 fetchDevices();
               }}
               disabled={busy}
-              className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1.5 text-[11px] text-zinc-500 transition-colors hover:bg-white/[0.06] disabled:opacity-40"
+              className="flex items-center gap-1 rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] disabled:opacity-40"
             >
               <RefreshCw
                 className={cn(
@@ -717,20 +717,20 @@ export function ChannelsView() {
           </div>
 
           {pendingRequests.length === 0 && (
-            <div className="mb-3 flex items-center gap-2 rounded-lg border border-white/[0.04] bg-white/[0.01] px-3 py-2 text-[11px] text-zinc-600">
-              <Bell className="h-3 w-3 shrink-0 text-zinc-700" />
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-foreground/[0.04] bg-foreground/[0.01] px-3 py-2 text-[11px] text-muted-foreground/60">
+              <Bell className="h-3 w-3 shrink-0 text-muted-foreground/40" />
               No pending pairing requests. New device requests will appear here
               automatically.
             </div>
           )}
 
           {devicesLoading && pairedDevices.length === 0 ? (
-            <div className="flex items-center gap-2 py-8 text-sm text-zinc-600">
+            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground/60">
               <RefreshCw className="h-4 w-4 animate-spin" />
               Loading devices...
             </div>
           ) : pairedDevices.length === 0 ? (
-            <p className="text-sm text-zinc-600">No paired devices</p>
+            <p className="text-sm text-muted-foreground/60">No paired devices</p>
           ) : (
             <div className="space-y-2">
               {pairedDevices.map((d) => (
@@ -747,27 +747,27 @@ export function ChannelsView() {
 
         {/* ── Channels ─────────────────── */}
         <section>
-          <h2 className="mb-4 text-sm font-semibold text-zinc-200">
+          <h2 className="mb-4 text-sm font-semibold text-foreground/90">
             Channels
           </h2>
           <div className="space-y-3">
             {channels.map((ch) => (
               <div
                 key={ch.name}
-                className="rounded-xl border border-white/[0.06] bg-zinc-900/50 p-4"
+                className="rounded-xl border border-foreground/[0.06] bg-card/90 p-4"
               >
                 <div className="flex items-center gap-3">
                   <Radio
                     className={cn(
                       "h-5 w-5",
-                      ch.enabled ? "text-emerald-400" : "text-zinc-600"
+                      ch.enabled ? "text-emerald-400" : "text-muted-foreground/60"
                     )}
                   />
                   <div>
-                    <p className="text-sm font-semibold capitalize text-zinc-100">
+                    <p className="text-sm font-semibold capitalize text-foreground">
                       {ch.name}
                     </p>
-                    <div className="flex items-center gap-3 text-[11px] text-zinc-500">
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                       <span className="flex items-center gap-1">
                         {ch.enabled ? (
                           <Check className="h-3 w-3 text-emerald-400" />
@@ -787,7 +787,7 @@ export function ChannelsView() {
                   {ch.accounts.map((acc) => (
                     <span
                       key={acc}
-                      className="rounded-md border border-white/[0.06] bg-zinc-800/50 px-2.5 py-1 text-[11px] text-zinc-400"
+                      className="rounded-md border border-foreground/[0.06] bg-muted/70 px-2.5 py-1 text-[11px] text-muted-foreground"
                     >
                       {acc}
                     </span>
@@ -796,20 +796,20 @@ export function ChannelsView() {
               </div>
             ))}
             {channels.length === 0 && (
-              <p className="text-sm text-zinc-600">No channels configured</p>
+              <p className="text-sm text-muted-foreground/60">No channels configured</p>
             )}
           </div>
         </section>
 
         {/* ── Skills ───────────────────── */}
         <section>
-          <h2 className="mb-4 text-sm font-semibold text-zinc-200">
+          <h2 className="mb-4 text-sm font-semibold text-foreground/90">
             Installed Skills ({skills.length})
           </h2>
 
           {workspaceSkills.length > 0 && (
             <div className="mb-4">
-              <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600">
+              <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
                 Workspace Skills
               </h3>
               <div className="flex flex-wrap gap-2">
@@ -822,7 +822,7 @@ export function ChannelsView() {
                       {s.name}
                     </p>
                     {s.version && (
-                      <p className="text-[10px] text-zinc-500">
+                      <p className="text-[10px] text-muted-foreground">
                         v{s.version}
                       </p>
                     )}
@@ -833,14 +833,14 @@ export function ChannelsView() {
           )}
 
           <div>
-            <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-zinc-600">
+            <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
               System Skills
             </h3>
             <div className="flex flex-wrap gap-1.5">
               {systemSkills.map((s) => (
                 <span
                   key={s.name}
-                  className="rounded-md border border-white/[0.06] bg-zinc-900/50 px-2.5 py-1 text-[11px] text-zinc-400"
+                  className="rounded-md border border-foreground/[0.06] bg-card/90 px-2.5 py-1 text-[11px] text-muted-foreground"
                 >
                   {s.name}
                 </span>

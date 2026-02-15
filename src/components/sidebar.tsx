@@ -75,7 +75,7 @@ function SidebarNav() {
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
                 isActive
                   ? "bg-violet-600/20 text-violet-700 dark:text-violet-300"
-                  : "text-zinc-500 dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-200"
+                  : "text-muted-foreground dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-200"
               )}
             >
               <Icon className="h-[18px] w-[18px] shrink-0" />
@@ -111,7 +111,7 @@ const STATUS_RING: Record<GatewayStatus, string> = {
   online: "ring-emerald-400/30",
   degraded: "ring-amber-400/30",
   offline: "ring-red-500/30",
-  loading: "ring-zinc-500/30",
+  loading: "ring-muted-foreground/30",
 };
 
 const STATUS_LABELS: Record<GatewayStatus, string> = {
@@ -194,11 +194,11 @@ function GatewayBadge() {
                 STATUS_RING[status]
               )}
             />
-            <span className="text-[11px] font-medium text-zinc-500 dark:text-zinc-400">
+            <span className="text-[11px] font-medium text-muted-foreground dark:text-zinc-400">
               Gateway
             </span>
           </div>
-          <span className="text-[10px] text-zinc-400 dark:text-zinc-600">
+          <span className="text-[10px] text-muted-foreground dark:text-zinc-600">
             {restarting ? "Restarting..." : STATUS_LABELS[status]}
           </span>
         </div>
@@ -214,7 +214,7 @@ function GatewayBadge() {
           >
             <RefreshCw
               className={cn(
-                "h-3.5 w-3.5 text-zinc-500",
+                "h-3.5 w-3.5 text-muted-foreground",
                 restarting && "animate-spin"
               )}
             />

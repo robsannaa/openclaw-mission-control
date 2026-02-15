@@ -36,7 +36,7 @@ export function AppSidebar() {
   const section = searchParams.get("section") || "tasks";
 
   return (
-    <aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-white/10 bg-zinc-950">
+    <aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-foreground/10 bg-secondary">
       <nav className="flex flex-1 flex-col gap-0.5 p-3">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -48,7 +48,7 @@ export function AppSidebar() {
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 section === item.section
                   ? "bg-violet-600/20 text-violet-300"
-                  : "text-zinc-400 hover:bg-zinc-800/80 hover:text-zinc-200"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground/90"
               )}
             >
               <Icon className="h-5 w-5 shrink-0" />
@@ -57,8 +57,8 @@ export function AppSidebar() {
           );
         })}
       </nav>
-      <div className="border-t border-white/10 p-4">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-zinc-800 text-2xl font-bold text-violet-400">
+      <div className="border-t border-foreground/10 p-4">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-2xl font-bold text-violet-400">
           N
         </div>
       </div>

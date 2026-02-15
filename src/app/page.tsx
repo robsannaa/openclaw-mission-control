@@ -90,7 +90,7 @@ export default function Home() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">
+        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
           Loading...
         </div>
       }

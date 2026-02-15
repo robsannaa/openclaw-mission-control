@@ -174,7 +174,7 @@ function ProviderCard({
 }) {
   const [expanded, setExpanded] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState<string | null>(null);
-  const color = PROVIDER_COLORS[provider.id] || "bg-zinc-500/15 text-zinc-400 border-zinc-500/20";
+  const color = PROVIDER_COLORS[provider.id] || "bg-zinc-500/15 text-muted-foreground border-zinc-500/20";
   const icon = PROVIDER_ICONS[provider.id] || "🔈";
 
   return (
@@ -183,7 +183,7 @@ function ProviderCard({
         "rounded-xl border transition-all",
         isActive
           ? "border-violet-500/30 bg-violet-500/[0.06]"
-          : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]"
+          : "border-foreground/[0.06] bg-foreground/[0.02] hover:border-foreground/[0.12]"
       )}
     >
       {/* Header */}
@@ -191,7 +191,7 @@ function ProviderCard({
         <span className="text-xl">{icon}</span>
         <div className="flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[14px] font-semibold text-zinc-200">
+            <span className="text-[14px] font-semibold text-foreground/90">
               {provider.name}
             </span>
             {isActive && (
@@ -205,7 +205,7 @@ function ProviderCard({
               </span>
             )}
           </div>
-          <div className="mt-0.5 flex items-center gap-3 text-[11px] text-zinc-500">
+          <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground">
             {provider.models.length > 0 && (
               <span>
                 {provider.models.length} model{provider.models.length !== 1 ? "s" : ""}
@@ -223,7 +223,7 @@ function ProviderCard({
             <button
               onClick={onSelect}
               disabled={loading}
-              className="rounded-lg bg-white/[0.06] px-3 py-1.5 text-[12px] font-medium text-zinc-300 transition-colors hover:bg-white/[0.1] hover:text-zinc-100 disabled:opacity-50"
+              className="rounded-lg bg-foreground/[0.06] px-3 py-1.5 text-[12px] font-medium text-foreground/70 transition-colors hover:bg-foreground/[0.1] hover:text-foreground disabled:opacity-50"
             >
               {loading ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -234,7 +234,7 @@ function ProviderCard({
           )}
           <button
             onClick={() => setExpanded(!expanded)}
-            className="rounded-lg p-1.5 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-300"
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground/70"
           >
             {expanded ? (
               <ChevronUp className="h-4 w-4" />
@@ -247,11 +247,11 @@ function ProviderCard({
 
       {/* Expanded: Models & Voices */}
       {expanded && (
-        <div className="border-t border-white/[0.04] px-4 py-3 space-y-3">
+        <div className="border-t border-foreground/[0.04] px-4 py-3 space-y-3">
           {/* Models */}
           {provider.models.length > 0 && (
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1.5">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
                 Models
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -273,7 +273,7 @@ function ProviderCard({
           {/* Voices */}
           {provider.voices && provider.voices.length > 0 && (
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1.5">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
                 Voices
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -285,7 +285,7 @@ function ProviderCard({
                       "rounded-md border px-2 py-1 text-[11px] transition-all",
                       selectedVoice === v
                         ? "border-violet-500/40 bg-violet-500/15 text-violet-300"
-                        : "border-white/[0.08] bg-white/[0.03] text-zinc-400 hover:border-white/[0.15] hover:text-zinc-300"
+                        : "border-foreground/[0.08] bg-foreground/[0.03] text-muted-foreground hover:border-foreground/[0.15] hover:text-foreground/70"
                     )}
                   >
                     {v}
@@ -407,7 +407,7 @@ function AudioPlayer({
       </div>
 
       {/* Player controls */}
-      <div className="flex items-center gap-3 rounded-lg border border-emerald-500/15 bg-black/30 px-3 py-3">
+      <div className="flex items-center gap-3 rounded-lg border border-emerald-500/15 bg-muted px-3 py-3">
         <button
           onClick={togglePlay}
           className={cn(
@@ -427,7 +427,7 @@ function AudioPlayer({
         <div className="flex-1 space-y-1">
           {/* Progress bar */}
           <div
-            className="group relative h-2 cursor-pointer rounded-full bg-white/[0.08]"
+            className="group relative h-2 cursor-pointer rounded-full bg-foreground/[0.08]"
             onClick={seekTo}
           >
             <div
@@ -441,7 +441,7 @@ function AudioPlayer({
           </div>
 
           {/* Time */}
-          <div className="flex items-center justify-between text-[10px] text-zinc-500">
+          <div className="flex items-center justify-between text-[10px] text-muted-foreground">
             <span>{formatTime(progress * duration)}</span>
             <span>{formatTime(duration)}</span>
           </div>
@@ -457,9 +457,9 @@ function AudioPlayer({
           value={result.voiceCompatible ? "Yes" : "No"}
         />
       </div>
-      <div className="flex items-center gap-2 text-[11px] text-zinc-500">
+      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
         <span>Saved to:</span>
-        <code className="rounded bg-black/30 px-1.5 py-0.5 text-[10px] text-zinc-400 truncate">
+        <code className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground truncate">
           {result.path}
         </code>
       </div>
@@ -477,8 +477,8 @@ function TtsTestPanel({ onTest, testing }: { onTest: (text: string, provider?: s
   };
 
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
-      <div className="flex items-center gap-2 text-[13px] font-semibold text-zinc-200">
+    <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4 space-y-3">
+      <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90">
         <Headphones className="h-4 w-4 text-violet-400" />
         Generate Sample Voice
       </div>
@@ -486,7 +486,7 @@ function TtsTestPanel({ onTest, testing }: { onTest: (text: string, provider?: s
         value={text}
         onChange={(e) => setText(e.target.value)}
         rows={3}
-        className="w-full rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2 text-[13px] text-zinc-200 placeholder-zinc-600 outline-none focus:border-violet-500/30 resize-none"
+        className="w-full rounded-lg border border-foreground/[0.08] bg-muted px-3 py-2 text-[13px] text-foreground/90 placeholder-zinc-600 outline-none focus:border-violet-500/30 resize-none"
         placeholder="Enter text to convert to speech..."
       />
       <button
@@ -516,13 +516,13 @@ function TalkModeSection({ config }: { config: TalkConfig }) {
   const hasConfig = config && Object.keys(config).length > 0;
 
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
-      <div className="flex items-center gap-2 text-[13px] font-semibold text-zinc-200">
+    <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4 space-y-3">
+      <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90">
         <Mic className="h-4 w-4 text-emerald-400" />
         Talk Mode
-        <span className="text-[11px] text-zinc-500 font-normal">(macOS / iOS / Android)</span>
+        <span className="text-[11px] text-muted-foreground font-normal">(macOS / iOS / Android)</span>
       </div>
-      <p className="text-[12px] text-zinc-500">
+      <p className="text-[12px] text-muted-foreground">
         Continuous voice conversation loop: Listen → Transcribe → Respond → Speak.
         Uses ElevenLabs for real-time streaming playback.
       </p>
@@ -537,7 +537,7 @@ function TalkModeSection({ config }: { config: TalkConfig }) {
           </div>
           {config.voiceAliases && Object.keys(config.voiceAliases).length > 0 && (
             <div className="mt-2">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1.5">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
                 Voice Aliases
               </p>
               <div className="flex flex-wrap gap-1.5">
@@ -555,20 +555,20 @@ function TalkModeSection({ config }: { config: TalkConfig }) {
           )}
         </div>
       ) : (
-        <div className="rounded-lg border border-dashed border-white/[0.08] bg-black/20 px-4 py-6 text-center">
-          <Mic className="mx-auto h-8 w-8 text-zinc-700 mb-2" />
-          <p className="text-[12px] text-zinc-500">
+        <div className="rounded-lg border border-dashed border-foreground/[0.08] bg-muted/50 px-4 py-6 text-center">
+          <Mic className="mx-auto h-8 w-8 text-muted-foreground/40 mb-2" />
+          <p className="text-[12px] text-muted-foreground">
             Talk Mode is not configured yet.
           </p>
-          <p className="text-[11px] text-zinc-600 mt-1">
-            Add a <code className="rounded bg-white/[0.06] px-1 py-0.5 text-[10px]">talk</code> section to openclaw.json to enable.
+          <p className="text-[11px] text-muted-foreground/60 mt-1">
+            Add a <code className="rounded bg-foreground/[0.06] px-1 py-0.5 text-[10px]">talk</code> section to openclaw.json to enable.
           </p>
         </div>
       )}
 
       {/* Usage info */}
-      <div className="rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2.5">
-        <p className="text-[11px] font-medium text-zinc-400 mb-1">How it works</p>
+      <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2.5">
+        <p className="text-[11px] font-medium text-muted-foreground mb-1">How it works</p>
         <div className="grid grid-cols-4 gap-2">
           {[
             { icon: "🎤", label: "Listen", desc: "Detects speech" },
@@ -578,8 +578,8 @@ function TalkModeSection({ config }: { config: TalkConfig }) {
           ].map((step) => (
             <div key={step.label} className="text-center">
               <span className="text-lg">{step.icon}</span>
-              <p className="text-[11px] font-medium text-zinc-300 mt-0.5">{step.label}</p>
-              <p className="text-[10px] text-zinc-600">{step.desc}</p>
+              <p className="text-[11px] font-medium text-foreground/70 mt-0.5">{step.label}</p>
+              <p className="text-[10px] text-muted-foreground/60">{step.desc}</p>
             </div>
           ))}
         </div>
@@ -595,56 +595,56 @@ function AudioUnderstandingSection({ config }: { config: AudioConfig }) {
   const models = config.models || [];
 
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+    <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[13px] font-semibold text-zinc-200">
+        <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90">
           <Ear className="h-4 w-4 text-sky-400" />
           Audio Understanding
-          <span className="text-[11px] text-zinc-500 font-normal">(Inbound Transcription)</span>
+          <span className="text-[11px] text-muted-foreground font-normal">(Inbound Transcription)</span>
         </div>
         <span
           className={cn(
             "rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
             isEnabled
               ? "bg-emerald-500/20 text-emerald-400"
-              : "bg-zinc-500/20 text-zinc-500"
+              : "bg-zinc-500/20 text-muted-foreground"
           )}
         >
           {isEnabled ? "Active" : "Disabled"}
         </span>
       </div>
 
-      <p className="text-[12px] text-zinc-500">
+      <p className="text-[12px] text-muted-foreground">
         Transcribes incoming voice messages and audio files using configured providers.
         Auto-detects available services when no explicit configuration is set.
       </p>
 
       {models.length > 0 ? (
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1.5">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
             Transcription Pipeline
           </p>
           <div className="space-y-1.5">
             {models.map((m, i) => (
               <div
                 key={i}
-                className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2"
+                className="flex items-center gap-3 rounded-lg border border-foreground/[0.06] bg-muted/50 px-3 py-2"
               >
                 <span className="flex h-6 w-6 items-center justify-center rounded-full bg-sky-500/15 text-[11px] font-bold text-sky-400">
                   {i + 1}
                 </span>
                 <div className="flex-1">
                   {m.type === "cli" ? (
-                    <span className="text-[12px] text-zinc-300">
-                      CLI: <code className="rounded bg-white/[0.06] px-1 text-[11px]">{m.command}</code>
+                    <span className="text-[12px] text-foreground/70">
+                      CLI: <code className="rounded bg-foreground/[0.06] px-1 text-[11px]">{m.command}</code>
                     </span>
                   ) : (
-                    <span className="text-[12px] text-zinc-300">
+                    <span className="text-[12px] text-foreground/70">
                       {m.provider || "auto"}/{m.model || "default"}
                     </span>
                   )}
                   {m.timeoutSeconds && (
-                    <span className="ml-2 text-[10px] text-zinc-600">
+                    <span className="ml-2 text-[10px] text-muted-foreground/60">
                       timeout: {m.timeoutSeconds}s
                     </span>
                   )}
@@ -671,7 +671,7 @@ function AudioUnderstandingSection({ config }: { config: AudioConfig }) {
             <Zap className="h-4 w-4 text-sky-400 mt-0.5 shrink-0" />
             <div>
               <p className="text-[12px] font-medium text-sky-300">Auto-Detection Active</p>
-              <p className="text-[11px] text-zinc-500 mt-0.5">
+              <p className="text-[11px] text-muted-foreground mt-0.5">
                 OpenClaw auto-detects transcription providers in order: local CLIs (sherpa-onnx, whisper-cli, whisper)
                 → Gemini CLI → Provider APIs (OpenAI → Groq → Deepgram → Google).
               </p>
@@ -688,10 +688,10 @@ function AudioUnderstandingSection({ config }: { config: AudioConfig }) {
       {/* Scope rules */}
       {config.scope && (
         <div className="mt-1">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1">
             Scope Rules
           </p>
-          <pre className="rounded-lg bg-black/30 p-2 text-[11px] text-zinc-400 overflow-auto">
+          <pre className="rounded-lg bg-muted p-2 text-[11px] text-muted-foreground overflow-auto">
             {JSON.stringify(config.scope, null, 2)}
           </pre>
         </div>
@@ -704,11 +704,11 @@ function AudioUnderstandingSection({ config }: { config: AudioConfig }) {
 
 function ConfigField({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2">
-      <p className="text-[10px] font-medium uppercase tracking-wider text-zinc-600">
+    <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2">
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">
         {label}
       </p>
-      <p className="text-[13px] text-zinc-300 mt-0.5 font-mono">{value}</p>
+      <p className="text-[13px] text-foreground/70 mt-0.5 font-mono">{value}</p>
     </div>
   );
 }
@@ -726,7 +726,7 @@ function AutoModeSelector({
 }) {
   return (
     <div className="space-y-2">
-      <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+      <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
         Auto-TTS Mode
       </p>
       <div className="grid grid-cols-2 gap-2">
@@ -739,18 +739,18 @@ function AutoModeSelector({
               "rounded-lg border px-3 py-2.5 text-left transition-all",
               current === m.value
                 ? "border-violet-500/30 bg-violet-500/10"
-                : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.12]"
+                : "border-foreground/[0.06] bg-foreground/[0.02] hover:border-foreground/[0.12]"
             )}
           >
             <p
               className={cn(
                 "text-[12px] font-medium",
-                current === m.value ? "text-violet-300" : "text-zinc-300"
+                current === m.value ? "text-violet-300" : "text-foreground/70"
               )}
             >
               {m.label}
             </p>
-            <p className="text-[10px] text-zinc-600 mt-0.5">{m.desc}</p>
+            <p className="text-[10px] text-muted-foreground/60 mt-0.5">{m.desc}</p>
           </button>
         ))}
       </div>
@@ -783,15 +783,15 @@ function TtsSettingsPanel({
   }, [prefs]);
 
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-4">
-      <div className="flex items-center gap-2 text-[13px] font-semibold text-zinc-200">
-        <Settings2 className="h-4 w-4 text-zinc-400" />
+    <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4 space-y-4">
+      <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90">
+        <Settings2 className="h-4 w-4 text-muted-foreground" />
         TTS Settings
       </div>
 
       {/* Fallback chain */}
       <div>
-        <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1.5">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
           Provider Fallback Chain
         </p>
         <div className="flex items-center gap-2">
@@ -800,8 +800,8 @@ function TtsSettingsPanel({
           </span>
           {status.fallbackProviders?.map((fp, i) => (
             <div key={fp} className="flex items-center gap-2">
-              <span className="text-[10px] text-zinc-600">→</span>
-              <span className="rounded-md border border-white/[0.08] bg-white/[0.03] px-2 py-1 text-[12px] text-zinc-400">
+              <span className="text-[10px] text-muted-foreground/60">→</span>
+              <span className="rounded-md border border-foreground/[0.08] bg-foreground/[0.03] px-2 py-1 text-[12px] text-muted-foreground">
                 {fp}
               </span>
             </div>
@@ -811,7 +811,7 @@ function TtsSettingsPanel({
 
       {/* API Key status */}
       <div>
-        <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1.5">
+        <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1.5">
           API Keys
         </p>
         <div className="grid grid-cols-3 gap-2">
@@ -826,7 +826,7 @@ function TtsSettingsPanel({
                 "flex items-center gap-2 rounded-lg border px-3 py-2 text-[12px]",
                 k.has
                   ? "border-emerald-500/20 bg-emerald-500/[0.05] text-emerald-400"
-                  : "border-white/[0.06] bg-white/[0.02] text-zinc-600"
+                  : "border-foreground/[0.06] bg-foreground/[0.02] text-muted-foreground/60"
               )}
             >
               {k.has ? (
@@ -843,7 +843,7 @@ function TtsSettingsPanel({
       {/* Summary settings */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <p className="text-[11px] font-medium uppercase tracking-wider text-zinc-500">
+          <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             Auto-Summarize Long Replies
           </p>
           <button
@@ -859,7 +859,7 @@ function TtsSettingsPanel({
             disabled={loading}
             className={cn(
               "relative h-5 w-9 rounded-full transition-colors",
-              summarize ? "bg-violet-500" : "bg-zinc-700"
+              summarize ? "bg-violet-500" : "bg-muted"
             )}
           >
             <span
@@ -872,26 +872,26 @@ function TtsSettingsPanel({
         </div>
         {summarize && (
           <div className="flex items-center gap-2">
-            <span className="text-[11px] text-zinc-500">Threshold:</span>
+            <span className="text-[11px] text-muted-foreground">Threshold:</span>
             <input
               type="number"
               value={summaryThreshold}
               onChange={(e) => setSummaryThreshold(e.target.value)}
-              className="w-24 rounded-md border border-white/[0.08] bg-black/30 px-2 py-1 text-[12px] text-zinc-300 outline-none"
+              className="w-24 rounded-md border border-foreground/[0.08] bg-muted px-2 py-1 text-[12px] text-foreground/70 outline-none"
               placeholder="1500"
             />
-            <span className="text-[11px] text-zinc-600">chars</span>
+            <span className="text-[11px] text-muted-foreground/60">chars</span>
           </div>
         )}
       </div>
 
       {/* Output format info */}
-      <div className="rounded-lg border border-white/[0.04] bg-black/20 px-3 py-2.5">
-        <p className="text-[11px] font-medium text-zinc-400 mb-1">Output Formats</p>
-        <div className="space-y-1 text-[11px] text-zinc-500">
-          <p><span className="text-zinc-400">Telegram:</span> Opus voice note (48kHz/64kbps)</p>
-          <p><span className="text-zinc-400">Other channels:</span> MP3 (44.1kHz/128kbps)</p>
-          <p><span className="text-zinc-400">Edge TTS:</span> audio-24khz-48kbitrate-mono-mp3</p>
+      <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2.5">
+        <p className="text-[11px] font-medium text-muted-foreground mb-1">Output Formats</p>
+        <div className="space-y-1 text-[11px] text-muted-foreground">
+          <p><span className="text-muted-foreground">Telegram:</span> Opus voice note (48kHz/64kbps)</p>
+          <p><span className="text-muted-foreground">Other channels:</span> MP3 (44.1kHz/128kbps)</p>
+          <p><span className="text-muted-foreground">Edge TTS:</span> audio-24khz-48kbitrate-mono-mp3</p>
         </div>
       </div>
     </div>
@@ -1097,7 +1097,7 @@ export function AudioView() {
 
   if (!data) {
     return (
-      <div className="flex flex-1 items-center justify-center text-[13px] text-zinc-500">
+      <div className="flex flex-1 items-center justify-center text-[13px] text-muted-foreground">
         Failed to load audio configuration
       </div>
     );
@@ -1113,13 +1113,13 @@ export function AudioView() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-6 py-4">
+      <div className="flex items-center justify-between border-b border-foreground/[0.06] px-6 py-4">
         <div>
-          <h1 className="text-[18px] font-semibold text-zinc-100 flex items-center gap-2">
+          <h1 className="text-[18px] font-semibold text-foreground flex items-center gap-2">
             <Volume2 className="h-5 w-5 text-violet-400" />
             Audio & Voice
           </h1>
-          <p className="text-[12px] text-zinc-500 mt-0.5">
+          <p className="text-[12px] text-muted-foreground mt-0.5">
             Text-to-speech, Talk Mode, and audio understanding configuration
           </p>
         </div>
@@ -1132,7 +1132,7 @@ export function AudioView() {
               "flex items-center gap-2 rounded-lg px-4 py-2 text-[13px] font-medium transition-colors",
               status.enabled
                 ? "bg-violet-600/20 text-violet-300 hover:bg-violet-600/30"
-                : "bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-300"
+                : "bg-muted text-muted-foreground hover:bg-muted hover:text-foreground/70"
             )}
           >
             {status.enabled ? (
@@ -1149,7 +1149,7 @@ export function AudioView() {
           </button>
           <button
             onClick={fetchData}
-            className="rounded-lg p-2 text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-300"
+            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground/70"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
@@ -1164,7 +1164,7 @@ export function AudioView() {
             label="Status"
             value={status.enabled ? "Active" : "Disabled"}
             icon={status.enabled ? Volume2 : VolumeX}
-            color={status.enabled ? "text-emerald-400" : "text-zinc-500"}
+            color={status.enabled ? "text-emerald-400" : "text-muted-foreground"}
           />
           <StatusCard
             label="Active Provider"
@@ -1195,7 +1195,7 @@ export function AudioView() {
 
         {/* Providers */}
         <div>
-          <h2 className="text-[14px] font-semibold text-zinc-200 mb-3 flex items-center gap-2">
+          <h2 className="text-[14px] font-semibold text-foreground/90 mb-3 flex items-center gap-2">
             <Speaker className="h-4 w-4 text-violet-400" />
             TTS Providers
           </h2>
@@ -1242,33 +1242,33 @@ export function AudioView() {
         />
 
         {/* Slash commands reference */}
-        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
-          <div className="flex items-center gap-2 text-[13px] font-semibold text-zinc-200">
+        <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4 space-y-3">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90">
             <Zap className="h-4 w-4 text-amber-400" />
             Slash Commands
           </div>
-          <p className="text-[12px] text-zinc-500">
+          <p className="text-[12px] text-muted-foreground">
             Control TTS from any channel using slash commands:
           </p>
-          <div className="rounded-lg bg-black/30 p-3 font-mono text-[12px] text-zinc-400 space-y-1">
-            <p><span className="text-violet-400">/tts</span> off &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-zinc-600"># Disable TTS</span></p>
-            <p><span className="text-violet-400">/tts</span> always &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-zinc-600"># Speak all replies</span></p>
-            <p><span className="text-violet-400">/tts</span> inbound &nbsp;&nbsp;&nbsp;<span className="text-zinc-600"># Reply to voice with voice</span></p>
-            <p><span className="text-violet-400">/tts</span> tagged &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-zinc-600"># Only /tts tagged messages</span></p>
-            <p><span className="text-violet-400">/tts</span> status &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-zinc-600"># Show current state</span></p>
-            <p><span className="text-violet-400">/tts</span> provider openai <span className="text-zinc-600"># Switch provider</span></p>
-            <p><span className="text-violet-400">/tts</span> limit 2000 &nbsp;<span className="text-zinc-600"># Summary threshold</span></p>
-            <p><span className="text-violet-400">/tts</span> audio Hello! &nbsp;<span className="text-zinc-600"># One-off TTS</span></p>
+          <div className="rounded-lg bg-muted p-3 font-mono text-[12px] text-muted-foreground space-y-1">
+            <p><span className="text-violet-400">/tts</span> off &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-muted-foreground/60"># Disable TTS</span></p>
+            <p><span className="text-violet-400">/tts</span> always &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-muted-foreground/60"># Speak all replies</span></p>
+            <p><span className="text-violet-400">/tts</span> inbound &nbsp;&nbsp;&nbsp;<span className="text-muted-foreground/60"># Reply to voice with voice</span></p>
+            <p><span className="text-violet-400">/tts</span> tagged &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-muted-foreground/60"># Only /tts tagged messages</span></p>
+            <p><span className="text-violet-400">/tts</span> status &nbsp;&nbsp;&nbsp;&nbsp;<span className="text-muted-foreground/60"># Show current state</span></p>
+            <p><span className="text-violet-400">/tts</span> provider openai <span className="text-muted-foreground/60"># Switch provider</span></p>
+            <p><span className="text-violet-400">/tts</span> limit 2000 &nbsp;<span className="text-muted-foreground/60"># Summary threshold</span></p>
+            <p><span className="text-violet-400">/tts</span> audio Hello! &nbsp;<span className="text-muted-foreground/60"># One-off TTS</span></p>
           </div>
-          <p className="text-[11px] text-zinc-600">
-            Note: Discord uses <code className="rounded bg-white/[0.06] px-1 text-[10px]">/voice</code> instead
-            (because <code className="rounded bg-white/[0.06] px-1 text-[10px]">/tts</code> is a built-in Discord command).
+          <p className="text-[11px] text-muted-foreground/60">
+            Note: Discord uses <code className="rounded bg-foreground/[0.06] px-1 text-[10px]">/voice</code> instead
+            (because <code className="rounded bg-foreground/[0.06] px-1 text-[10px]">/tts</code> is a built-in Discord command).
           </p>
         </div>
 
         {/* Gateway RPC reference */}
-        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
-          <div className="flex items-center gap-2 text-[13px] font-semibold text-zinc-200">
+        <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4 space-y-3">
+          <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90">
             <Radio className="h-4 w-4 text-sky-400" />
             Gateway RPC Methods
           </div>
@@ -1283,7 +1283,7 @@ export function AudioView() {
             ].map((m) => (
               <div
                 key={m}
-                className="rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2 font-mono text-[11px] text-sky-400"
+                className="rounded-lg border border-foreground/[0.06] bg-muted/50 px-3 py-2 font-mono text-[11px] text-sky-400"
               >
                 {m}
               </div>
@@ -1311,12 +1311,12 @@ function StatusCard({
   color: string;
 }) {
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
-      <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-zinc-500 mb-1">
+    <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-3">
+      <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground mb-1">
         <Icon className={cn("h-3.5 w-3.5", color)} />
         {label}
       </div>
-      <p className="text-[16px] font-semibold text-zinc-200 capitalize">{value}</p>
+      <p className="text-[16px] font-semibold text-foreground/90 capitalize">{value}</p>
     </div>
   );
 }

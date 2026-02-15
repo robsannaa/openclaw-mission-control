@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const baseComponents = {
   h1: ({ children, ...props }: React.ComponentPropsWithoutRef<"h1">) => (
     <h1
-      className="mb-3 mt-6 text-lg font-semibold text-zinc-100 first:mt-0"
+      className="mb-3 mt-6 text-lg font-semibold text-foreground first:mt-0"
       {...props}
     >
       {children}
@@ -24,7 +24,7 @@ const baseComponents = {
   ),
   h3: ({ children, ...props }: React.ComponentPropsWithoutRef<"h3">) => (
     <h3
-      className="mb-2 mt-4 text-sm font-semibold text-zinc-200 first:mt-0"
+      className="mb-2 mt-4 text-sm font-semibold text-foreground/90 first:mt-0"
       {...props}
     >
       {children}
@@ -32,20 +32,20 @@ const baseComponents = {
   ),
   h4: ({ children, ...props }: React.ComponentPropsWithoutRef<"h4">) => (
     <h4
-      className="mb-1.5 mt-3 text-sm font-medium text-zinc-300 first:mt-0"
+      className="mb-1.5 mt-3 text-sm font-medium text-foreground/70 first:mt-0"
       {...props}
     >
       {children}
     </h4>
   ),
   p: ({ children, ...props }: React.ComponentPropsWithoutRef<"p">) => (
-    <p className="mb-2 text-sm leading-7 text-zinc-400" {...props}>
+    <p className="mb-2 text-sm leading-7 text-muted-foreground" {...props}>
       {children}
     </p>
   ),
   ul: ({ children, ...props }: React.ComponentPropsWithoutRef<"ul">) => (
     <ul
-      className="my-2 list-inside list-disc space-y-1 text-zinc-400"
+      className="my-2 list-inside list-disc space-y-1 text-muted-foreground"
       {...props}
     >
       {children}
@@ -53,33 +53,33 @@ const baseComponents = {
   ),
   ol: ({ children, ...props }: React.ComponentPropsWithoutRef<"ol">) => (
     <ol
-      className="my-2 list-inside list-decimal space-y-1 text-zinc-400"
+      className="my-2 list-inside list-decimal space-y-1 text-muted-foreground"
       {...props}
     >
       {children}
     </ol>
   ),
   li: ({ children, ...props }: React.ComponentPropsWithoutRef<"li">) => (
-    <li className="text-sm text-zinc-400" {...props}>
+    <li className="text-sm text-muted-foreground" {...props}>
       {children}
     </li>
   ),
   hr: (props: React.ComponentPropsWithoutRef<"hr">) => (
-    <hr className="my-4 border-white/[0.06]" {...props} />
+    <hr className="my-4 border-foreground/[0.06]" {...props} />
   ),
   strong: ({ children, ...props }: React.ComponentPropsWithoutRef<"strong">) => (
-    <strong className="font-semibold text-zinc-200" {...props}>
+    <strong className="font-semibold text-foreground/90" {...props}>
       {children}
     </strong>
   ),
   em: ({ children, ...props }: React.ComponentPropsWithoutRef<"em">) => (
-    <em className="italic text-zinc-300" {...props}>
+    <em className="italic text-foreground/70" {...props}>
       {children}
     </em>
   ),
   code: ({ children, ...props }: React.ComponentPropsWithoutRef<"code">) => (
     <code
-      className="rounded bg-zinc-800/80 px-1.5 py-0.5 font-mono text-[13px] text-zinc-300"
+      className="rounded bg-muted px-1.5 py-0.5 font-mono text-[13px] text-foreground/70"
       {...props}
     >
       {children}
@@ -87,7 +87,7 @@ const baseComponents = {
   ),
   pre: ({ children, ...props }: React.ComponentPropsWithoutRef<"pre">) => (
     <pre
-      className="my-3 overflow-x-auto rounded-lg bg-zinc-800/60 p-4 text-sm text-zinc-300"
+      className="my-3 overflow-x-auto rounded-lg bg-muted/80 p-4 text-sm text-foreground/70"
       {...props}
     >
       {children}
@@ -98,7 +98,7 @@ const baseComponents = {
     ...props
   }: React.ComponentPropsWithoutRef<"blockquote">) => (
     <blockquote
-      className="my-2 border-l-2 border-violet-500/40 pl-4 italic text-zinc-500"
+      className="my-2 border-l-2 border-violet-500/40 pl-4 italic text-muted-foreground"
       {...props}
     >
       {children}
@@ -122,7 +122,7 @@ const baseComponents = {
   table: ({ children, ...props }: React.ComponentPropsWithoutRef<"table">) => (
     <div className="my-4 overflow-x-auto">
       <table
-        className="min-w-full border-collapse border border-white/[0.06] text-sm text-zinc-400"
+        className="min-w-full border-collapse border border-foreground/[0.06] text-sm text-muted-foreground"
         {...props}
       >
         {children}
@@ -131,19 +131,19 @@ const baseComponents = {
   ),
   th: ({ children, ...props }: React.ComponentPropsWithoutRef<"th">) => (
     <th
-      className="border border-white/[0.06] bg-zinc-800/40 px-3 py-2 text-left text-[13px] font-medium text-zinc-200"
+      className="border border-foreground/[0.06] bg-muted/60 px-3 py-2 text-left text-[13px] font-medium text-foreground/90"
       {...props}
     >
       {children}
     </th>
   ),
   td: ({ children, ...props }: React.ComponentPropsWithoutRef<"td">) => (
-    <td className="border border-white/[0.06] px-3 py-2 text-[13px]" {...props}>
+    <td className="border border-foreground/[0.06] px-3 py-2 text-[13px]" {...props}>
       {children}
     </td>
   ),
   tr: ({ children, ...props }: React.ComponentPropsWithoutRef<"tr">) => (
-    <tr className="border-b border-white/[0.06]" {...props}>
+    <tr className="border-b border-foreground/[0.06]" {...props}>
       {children}
     </tr>
   ),
@@ -159,7 +159,7 @@ export function MarkdownContent({
   const source = typeof content === "string" ? content : "";
   if (!source.trim()) {
     return (
-      <p className={cn("text-sm italic text-zinc-600", className)}>
+      <p className={cn("text-sm italic text-muted-foreground/60", className)}>
         No content
       </p>
     );

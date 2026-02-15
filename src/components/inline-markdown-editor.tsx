@@ -181,8 +181,8 @@ export function InlineMarkdownEditor({
       className={cn(
         "md-editor min-h-[200px] rounded-lg px-4 py-3 outline-none transition-all",
         isFocused
-          ? "ring-1 ring-violet-500/20 bg-zinc-900/20"
-          : "hover:bg-zinc-900/10 cursor-text",
+          ? "ring-1 ring-violet-500/20 bg-card/60"
+          : "hover:bg-muted/30 cursor-text",
         className
       )}
     />

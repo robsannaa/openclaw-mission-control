@@ -44,7 +44,7 @@ const LEVEL_STYLES: Record<
   },
   info: {
     icon: Info,
-    text: "text-zinc-500",
+    text: "text-muted-foreground",
     bg: "border-l-2 border-transparent",
   },
 };
@@ -152,14 +152,14 @@ export function LogsView() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* ── Toolbar ──────────────────────────────── */}
-      <div className="shrink-0 border-b border-white/[0.06] bg-[#0c0c10]/60">
+      <div className="shrink-0 border-b border-foreground/[0.06] bg-card/60">
         <div className="flex items-center gap-3 px-4 py-2.5">
-          <Terminal className="h-4 w-4 text-zinc-500" />
-          <h2 className="text-sm font-semibold text-zinc-200">Live Logs</h2>
+          <Terminal className="h-4 w-4 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground/90">Live Logs</h2>
 
           {/* Stats badges */}
           <div className="flex items-center gap-1.5">
-            <span className="rounded bg-zinc-800/60 px-2 py-0.5 text-[10px] text-zinc-500">
+            <span className="rounded bg-muted/80 px-2 py-0.5 text-[10px] text-muted-foreground">
               {stats.info} info
             </span>
             {stats.warn > 0 && (
@@ -184,7 +184,7 @@ export function LogsView() {
               "flex items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] transition-colors",
               autoRefresh
                 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                : "border-white/[0.06] bg-zinc-800/40 text-zinc-500"
+                : "border-foreground/[0.06] bg-muted/60 text-muted-foreground"
             )}
           >
             {autoRefresh ? (
@@ -199,7 +199,7 @@ export function LogsView() {
           <button
             type="button"
             onClick={fetchLogs}
-            className="rounded-md border border-white/[0.06] bg-zinc-800/40 p-1.5 text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+            className="rounded-md border border-foreground/[0.06] bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
             title="Refresh now"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
@@ -213,7 +213,7 @@ export function LogsView() {
               "flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] transition-colors",
               showFilters || hasFilters
                 ? "border-violet-500/20 bg-violet-500/10 text-violet-400"
-                : "border-white/[0.06] bg-zinc-800/40 text-zinc-500 hover:text-zinc-300"
+                : "border-foreground/[0.06] bg-muted/60 text-muted-foreground hover:text-foreground/70"
             )}
           >
             <Filter className="h-3 w-3" />
@@ -228,21 +228,21 @@ export function LogsView() {
 
         {/* ── Filter bar ──────────────────────────── */}
         {showFilters && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.04] px-4 py-2">
+          <div className="flex flex-wrap items-center gap-2 border-t border-foreground/[0.04] px-4 py-2">
             {/* Search */}
-            <div className="flex items-center gap-1.5 rounded-md border border-white/[0.08] bg-zinc-900/80 px-2 py-1">
-              <Search className="h-3 w-3 text-zinc-600" />
+            <div className="flex items-center gap-1.5 rounded-md border border-foreground/[0.08] bg-card px-2 py-1">
+              <Search className="h-3 w-3 text-muted-foreground/60" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search logs..."
-                className="w-40 bg-transparent text-[12px] text-zinc-300 outline-none placeholder:text-zinc-600"
+                className="w-40 bg-transparent text-[12px] text-foreground/70 outline-none placeholder:text-muted-foreground/60"
               />
               {search && (
                 <button
                   type="button"
                   onClick={() => setSearch("")}
-                  className="text-zinc-600 hover:text-zinc-400"
+                  className="text-muted-foreground/60 hover:text-muted-foreground"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -253,7 +253,7 @@ export function LogsView() {
             <select
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value)}
-              className="rounded-md border border-white/[0.08] bg-zinc-900/80 px-2 py-1 text-[12px] text-zinc-300 outline-none"
+              className="rounded-md border border-foreground/[0.08] bg-card px-2 py-1 text-[12px] text-foreground/70 outline-none"
             >
               <option value="">All sources</option>
               {sources.map((s) => (
@@ -280,7 +280,7 @@ export function LogsView() {
                         : level === "warn"
                           ? "border-amber-500/30 bg-amber-500/15 text-amber-400"
                           : "border-blue-500/30 bg-blue-500/15 text-blue-300"
-                      : "border-white/[0.06] bg-zinc-800/40 text-zinc-500 hover:text-zinc-400"
+                      : "border-foreground/[0.06] bg-muted/60 text-muted-foreground hover:text-muted-foreground"
                   )}
                 >
                   {level}
@@ -292,7 +292,7 @@ export function LogsView() {
             <select
               value={limit}
               onChange={(e) => setLimit(parseInt(e.target.value, 10))}
-              className="rounded-md border border-white/[0.08] bg-zinc-900/80 px-2 py-1 text-[12px] text-zinc-300 outline-none"
+              className="rounded-md border border-foreground/[0.08] bg-card px-2 py-1 text-[12px] text-foreground/70 outline-none"
             >
               <option value="100">100 lines</option>
               <option value="200">200 lines</option>
@@ -304,7 +304,7 @@ export function LogsView() {
               <button
                 type="button"
                 onClick={clearFilters}
-                className="text-[11px] text-zinc-500 hover:text-zinc-300"
+                className="text-[11px] text-muted-foreground hover:text-foreground/70"
               >
                 Clear all
               </button>
@@ -317,15 +317,15 @@ export function LogsView() {
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto bg-[#08080c] font-mono text-[12px] leading-[1.65]"
+        className="flex-1 overflow-y-auto bg-background font-mono text-[12px] leading-[1.65]"
       >
         {loading && entries.length === 0 ? (
-          <div className="flex items-center justify-center py-12 text-zinc-600">
+          <div className="flex items-center justify-center py-12 text-muted-foreground/60">
             <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
             Loading logs...
           </div>
         ) : displayEntries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-12 text-zinc-600">
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground/60">
             <Terminal className="h-6 w-6" />
             <span className="text-sm">No log entries found</span>
             {hasFilters && (
@@ -355,20 +355,20 @@ export function LogsView() {
                 <div key={`${entry.time}-${entry.line}-${i}`}>
                   {showDate && entry.time && (
                     <div className="my-1 flex items-center gap-2 px-2 py-0.5">
-                      <div className="h-px flex-1 bg-white/[0.04]" />
-                      <span className="text-[10px] text-zinc-600">
+                      <div className="h-px flex-1 bg-foreground/[0.04]" />
+                      <span className="text-[10px] text-muted-foreground/60">
                         {formatLogDate(entry.time)}
                       </span>
-                      <div className="h-px flex-1 bg-white/[0.04]" />
+                      <div className="h-px flex-1 bg-foreground/[0.04]" />
                     </div>
                   )}
                   <div
                     className={cn(
-                      "group flex items-start gap-2 rounded px-2 py-[2px] transition-colors hover:bg-zinc-800/30",
+                      "group flex items-start gap-2 rounded px-2 py-[2px] transition-colors hover:bg-muted/50",
                       style.bg
                     )}
                   >
-                    <span className="w-[65px] shrink-0 text-zinc-600">
+                    <span className="w-[65px] shrink-0 text-muted-foreground/60">
                       {formatLogTime(entry.time)}
                     </span>
                     <LevelIcon
@@ -391,7 +391,7 @@ export function LogsView() {
                                     ? "text-emerald-400/60"
                                     : entry.source === "system"
                                       ? "text-rose-400/60"
-                                      : "text-zinc-500"
+                                      : "text-muted-foreground"
                       )}
                     >
                       [{entry.source}]
@@ -403,7 +403,7 @@ export function LogsView() {
                           ? "text-red-300/80"
                           : entry.level === "warn"
                             ? "text-amber-300/70"
-                            : "text-zinc-400"
+                            : "text-muted-foreground"
                       )}
                     >
                       {highlightMessage(entry.message, search)}
@@ -417,8 +417,8 @@ export function LogsView() {
       </div>
 
       {/* ── Bottom bar ─────────────────────────── */}
-      <div className="flex shrink-0 items-center justify-between border-t border-white/[0.06] bg-[#0c0c10]/60 px-4 py-1.5">
-        <span className="text-[10px] text-zinc-600">
+      <div className="flex shrink-0 items-center justify-between border-t border-foreground/[0.06] bg-card/60 px-4 py-1.5">
+        <span className="text-[10px] text-muted-foreground/60">
           {displayEntries.length} entries
           {hasFilters && " (filtered)"}
         </span>

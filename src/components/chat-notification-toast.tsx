@@ -78,16 +78,16 @@ export function ChatNotificationToast() {
       {toasts.map((toast, i) => (
         <div
           key={toast.id}
-          className="flex items-center gap-3 rounded-xl border border-violet-500/20 bg-zinc-900/95 px-4 py-3 shadow-2xl backdrop-blur-sm animate-in slide-in-from-right-5 fade-in duration-300"
+          className="flex items-center gap-3 rounded-xl border border-violet-500/20 bg-card/95 px-4 py-3 shadow-2xl backdrop-blur-sm animate-in slide-in-from-right-5 fade-in duration-300"
         >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/20">
             <MessageCircle className="h-4 w-4 text-violet-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-medium text-zinc-200">
+            <p className="text-[12px] font-medium text-foreground/90">
               {toast.agentName} responded
             </p>
-            <p className="text-[10px] text-zinc-500">
+            <p className="text-[10px] text-muted-foreground">
               New message in chat
             </p>
           </div>
@@ -101,7 +101,7 @@ export function ChatNotificationToast() {
           <button
             type="button"
             onClick={() => dismiss(toast.id)}
-            className="shrink-0 rounded-md p-1 text-zinc-600 transition-colors hover:text-zinc-400"
+            className="shrink-0 rounded-md p-1 text-muted-foreground/60 transition-colors hover:text-muted-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>

@@ -100,10 +100,10 @@ function DmRequestCard({
 }) {
   const icon = CHANNEL_ICONS[req.channel] || "\u{1F4E8}";
   const colorClass =
-    CHANNEL_COLORS[req.channel] || "bg-zinc-500/20 text-zinc-400 border-zinc-500/30";
+    CHANNEL_COLORS[req.channel] || "bg-zinc-500/20 text-muted-foreground border-zinc-500/30";
 
   return (
-    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 transition-all hover:border-white/[0.1]">
+    <div className="rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] p-3 transition-all hover:border-foreground/[0.1]">
       <div className="flex items-start gap-2.5">
         <div
           className={cn(
@@ -115,35 +115,35 @@ function DmRequestCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[12px] font-semibold capitalize text-zinc-200">
+            <span className="text-[12px] font-semibold capitalize text-foreground/90">
               {req.channel}
             </span>
-            <MessageCircle className="h-3 w-3 text-zinc-600" />
-            <span className="text-[10px] text-zinc-600">DM pairing</span>
+            <MessageCircle className="h-3 w-3 text-muted-foreground/60" />
+            <span className="text-[10px] text-muted-foreground/60">DM pairing</span>
           </div>
           <div className="mt-0.5 flex items-center gap-2">
             <code className="rounded bg-violet-500/10 px-1.5 py-0.5 text-[11px] font-bold tracking-wider text-violet-300">
               {req.code}
             </code>
             {req.senderName && (
-              <span className="text-[11px] text-zinc-500">
+              <span className="text-[11px] text-muted-foreground">
                 from {req.senderName}
               </span>
             )}
             {!req.senderName && req.senderId && (
-              <span className="text-[11px] text-zinc-500">
+              <span className="text-[11px] text-muted-foreground">
                 ID: {req.senderId}
               </span>
             )}
           </div>
           {req.message && (
-            <p className="mt-1 line-clamp-1 text-[10px] text-zinc-600 italic">
+            <p className="mt-1 line-clamp-1 text-[10px] text-muted-foreground/60 italic">
               &ldquo;{req.message}&rdquo;
             </p>
           )}
           <div className="mt-1.5 flex items-center gap-2">
             {req.createdAt && (
-              <span className="flex items-center gap-1 text-[9px] text-zinc-600">
+              <span className="flex items-center gap-1 text-[9px] text-muted-foreground/60">
                 <Clock className="h-2.5 w-2.5" />
                 {formatTimeAgo(req.createdAt)}
               </span>
@@ -184,35 +184,35 @@ function DeviceRequestCard({
 }) {
   const PlatformIcon = platformIcon(req.platform);
   return (
-    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 transition-all hover:border-white/[0.1]">
+    <div className="rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] p-3 transition-all hover:border-foreground/[0.1]">
       <div className="flex items-start gap-2.5">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/20 text-amber-400">
           <PlatformIcon className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-[12px] font-semibold text-zinc-200">
+            <span className="text-[12px] font-semibold text-foreground/90">
               {req.displayName || req.clientId || "Unknown Device"}
             </span>
-            <Smartphone className="h-3 w-3 text-zinc-600" />
-            <span className="text-[10px] text-zinc-600">Device pairing</span>
+            <Smartphone className="h-3 w-3 text-muted-foreground/60" />
+            <span className="text-[10px] text-muted-foreground/60">Device pairing</span>
           </div>
           {req.platform && (
-            <p className="mt-0.5 text-[11px] text-zinc-500">{req.platform}</p>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">{req.platform}</p>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {req.role && (
-              <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-400">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
                 {req.role}
               </span>
             )}
             {req.clientMode && (
-              <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-400">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
                 {req.clientMode}
               </span>
             )}
             {req.createdAtMs && (
-              <span className="flex items-center gap-1 text-[9px] text-zinc-600">
+              <span className="flex items-center gap-1 text-[9px] text-muted-foreground/60">
                 <Clock className="h-2.5 w-2.5" />
                 {formatTimeAgo(undefined, req.createdAtMs)}
               </span>
@@ -407,7 +407,7 @@ export function PairingNotifications() {
           "relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors",
           count > 0
             ? "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-            : "border-white/[0.08] bg-zinc-900/60 text-zinc-400 hover:bg-zinc-800/60"
+            : "border-foreground/[0.08] bg-card text-muted-foreground hover:bg-muted/80"
         )}
         aria-label={`Pairing requests: ${count}`}
       >
@@ -437,12 +437,12 @@ export function PairingNotifications() {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[380px] overflow-hidden rounded-xl border border-white/[0.08] bg-zinc-900/95 shadow-2xl backdrop-blur-sm">
+        <div className="absolute right-0 top-full z-50 mt-2 w-[380px] overflow-hidden rounded-xl border border-foreground/[0.08] bg-card/95 shadow-2xl backdrop-blur-sm">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
+          <div className="flex items-center justify-between border-b border-foreground/[0.06] px-4 py-2.5">
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-violet-400" />
-              <span className="text-[13px] font-semibold text-zinc-200">
+              <span className="text-[13px] font-semibold text-foreground/90">
                 Pairing Requests
               </span>
               {count > 0 && (
@@ -454,7 +454,7 @@ export function PairingNotifications() {
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-400"
+              className="rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-muted-foreground"
             >
               <X className="h-3.5 w-3.5" />
             </button>
@@ -465,10 +465,10 @@ export function PairingNotifications() {
             {count === 0 ? (
               <div className="px-4 py-8 text-center">
                 <ShieldCheck className="mx-auto mb-2 h-8 w-8 text-emerald-500/40" />
-                <p className="text-[13px] font-medium text-zinc-400">
+                <p className="text-[13px] font-medium text-muted-foreground">
                   All clear
                 </p>
-                <p className="mt-1 text-[11px] text-zinc-600">
+                <p className="mt-1 text-[11px] text-muted-foreground/60">
                   No pending pairing requests. When someone tries to DM your
                   bot or a new device connects, it will show up here.
                 </p>
@@ -500,8 +500,8 @@ export function PairingNotifications() {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-white/[0.06] px-4 py-2">
-            <p className="text-[10px] text-zinc-600">
+          <div className="border-t border-foreground/[0.06] px-4 py-2">
+            <p className="text-[10px] text-muted-foreground/60">
               Polling every 15s &middot; DM codes expire after 1 hour
             </p>
           </div>

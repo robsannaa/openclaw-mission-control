@@ -124,47 +124,47 @@ function QuickCommandPopover({ onClose }: { onClose: () => void }) {
   return (
     <div
       ref={popoverRef}
-      className="absolute right-0 top-full z-50 mt-2 w-[420px] overflow-hidden rounded-xl border border-white/[0.08] bg-zinc-900/95 shadow-2xl backdrop-blur-sm"
+      className="absolute right-0 top-full z-50 mt-2 w-[420px] overflow-hidden rounded-xl border border-foreground/[0.08] bg-card/95 shadow-2xl backdrop-blur-sm"
     >
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2">
+      <div className="flex items-center justify-between border-b border-foreground/[0.06] px-3 py-2">
         <div className="flex items-center gap-1.5">
           <Zap className="h-3.5 w-3.5 text-violet-400" />
-          <span className="text-[12px] font-medium text-zinc-300">
+          <span className="text-[12px] font-medium text-foreground/70">
             Quick Command
           </span>
         </div>
         <button
           type="button"
           onClick={onClose}
-          className="rounded p-0.5 text-zinc-600 transition-colors hover:text-zinc-400"
+          className="rounded p-0.5 text-muted-foreground/60 transition-colors hover:text-muted-foreground"
         >
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
 
       {/* Agent selector */}
-      <div className="border-b border-white/[0.06] px-3 py-2">
+      <div className="border-b border-foreground/[0.06] px-3 py-2">
         <div className="relative">
           <button
             type="button"
             onClick={() => setShowAgentPicker(!showAgentPicker)}
-            className="flex w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
+            className="flex w-full items-center gap-2 rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] px-2.5 py-1.5 text-left transition-colors hover:bg-foreground/[0.04]"
           >
-            <span className="text-[11px] text-zinc-500">Agent:</span>
-            <span className="flex-1 truncate text-[12px] font-medium text-zinc-300">
+            <span className="text-[11px] text-muted-foreground">Agent:</span>
+            <span className="flex-1 truncate text-[12px] font-medium text-foreground/70">
               {currentAgent?.name || currentAgent?.id || "Select agent..."}
             </span>
             {currentAgent?.model && (
-              <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] text-zinc-600">
+              <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground/60">
                 {currentAgent.model.split("/").pop()}
               </span>
             )}
-            <ChevronDown className="h-3 w-3 shrink-0 text-zinc-600" />
+            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/60" />
           </button>
 
           {showAgentPicker && agents.length > 0 && (
-            <div className="absolute left-0 top-full z-10 mt-1 w-full overflow-hidden rounded-lg border border-white/[0.08] bg-zinc-900/98 py-1 shadow-lg">
+            <div className="absolute left-0 top-full z-10 mt-1 w-full overflow-hidden rounded-lg border border-foreground/[0.08] bg-card py-1 shadow-lg">
               {agents.map((a) => (
                 <button
                   key={a.id}
@@ -178,11 +178,11 @@ function QuickCommandPopover({ onClose }: { onClose: () => void }) {
                     a.id === selectedAgent && "bg-violet-500/5"
                   )}
                 >
-                  <span className="text-[12px] font-medium text-zinc-300">
+                  <span className="text-[12px] font-medium text-foreground/70">
                     {a.name || a.id}
                   </span>
                   {a.model && (
-                    <span className="ml-auto text-[10px] text-zinc-600">
+                    <span className="ml-auto text-[10px] text-muted-foreground/60">
                       {a.model.split("/").pop()}
                     </span>
                   )}
@@ -207,7 +207,7 @@ function QuickCommandPopover({ onClose }: { onClose: () => void }) {
             placeholder="Type a quick command for the agent..."
             rows={2}
             disabled={state === "sending"}
-            className="flex-1 resize-none rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-[12px] text-zinc-200 placeholder:text-zinc-600 focus:border-violet-500/30 focus:outline-none disabled:opacity-50"
+            className="flex-1 resize-none rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] px-3 py-2 text-[12px] text-foreground/90 placeholder:text-muted-foreground/60 focus:border-violet-500/30 focus:outline-none disabled:opacity-50"
           />
           <button
             type="button"
@@ -223,7 +223,7 @@ function QuickCommandPopover({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div className="mt-1 flex items-center justify-between">
-          <span className="text-[10px] text-zinc-700">
+          <span className="text-[10px] text-muted-foreground/40">
             Enter to send · Shift+Enter for newline
           </span>
           {state === "sending" && (
@@ -239,7 +239,7 @@ function QuickCommandPopover({ onClose }: { onClose: () => void }) {
       {(state === "success" || state === "error") && response && (
         <div
           className={cn(
-            "border-t border-white/[0.06] px-3 py-2",
+            "border-t border-foreground/[0.06] px-3 py-2",
             state === "error" && "bg-red-500/[0.03]"
           )}
         >
@@ -258,7 +258,7 @@ function QuickCommandPopover({ onClose }: { onClose: () => void }) {
               {state === "success" ? "Agent responded" : "Error"}
             </span>
           </div>
-          <p className="max-h-32 overflow-y-auto whitespace-pre-wrap text-[11px] leading-relaxed text-zinc-400">
+          <p className="max-h-32 overflow-y-auto whitespace-pre-wrap text-[11px] leading-relaxed text-muted-foreground">
             {response}
           </p>
           {state === "success" && (
@@ -338,7 +338,7 @@ export function Header() {
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-sidebar/80 px-5 backdrop-blur-sm">
         <div className="flex items-center gap-2.5">
           <span className="text-lg">🦞</span>
-          <h1 className="text-sm font-semibold text-zinc-100">
+          <h1 className="text-sm font-semibold text-foreground">
             Mission Control
           </h1>
         </div>
@@ -347,11 +347,11 @@ export function Header() {
           <button
             type="button"
             onClick={() => setSearchOpen(true)}
-            className="flex h-8 items-center gap-2 rounded-lg border border-white/[0.08] bg-zinc-900/60 px-3 text-xs text-zinc-400 transition-colors hover:bg-zinc-800/60 hover:text-zinc-300"
+            className="flex h-8 items-center gap-2 rounded-lg border border-foreground/[0.08] bg-card px-3 text-xs text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground/70"
           >
             <Search className="h-3.5 w-3.5" />
             <span>Search</span>
-            <kbd className="ml-1 rounded border border-white/[0.08] bg-zinc-800/50 px-1.5 py-0.5 text-[10px] text-zinc-500">
+            <kbd className="ml-1 rounded border border-foreground/[0.08] bg-muted/70 px-1.5 py-0.5 text-[10px] text-muted-foreground">
               ⌘K
             </kbd>
           </button>
@@ -365,7 +365,7 @@ export function Header() {
               "flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs transition-colors disabled:opacity-50",
               paused
                 ? "border-amber-500/20 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-                : "border-white/[0.08] bg-zinc-900/60 text-zinc-400 hover:bg-zinc-800/60"
+                : "border-foreground/[0.08] bg-card text-muted-foreground hover:bg-muted/80"
             )}
           >
             {paused ? (
@@ -388,7 +388,7 @@ export function Header() {
                 "flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs transition-colors",
                 cmdOpen
                   ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
-                  : "border-white/[0.08] bg-zinc-900/60 text-zinc-400 hover:bg-zinc-800/60"
+                  : "border-foreground/[0.08] bg-card text-muted-foreground hover:bg-muted/80"
               )}
             >
               <Zap className="h-3.5 w-3.5" />

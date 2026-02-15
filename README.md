@@ -48,6 +48,38 @@ Everything runs locally. No cloud. No data leaves your machine.
 
 ---
 
+## Screenshots
+
+### Dashboard
+![Dashboard](promo-dashboard.png)
+*Real-time overview of your agents, gateway status, and system metrics*
+
+### Tasks
+![Tasks](promo-tasks.png)
+*Kanban board synchronized with your workspace*
+
+### Cron Jobs
+![Cron Jobs](promo-cron.png)
+*Manage and monitor scheduled tasks*
+
+### Sessions
+![Sessions](promo-sessions.png)
+*Chat history and agent interactions*
+
+### System
+![System](promo-system.png)
+*CPU, memory, skills, and device management*
+
+### Memory
+![Memory](promo-memory.png)
+*Edit long-term memory and daily journal*
+
+### Documents
+![Documents](promo-docs.png)
+*Browse workspace documentation*
+
+---
+
 ## Alternative: Ask Your Agent
 
 If OpenClaw is already running, just ask:
@@ -100,8 +132,6 @@ These are **not required** — everything is auto-discovered. Override only if n
 
 ```
 dashboard/
-├── bin/
-│   └── cli.mjs             # npx entry point
 ├── src/
 │   ├── app/
 │   │   ├── api/             # Backend API routes
@@ -136,10 +166,13 @@ If that doesn't work, [install OpenClaw first](https://docs.openclaw.ai/install)
 <details>
 <summary><strong>Can I run this on a remote server?</strong></summary>
 
-Yes! Run it on any machine where OpenClaw is installed. Just make sure the port is accessible:
+Yes! Clone the repo on any machine where OpenClaw is installed:
 
 ```bash
-npx @openclaw/dashboard --port 8080
+git clone https://github.com/openclaw/dashboard.git
+cd dashboard
+npm install
+npm run dev -- --port 8080
 ```
 
 For remote access via SSH:
@@ -161,7 +194,7 @@ No. Everything runs locally. Mission Control talks to your local OpenClaw instal
 Yes — set `OPENCLAW_HOME` to point at a different instance:
 
 ```bash
-OPENCLAW_HOME=/path/to/other/.openclaw npx @openclaw/dashboard --port 3001
+OPENCLAW_HOME=/path/to/other/.openclaw npm run dev -- --port 3001
 ```
 </details>
 

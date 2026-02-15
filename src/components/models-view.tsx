@@ -80,9 +80,9 @@ function getProviderColor(key: string): string {
     groq: "bg-orange-500/15 text-orange-400 border-orange-500/20",
     xai: "bg-sky-500/15 text-sky-400 border-sky-500/20",
     mistral: "bg-indigo-500/15 text-indigo-400 border-indigo-500/20",
-    ollama: "bg-zinc-500/15 text-zinc-400 border-zinc-500/20",
+    ollama: "bg-zinc-500/15 text-muted-foreground border-zinc-500/20",
   };
-  return colors[p] || "bg-zinc-500/15 text-zinc-400 border-zinc-500/20";
+  return colors[p] || "bg-zinc-500/15 text-muted-foreground border-zinc-500/20";
 }
 
 function getModelDisplayName(
@@ -162,7 +162,7 @@ function ModelCard({
         "group relative flex items-center gap-3 rounded-xl border px-4 py-3 transition-all",
         isPrimary
           ? "border-violet-500/30 bg-violet-500/[0.08]"
-          : "border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04]",
+          : "border-foreground/[0.06] bg-foreground/[0.02] hover:bg-foreground/[0.04]",
         isDragging && "opacity-40 scale-[0.98]",
         isDragOver &&
           "border-violet-500/50 bg-violet-500/[0.06] ring-1 ring-violet-500/30"
@@ -179,14 +179,14 @@ function ModelCard({
           className={cn(
             "h-3.5 w-3.5",
             draggable
-              ? "text-zinc-500 group-hover:text-violet-400 transition-colors"
-              : "text-zinc-700"
+              ? "text-muted-foreground group-hover:text-violet-400 transition-colors"
+              : "text-muted-foreground/40"
           )}
         />
         <span
           className={cn(
             "text-[10px] font-bold",
-            isPrimary ? "text-violet-400" : "text-zinc-600"
+            isPrimary ? "text-violet-400" : "text-muted-foreground/60"
           )}
         >
           #{rank}
@@ -205,13 +205,13 @@ function ModelCard({
           <span
             className={cn(
               "truncate text-sm font-medium",
-              isPrimary ? "text-violet-200" : "text-zinc-200"
+              isPrimary ? "text-violet-200" : "text-foreground/90"
             )}
           >
             {info?.name || model.split("/").pop()}
           </span>
           {alias && (
-            <span className="shrink-0 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-medium text-zinc-500">
+            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
               {alias}
             </span>
           )}
@@ -225,16 +225,16 @@ function ModelCard({
           >
             {provider}
           </span>
-          <span className="text-[10px] text-zinc-600">{model}</span>
+          <span className="text-[10px] text-muted-foreground/60">{model}</span>
           {info && (
             <>
-              <span className="text-[10px] text-zinc-700">·</span>
-              <span className="text-[10px] text-zinc-500">
+              <span className="text-[10px] text-muted-foreground/40">·</span>
+              <span className="text-[10px] text-muted-foreground">
                 ctx {formatCtx(info.contextWindow)}
               </span>
               {info.input.includes("image") && (
                 <>
-                  <span className="text-[10px] text-zinc-700">·</span>
+                  <span className="text-[10px] text-muted-foreground/40">·</span>
                   <span className="text-[10px] text-cyan-500">vision</span>
                 </>
               )}
@@ -242,7 +242,7 @@ function ModelCard({
           )}
           {info && !info.available && (
             <>
-              <span className="text-[10px] text-zinc-700">·</span>
+              <span className="text-[10px] text-muted-foreground/40">·</span>
               <span className="flex items-center gap-0.5 text-[10px] text-amber-500">
                 <AlertTriangle className="h-2.5 w-2.5" />
                 no auth
@@ -270,7 +270,7 @@ function ModelCard({
             type="button"
             onClick={onMoveUp}
             disabled={busy}
-            className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-white/5 disabled:opacity-40"
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-foreground/5 disabled:opacity-40"
             title="Move up"
           >
             <ArrowUp className="h-3.5 w-3.5" />
@@ -281,7 +281,7 @@ function ModelCard({
             type="button"
             onClick={onMoveDown}
             disabled={busy}
-            className="rounded-lg p-1.5 text-zinc-400 transition-colors hover:bg-white/5 disabled:opacity-40"
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-foreground/5 disabled:opacity-40"
             title="Move down"
           >
             <ArrowDown className="h-3.5 w-3.5" />
@@ -364,22 +364,22 @@ function ModelPicker({
       />
 
       {/* Modal */}
-      <div className="relative z-10 flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-zinc-900/95 shadow-2xl">
+      <div className="relative z-10 flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-foreground/[0.08] bg-card/95 shadow-2xl">
         {/* Search */}
-        <div className="flex items-center gap-3 border-b border-white/[0.06] px-4 py-3">
-          <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+        <div className="flex items-center gap-3 border-b border-foreground/[0.06] px-4 py-3">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search models (e.g. anthropic, gpt, claude, ollama)..."
-            className="flex-1 bg-transparent text-sm text-zinc-200 placeholder:text-zinc-600 focus:outline-none"
+            className="flex-1 bg-transparent text-sm text-foreground/90 placeholder:text-muted-foreground/60 focus:outline-none"
           />
           <button
             type="button"
             onClick={onClose}
-            className="rounded p-1 text-zinc-500 hover:text-zinc-300"
+            className="rounded p-1 text-muted-foreground hover:text-foreground/70"
           >
             <X className="h-4 w-4" />
           </button>
@@ -389,13 +389,13 @@ function ModelPicker({
         <div className="flex-1 overflow-y-auto p-2">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <RefreshCw className="h-5 w-5 animate-spin text-zinc-600" />
-              <span className="ml-2 text-sm text-zinc-500">
+              <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground/60" />
+              <span className="ml-2 text-sm text-muted-foreground">
                 Loading models catalog...
               </span>
             </div>
           ) : filtered.length === 0 ? (
-            <div className="py-12 text-center text-sm text-zinc-600">
+            <div className="py-12 text-center text-sm text-muted-foreground/60">
               {query
                 ? "No models matching your search"
                 : "No additional models available"}
@@ -408,10 +408,10 @@ function ModelPicker({
                 onClick={() => onSelect(m.key)}
                 className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-violet-500/10"
               >
-                <Cpu className="h-4 w-4 shrink-0 text-zinc-600" />
+                <Cpu className="h-4 w-4 shrink-0 text-muted-foreground/60" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="truncate text-sm font-medium text-zinc-200">
+                    <span className="truncate text-sm font-medium text-foreground/90">
                       {m.name || m.key.split("/").pop()}
                     </span>
                     {m.available && (
@@ -434,16 +434,16 @@ function ModelPicker({
                     >
                       {m.key.split("/")[0]}
                     </span>
-                    <span className="truncate text-[10px] text-zinc-600">
+                    <span className="truncate text-[10px] text-muted-foreground/60">
                       {m.key}
                     </span>
-                    <span className="text-[10px] text-zinc-700">·</span>
-                    <span className="text-[10px] text-zinc-500">
+                    <span className="text-[10px] text-muted-foreground/40">·</span>
+                    <span className="text-[10px] text-muted-foreground">
                       ctx {formatCtx(m.contextWindow)}
                     </span>
                     {m.input.includes("image") && (
                       <>
-                        <span className="text-[10px] text-zinc-700">·</span>
+                        <span className="text-[10px] text-muted-foreground/40">·</span>
                         <span className="text-[10px] text-cyan-500">
                           vision
                         </span>
@@ -456,7 +456,7 @@ function ModelPicker({
           )}
         </div>
 
-        <div className="border-t border-white/[0.06] px-4 py-2 text-[10px] text-zinc-600">
+        <div className="border-t border-foreground/[0.06] px-4 py-2 text-[10px] text-muted-foreground/60">
           {loading
             ? "Scanning model catalog..."
             : `${allModels.length} total models · ${filtered.length} shown`}
@@ -495,19 +495,19 @@ function AgentCard({
   const isOverridden = !agent.usesDefaults;
 
   return (
-    <div className="rounded-xl border border-white/[0.06] bg-white/[0.02]">
+    <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02]">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-3 px-4 py-3"
       >
-        <Users className="h-4 w-4 shrink-0 text-zinc-500" />
+        <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-zinc-200">
+            <span className="text-sm font-medium text-foreground/90">
               {agent.name}
             </span>
-            <span className="rounded bg-zinc-800/80 px-1.5 py-0.5 text-[10px] text-zinc-500">
+            <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
               {agent.id}
             </span>
             {isOverridden ? (
@@ -515,12 +515,12 @@ function AgentCard({
                 custom
               </span>
             ) : (
-              <span className="rounded bg-zinc-800/60 px-1.5 py-0.5 text-[10px] text-zinc-600">
+              <span className="rounded bg-muted/80 px-1.5 py-0.5 text-[10px] text-muted-foreground/60">
                 inherits defaults
               </span>
             )}
           </div>
-          <span className="mt-0.5 block truncate text-[11px] text-zinc-500">
+          <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">
             {getModelDisplayName(effectivePrimary, models, aliases)}
             {effectiveFallbacks.length > 0 &&
               ` → ${effectiveFallbacks
@@ -529,30 +529,30 @@ function AgentCard({
           </span>
         </div>
         {expanded ? (
-          <ChevronUp className="h-4 w-4 text-zinc-600" />
+          <ChevronUp className="h-4 w-4 text-muted-foreground/60" />
         ) : (
-          <ChevronDown className="h-4 w-4 text-zinc-600" />
+          <ChevronDown className="h-4 w-4 text-muted-foreground/60" />
         )}
       </button>
 
       {expanded && (
-        <div className="border-t border-white/[0.06] px-4 py-3">
+        <div className="border-t border-foreground/[0.06] px-4 py-3">
           {/* Primary */}
           <div className="mb-2 flex items-center gap-2">
             <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-            <span className="text-[11px] font-medium text-zinc-400">
+            <span className="text-[11px] font-medium text-muted-foreground">
               Primary:
             </span>
-            <span className="text-[11px] text-zinc-300">
+            <span className="text-[11px] text-foreground/70">
               {effectivePrimary}
             </span>
           </div>
 
           {/* Fallbacks */}
           <div className="mb-3 flex items-start gap-2">
-            <Shield className="mt-0.5 h-3 w-3 text-zinc-600" />
+            <Shield className="mt-0.5 h-3 w-3 text-muted-foreground/60" />
             <div>
-              <span className="text-[11px] font-medium text-zinc-400">
+              <span className="text-[11px] font-medium text-muted-foreground">
                 Fallbacks:
               </span>
               {effectiveFallbacks.length > 0 ? (
@@ -560,15 +560,15 @@ function AgentCard({
                   {effectiveFallbacks.map((f, i) => (
                     <span
                       key={f}
-                      className="inline-flex items-center gap-1 rounded bg-zinc-800/60 px-1.5 py-0.5 text-[10px] text-zinc-400"
+                      className="inline-flex items-center gap-1 rounded bg-muted/80 px-1.5 py-0.5 text-[10px] text-muted-foreground"
                     >
-                      <span className="text-zinc-600">#{i + 1}</span>{" "}
+                      <span className="text-muted-foreground/60">#{i + 1}</span>{" "}
                       {getModelDisplayName(f, models, aliases)}
                     </span>
                   ))}
                 </div>
               ) : (
-                <span className="ml-1 text-[11px] text-zinc-600">none</span>
+                <span className="ml-1 text-[11px] text-muted-foreground/60">none</span>
               )}
             </div>
           </div>
@@ -580,7 +580,7 @@ function AgentCard({
                 type="button"
                 onClick={() => onReset(agent.id)}
                 disabled={busy}
-                className="flex items-center gap-1 rounded-lg border border-white/[0.08] bg-white/[0.02] px-2.5 py-1.5 text-[11px] text-zinc-400 transition-colors hover:bg-white/[0.05] disabled:opacity-40"
+                className="flex items-center gap-1 rounded-lg border border-foreground/[0.08] bg-foreground/[0.02] px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.05] disabled:opacity-40"
               >
                 <RotateCcw className="h-3 w-3" />
                 Use defaults
@@ -627,16 +627,16 @@ function AliasRow({
   busy: boolean;
 }) {
   return (
-    <div className="group flex items-center gap-2 rounded-lg border border-white/[0.04] bg-white/[0.02] px-3 py-2">
-      <Tag className="h-3 w-3 shrink-0 text-zinc-600" />
+    <div className="group flex items-center gap-2 rounded-lg border border-foreground/[0.04] bg-foreground/[0.02] px-3 py-2">
+      <Tag className="h-3 w-3 shrink-0 text-muted-foreground/60" />
       <span className="text-[12px] font-medium text-amber-400">{alias}</span>
-      <span className="text-[12px] text-zinc-700">→</span>
-      <span className="truncate text-[12px] text-zinc-400">{model}</span>
+      <span className="text-[12px] text-muted-foreground/40">→</span>
+      <span className="truncate text-[12px] text-muted-foreground">{model}</span>
       <button
         type="button"
         onClick={onRemove}
         disabled={busy}
-        className="ml-auto rounded p-1 text-zinc-700 opacity-0 transition-all hover:text-red-400 group-hover:opacity-100 disabled:opacity-40"
+        className="ml-auto rounded p-1 text-muted-foreground/40 opacity-0 transition-all hover:text-red-400 group-hover:opacity-100 disabled:opacity-40"
       >
         <X className="h-3 w-3" />
       </button>
@@ -879,8 +879,8 @@ export function ModelsView() {
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <RefreshCw className="h-5 w-5 animate-spin text-zinc-600" />
-        <span className="ml-2 text-sm text-zinc-500">Loading models...</span>
+        <RefreshCw className="h-5 w-5 animate-spin text-muted-foreground/60" />
+        <span className="ml-2 text-sm text-muted-foreground">Loading models...</span>
       </div>
     );
   }
@@ -896,10 +896,10 @@ export function ModelsView() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] px-6 py-4">
+      <div className="flex items-center justify-between border-b border-foreground/[0.06] px-6 py-4">
         <div>
-          <h1 className="text-lg font-semibold text-zinc-100">Models</h1>
-          <p className="mt-0.5 text-[12px] text-zinc-500">
+          <h1 className="text-lg font-semibold text-foreground">Models</h1>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
             Manage primary model, fallback chain, and per-agent overrides. Changes
             apply instantly via hot reload.
           </p>
@@ -911,7 +911,7 @@ export function ModelsView() {
             fetchModels();
           }}
           disabled={busy}
-          className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[12px] text-zinc-400 transition-colors hover:bg-white/[0.06] disabled:opacity-40"
+          className="flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-3 py-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] disabled:opacity-40"
         >
           <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} />
           Refresh
@@ -925,7 +925,7 @@ export function ModelsView() {
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Zap className="h-4 w-4 text-violet-400" />
-                <h2 className="text-sm font-semibold text-zinc-200">
+                <h2 className="text-sm font-semibold text-foreground/90">
                   Model Priority Chain
                 </h2>
               </div>
@@ -940,7 +940,7 @@ export function ModelsView() {
               </button>
             </div>
 
-            <p className="mb-4 text-[11px] text-zinc-600">
+            <p className="mb-4 text-[11px] text-muted-foreground/60">
               The primary model is tried first. On failure (rate limit, auth
               error, timeout), fallbacks are tried in order. Drag and drop
               fallbacks to reorder, or use arrows.
@@ -971,11 +971,11 @@ export function ModelsView() {
               {/* Fallback divider */}
               {fallbacks.length > 0 && (
                 <div className="flex items-center gap-3 py-1">
-                  <div className="h-px flex-1 bg-white/[0.06]" />
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-zinc-700">
+                  <div className="h-px flex-1 bg-foreground/[0.06]" />
+                  <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/40">
                     Fallbacks
                   </span>
-                  <div className="h-px flex-1 bg-white/[0.06]" />
+                  <div className="h-px flex-1 bg-foreground/[0.06]" />
                 </div>
               )}
 
@@ -1012,7 +1012,7 @@ export function ModelsView() {
             {/* Quick swap: pick any configured model as primary */}
             {models.length > 1 && (
               <div className="mt-4">
-                <p className="mb-2 text-[11px] text-zinc-500">
+                <p className="mb-2 text-[11px] text-muted-foreground">
                   Quick swap — click to make primary:
                 </p>
                 <div className="flex flex-wrap gap-1.5">
@@ -1034,7 +1034,7 @@ export function ModelsView() {
                             "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-40",
                             isInChain
                               ? "border-amber-500/20 bg-amber-500/5 text-amber-400 hover:bg-amber-500/15"
-                              : "border-white/[0.08] bg-white/[0.02] text-zinc-400 hover:bg-white/[0.06]"
+                              : "border-foreground/[0.08] bg-foreground/[0.02] text-muted-foreground hover:bg-foreground/[0.06]"
                           )}
                         >
                           <Star className="h-2.5 w-2.5" />
@@ -1058,24 +1058,24 @@ export function ModelsView() {
                 onClick={() => setShowAgents(!showAgents)}
                 className="mb-3 flex w-full items-center gap-2"
               >
-                <Users className="h-4 w-4 text-zinc-500" />
-                <h2 className="text-sm font-semibold text-zinc-200">
+                <Users className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-sm font-semibold text-foreground/90">
                   Per-Agent Overrides
                 </h2>
-                <span className="ml-1 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">
+                <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                   {agents.length}
                 </span>
                 <div className="flex-1" />
                 {showAgents ? (
-                  <ChevronUp className="h-4 w-4 text-zinc-600" />
+                  <ChevronUp className="h-4 w-4 text-muted-foreground/60" />
                 ) : (
-                  <ChevronDown className="h-4 w-4 text-zinc-600" />
+                  <ChevronDown className="h-4 w-4 text-muted-foreground/60" />
                 )}
               </button>
 
               {showAgents && (
                 <>
-                  <p className="mb-3 text-[11px] text-zinc-600">
+                  <p className="mb-3 text-[11px] text-muted-foreground/60">
                     Each agent inherits the default model chain above unless
                     overridden. Set a custom model per agent for specialized
                     workloads.
@@ -1107,30 +1107,30 @@ export function ModelsView() {
               onClick={() => setShowAliases(!showAliases)}
               className="mb-3 flex w-full items-center gap-2"
             >
-              <Tag className="h-4 w-4 text-zinc-500" />
-              <h2 className="text-sm font-semibold text-zinc-200">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold text-foreground/90">
                 Model Aliases
               </h2>
-              <span className="ml-1 rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">
+              <span className="ml-1 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                 {Object.keys(aliases).length}
               </span>
               <div className="flex-1" />
               {showAliases ? (
-                <ChevronUp className="h-4 w-4 text-zinc-600" />
+                <ChevronUp className="h-4 w-4 text-muted-foreground/60" />
               ) : (
-                <ChevronDown className="h-4 w-4 text-zinc-600" />
+                <ChevronDown className="h-4 w-4 text-muted-foreground/60" />
               )}
             </button>
 
             {showAliases && (
               <>
-                <p className="mb-3 text-[11px] text-zinc-600">
+                <p className="mb-3 text-[11px] text-muted-foreground/60">
                   Aliases are short names for models. Use them in chat with{" "}
-                  <code className="rounded bg-zinc-800 px-1 text-zinc-400">
+                  <code className="rounded bg-muted px-1 text-muted-foreground">
                     /model &lt;alias&gt;
                   </code>
                   . Also limits the allowlist for{" "}
-                  <code className="rounded bg-zinc-800 px-1 text-zinc-400">
+                  <code className="rounded bg-muted px-1 text-muted-foreground">
                     /model
                   </code>{" "}
                   switching.
@@ -1155,15 +1155,15 @@ export function ModelsView() {
                     value={newAlias}
                     onChange={(e) => setNewAlias(e.target.value)}
                     placeholder="alias"
-                    className="w-24 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-[12px] text-zinc-300 placeholder:text-zinc-700 focus:border-violet-500/30 focus:outline-none"
+                    className="w-24 rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] px-2.5 py-1.5 text-[12px] text-foreground/70 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
                   />
-                  <span className="text-zinc-700">→</span>
+                  <span className="text-muted-foreground/40">→</span>
                   <input
                     type="text"
                     value={newAliasModel}
                     onChange={(e) => setNewAliasModel(e.target.value)}
                     placeholder="provider/model-name"
-                    className="flex-1 rounded-lg border border-white/[0.06] bg-white/[0.02] px-2.5 py-1.5 text-[12px] text-zinc-300 placeholder:text-zinc-700 focus:border-violet-500/30 focus:outline-none"
+                    className="flex-1 rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] px-2.5 py-1.5 text-[12px] text-foreground/70 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
                   />
                   <button
                     type="button"
@@ -1180,25 +1180,25 @@ export function ModelsView() {
           </section>
 
           {/* ── Image Model Info ────────── */}
-          <section className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3">
+          <section className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] px-4 py-3">
             <div className="flex items-center gap-2">
               <ImageIcon className="h-4 w-4 text-cyan-400" />
-              <h3 className="text-[12px] font-semibold text-zinc-300">
+              <h3 className="text-[12px] font-semibold text-foreground/70">
                 Image Model
               </h3>
             </div>
-            <p className="mt-1 text-[11px] text-zinc-500">
+            <p className="mt-1 text-[11px] text-muted-foreground">
               Used when the primary model cannot accept images.
             </p>
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-[12px] text-zinc-300">
+              <span className="text-[12px] text-foreground/70">
                 {status.imageModel || "same as primary"}
               </span>
               {status.imageFallbacks.length > 0 && (
                 <>
-                  <span className="text-[10px] text-zinc-700">→</span>
+                  <span className="text-[10px] text-muted-foreground/40">→</span>
                   {status.imageFallbacks.map((f) => (
-                    <span key={f} className="text-[11px] text-zinc-500">
+                    <span key={f} className="text-[11px] text-muted-foreground">
                       {f.split("/").pop()}
                     </span>
                   ))}
@@ -1209,7 +1209,7 @@ export function ModelsView() {
 
           {/* ── Config hash debug ──────── */}
           {configHash && (
-            <div className="text-[10px] text-zinc-700">
+            <div className="text-[10px] text-muted-foreground/40">
               Config hash: {configHash}
             </div>
           )}

@@ -335,7 +335,7 @@ function FieldLabel({
   return (
     <div className="mb-1">
       <div className="flex items-center gap-1.5">
-        <label className="text-[12px] font-medium text-zinc-300">
+        <label className="text-[12px] font-medium text-foreground/70">
           {label}
           {required && <span className="text-red-400 ml-0.5">*</span>}
         </label>
@@ -344,7 +344,7 @@ function FieldLabel({
         )}
       </div>
       {help && (
-        <p className="text-[10px] text-zinc-600 mt-0.5 leading-relaxed">
+        <p className="text-[10px] text-muted-foreground/60 mt-0.5 leading-relaxed">
           {help}
         </p>
       )}
@@ -374,13 +374,13 @@ function StringField({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         placeholder={placeholder || ""}
-        className="flex-1 rounded-lg border border-white/[0.08] bg-black/30 px-3 py-1.5 text-[12px] text-zinc-200 outline-none transition-colors focus:border-violet-500/30 disabled:opacity-50 font-mono"
+        className="flex-1 rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-[12px] text-foreground/90 outline-none transition-colors focus:border-violet-500/30 disabled:opacity-50 font-mono"
       />
       {sensitive && (
         <button
           type="button"
           onClick={() => setShow(!show)}
-          className="rounded p-1 text-zinc-600 hover:text-zinc-400"
+          className="rounded p-1 text-muted-foreground/60 hover:text-muted-foreground"
         >
           {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
         </button>
@@ -407,7 +407,7 @@ function NumberField({
         onChange(v === "" ? undefined : Number(v));
       }}
       disabled={disabled}
-      className="w-full rounded-lg border border-white/[0.08] bg-black/30 px-3 py-1.5 text-[12px] text-zinc-200 outline-none transition-colors focus:border-violet-500/30 disabled:opacity-50 font-mono"
+      className="w-full rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-[12px] text-foreground/90 outline-none transition-colors focus:border-violet-500/30 disabled:opacity-50 font-mono"
     />
   );
 }
@@ -428,7 +428,7 @@ function BooleanField({
       disabled={disabled}
       className={cn(
         "relative h-6 w-11 rounded-full transition-colors",
-        value ? "bg-violet-500" : "bg-zinc-700",
+        value ? "bg-violet-500" : "bg-muted",
         disabled && "opacity-50"
       )}
     >
@@ -467,7 +467,7 @@ function EnumField({
               "rounded-lg border px-3 py-1.5 text-[11px] font-medium transition-all",
               value === opt
                 ? "border-violet-500/40 bg-violet-500/15 text-violet-300"
-                : "border-white/[0.08] bg-white/[0.02] text-zinc-400 hover:border-white/[0.15] hover:text-zinc-300"
+                : "border-foreground/[0.08] bg-foreground/[0.02] text-muted-foreground hover:border-foreground/[0.15] hover:text-foreground/70"
             )}
           >
             {opt}
@@ -482,7 +482,7 @@ function EnumField({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className="rounded-lg border border-white/[0.08] bg-black/30 px-3 py-1.5 text-[12px] text-zinc-200 outline-none"
+      className="rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-[12px] text-foreground/90 outline-none"
     >
       <option value="">Select...</option>
       {options.map((opt) => (
@@ -536,19 +536,19 @@ function ArrayField({
     <div className="space-y-1.5">
       {value.map((item, idx) => (
         <div key={idx} className="flex items-center gap-1.5">
-          <GripVertical className="h-3 w-3 shrink-0 text-zinc-700" />
+          <GripVertical className="h-3 w-3 shrink-0 text-muted-foreground/40" />
           <input
             type="text"
             value={String(item)}
             onChange={(e) => updateItem(idx, e.target.value)}
             disabled={disabled}
-            className="flex-1 rounded-lg border border-white/[0.08] bg-black/30 px-3 py-1.5 text-[12px] text-zinc-200 outline-none font-mono focus:border-violet-500/30"
+            className="flex-1 rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-[12px] text-foreground/90 outline-none font-mono focus:border-violet-500/30"
           />
           {!disabled && (
             <button
               type="button"
               onClick={() => removeItem(idx)}
-              className="rounded p-1 text-zinc-600 hover:text-red-400 transition-colors"
+              className="rounded p-1 text-muted-foreground/60 hover:text-red-400 transition-colors"
             >
               <Trash2 className="h-3 w-3" />
             </button>
@@ -559,7 +559,7 @@ function ArrayField({
         <button
           type="button"
           onClick={addItem}
-          className="flex items-center gap-1 rounded-lg border border-dashed border-white/[0.1] px-3 py-1.5 text-[11px] text-zinc-500 transition-colors hover:border-violet-500/30 hover:text-violet-400"
+          className="flex items-center gap-1 rounded-lg border border-dashed border-foreground/[0.1] px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:border-violet-500/30 hover:text-violet-400"
         >
           <Plus className="h-3 w-3" />
           Add item
@@ -578,7 +578,7 @@ function JsonFallbackField({
   onChange: (v: unknown) => void;
   disabled?: boolean;
 }) {
-  const [text, setText] = useState(JSON.stringify(value, null, 2));
+  const [text, setText] = useState(JSON.stringify(value, null, 2) ?? "");
   const [error, setError] = useState("");
 
   const handleBlur = () => {
@@ -598,8 +598,8 @@ function JsonFallbackField({
         onChange={(e) => setText(e.target.value)}
         onBlur={handleBlur}
         disabled={disabled}
-        rows={Math.min(12, text.split("\n").length + 1)}
-        className="w-full rounded-lg border border-white/[0.08] bg-black/30 p-3 font-mono text-[11px] leading-5 text-zinc-300 outline-none resize-y focus:border-violet-500/30 disabled:opacity-50"
+        rows={Math.min(12, (text || "").split("\n").length + 1)}
+        className="w-full rounded-lg border border-foreground/[0.08] bg-muted p-3 font-mono text-[11px] leading-5 text-foreground/70 outline-none resize-y focus:border-violet-500/30 disabled:opacity-50"
         spellCheck={false}
       />
       {error && (
@@ -635,7 +635,7 @@ function SectionFields({
 }) {
   if (sectionValue == null || typeof sectionValue !== "object") {
     return (
-      <div className="text-[11px] text-zinc-600 italic">
+      <div className="text-[11px] text-muted-foreground/60 italic">
         No configuration set for this section.
       </div>
     );
@@ -837,26 +837,26 @@ function NestedSection({
       schema?.propertyNames !== undefined);
 
   return (
-    <div className="rounded-lg border border-white/[0.04] bg-white/[0.01]">
+    <div className="rounded-lg border border-foreground/[0.04] bg-foreground/[0.01]">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
         className="flex w-full items-center gap-2 px-3 py-2 text-left"
       >
         {expanded ? (
-          <ChevronDown className="h-3 w-3 text-zinc-500" />
+          <ChevronDown className="h-3 w-3 text-muted-foreground" />
         ) : (
-          <ChevronRight className="h-3 w-3 text-zinc-600" />
+          <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
         )}
-        <span className="text-[12px] font-medium text-zinc-300">{label}</span>
-        <span className="text-[10px] text-zinc-600">
+        <span className="text-[12px] font-medium text-foreground/70">{label}</span>
+        <span className="text-[10px] text-muted-foreground/60">
           {allKeys.length} field{allKeys.length !== 1 ? "s" : ""}
         </span>
       </button>
       {expanded && (
-        <div className="border-t border-white/[0.04] px-3 py-3 space-y-3">
+        <div className="border-t border-foreground/[0.04] px-3 py-3 space-y-3">
           {help && (
-            <p className="text-[10px] text-zinc-600 leading-relaxed">{help}</p>
+            <p className="text-[10px] text-muted-foreground/60 leading-relaxed">{help}</p>
           )}
           {isDynamicMap ? (
             <JsonFallbackField
@@ -1099,7 +1099,7 @@ export function ConfigEditor() {
 
   if (!rawConfig) {
     return (
-      <div className="flex flex-1 items-center justify-center text-[13px] text-zinc-500">
+      <div className="flex flex-1 items-center justify-center text-[13px] text-muted-foreground">
         <AlertCircle className="mr-2 h-4 w-4" />
         Failed to load configuration
       </div>
@@ -1111,29 +1111,29 @@ export function ConfigEditor() {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div className="shrink-0 border-b border-white/[0.06] px-6 py-4">
+      <div className="shrink-0 border-b border-foreground/[0.06] px-6 py-4">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="flex items-center gap-2 text-[18px] font-semibold text-zinc-100">
+            <h1 className="flex items-center gap-2 text-[18px] font-semibold text-foreground">
               <Settings2 className="h-5 w-5 text-violet-400" />
               Configuration
             </h1>
-            <p className="text-[12px] text-zinc-500 mt-0.5">
+            <p className="text-[12px] text-muted-foreground mt-0.5">
               Edit your OpenClaw settings safely &bull; Changes are validated before saving
             </p>
           </div>
           <div className="flex items-center gap-2">
             {/* Search */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-black/20 px-2.5 py-1.5">
-              <Search className="h-3.5 w-3.5 text-zinc-600" />
+            <div className="flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] bg-muted/50 px-2.5 py-1.5">
+              <Search className="h-3.5 w-3.5 text-muted-foreground/60" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search settings..."
-                className="w-36 bg-transparent text-[12px] text-zinc-300 outline-none placeholder:text-zinc-600"
+                className="w-36 bg-transparent text-[12px] text-foreground/70 outline-none placeholder:text-muted-foreground/60"
               />
               {search && (
-                <button onClick={() => setSearch("")} className="text-zinc-600 hover:text-zinc-400">
+                <button onClick={() => setSearch("")} className="text-muted-foreground/60 hover:text-muted-foreground">
                   <X className="h-3 w-3" />
                 </button>
               )}
@@ -1146,7 +1146,7 @@ export function ConfigEditor() {
                 "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] transition-colors",
                 showSensitive
                   ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                  : "border-white/[0.08] text-zinc-400 hover:bg-zinc-800/60"
+                  : "border-foreground/[0.08] text-muted-foreground hover:bg-muted/80"
               )}
             >
               {showSensitive ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
@@ -1160,7 +1160,7 @@ export function ConfigEditor() {
                 "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] transition-colors",
                 showRawJson
                   ? "border-violet-500/30 bg-violet-500/10 text-violet-400"
-                  : "border-white/[0.08] text-zinc-400 hover:bg-zinc-800/60"
+                  : "border-foreground/[0.08] text-muted-foreground hover:bg-muted/80"
               )}
             >
               <Code className="h-3 w-3" />
@@ -1170,7 +1170,7 @@ export function ConfigEditor() {
             <button
               type="button"
               onClick={fetchConfig}
-              className="rounded-lg border border-white/[0.08] p-1.5 text-zinc-400 transition-colors hover:bg-zinc-800/60 hover:text-zinc-300"
+              className="rounded-lg border border-foreground/[0.08] p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground/70"
             >
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
@@ -1199,7 +1199,7 @@ export function ConfigEditor() {
           <button
             type="button"
             onClick={discardChanges}
-            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
           >
             <RotateCcw className="h-3 w-3" />
             Discard
@@ -1224,16 +1224,16 @@ export function ConfigEditor() {
       <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
         {showRawJson ? (
           /* Raw JSON view */
-          <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
+          <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4">
             <div className="flex items-center justify-between mb-3">
-              <span className="text-[13px] font-medium text-zinc-300">
+              <span className="text-[13px] font-medium text-foreground/70">
                 Raw Configuration (read-only)
               </span>
-              <span className="text-[10px] text-zinc-600">
+              <span className="text-[10px] text-muted-foreground/60">
                 Use the form view to make changes safely
               </span>
             </div>
-            <pre className="max-h-[70vh] overflow-auto rounded-lg bg-black/30 p-4 font-mono text-[11px] leading-5 text-zinc-400 whitespace-pre-wrap">
+            <pre className="max-h-[70vh] overflow-auto rounded-lg bg-muted p-4 font-mono text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap">
               {JSON.stringify(rawConfig, null, 2)}
             </pre>
           </div>
@@ -1263,7 +1263,7 @@ export function ConfigEditor() {
                   "rounded-xl border transition-colors",
                   isDirty
                     ? "border-violet-500/30 bg-violet-500/[0.03]"
-                    : "border-white/[0.06] bg-white/[0.02]"
+                    : "border-foreground/[0.06] bg-foreground/[0.02]"
                 )}
               >
                 {/* Section header */}
@@ -1272,14 +1272,14 @@ export function ConfigEditor() {
                   onClick={() => toggleSection(sectionKey)}
                 >
                   {isExpanded ? (
-                    <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                   ) : (
-                    <ChevronRight className="h-3.5 w-3.5 text-zinc-600" />
+                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
                   )}
                   <span className="text-base">{icon}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-[13px] font-semibold text-zinc-200">
+                      <span className="text-[13px] font-semibold text-foreground/90">
                         {label}
                       </span>
                       {isDirty && (
@@ -1288,7 +1288,7 @@ export function ConfigEditor() {
                         </span>
                       )}
                       {isReadonly && (
-                        <span className="rounded-full bg-zinc-700/30 px-2 py-0.5 text-[9px] text-zinc-500">
+                        <span className="rounded-full bg-muted/50 px-2 py-0.5 text-[9px] text-muted-foreground">
                           Read-only
                         </span>
                       )}
@@ -1296,7 +1296,7 @@ export function ConfigEditor() {
                         <Shield className="h-3 w-3 text-amber-500" />
                       )}
                     </div>
-                    <p className="text-[10px] text-zinc-600">
+                    <p className="text-[10px] text-muted-foreground/60">
                       {sectionHint?.help || `${fieldCount} setting${fieldCount !== 1 ? "s" : ""}`}
                     </p>
                   </div>
@@ -1304,7 +1304,7 @@ export function ConfigEditor() {
 
                 {/* Section content */}
                 {isExpanded && (
-                  <div className="border-t border-white/[0.04] px-4 py-4">
+                  <div className="border-t border-foreground/[0.04] px-4 py-4">
                     <SectionFields
                       sectionKey={sectionKey}
                       sectionSchema={sectionSchema}
@@ -1322,7 +1322,7 @@ export function ConfigEditor() {
         )}
 
         {filteredSections.length === 0 && search && (
-          <div className="flex flex-col items-center justify-center py-12 text-zinc-600">
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground/60">
             <Search className="h-6 w-6 mb-2" />
             <p className="text-[13px]">No settings match &ldquo;{search}&rdquo;</p>
             <button

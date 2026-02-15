@@ -42,7 +42,7 @@ function sessionLabel(key: string): { type: string; badge: string } {
     return { type: "Main", badge: "bg-violet-500/15 text-violet-400" };
   if (key.includes(":hook:"))
     return { type: "Hook", badge: "bg-cyan-500/15 text-cyan-400" };
-  return { type: "Session", badge: "bg-zinc-500/15 text-zinc-400" };
+  return { type: "Session", badge: "bg-zinc-500/15 text-muted-foreground" };
 }
 
 export function SessionsView() {
@@ -85,7 +85,7 @@ export function SessionsView() {
 
   if (loading) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
         Loading sessions...
       </div>
     );
@@ -95,10 +95,10 @@ export function SessionsView() {
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="shrink-0 flex items-center justify-between px-6 pt-5 pb-4">
         <div>
-          <h2 className="text-base font-semibold text-zinc-100">
+          <h2 className="text-base font-semibold text-foreground">
             Sessions ({sessions.length})
           </h2>
-          <p className="text-[11px] text-zinc-600">
+          <p className="text-[11px] text-muted-foreground/60">
             Live sessions via Gateway RPC &bull; Kill to clear conversation history
           </p>
         </div>
@@ -108,7 +108,7 @@ export function SessionsView() {
             setLoading(true);
             fetchSessions();
           }}
-          className="flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-3 py-1.5 text-[11px] text-zinc-400 hover:bg-zinc-800/60"
+          className="flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] px-3 py-1.5 text-[11px] text-muted-foreground hover:bg-muted/80"
         >
           <RefreshCw className="h-3 w-3" /> Refresh
         </button>
@@ -122,20 +122,20 @@ export function SessionsView() {
           return (
             <div
               key={s.key}
-              className="rounded-xl border border-white/[0.06] bg-zinc-900/50 p-4"
+              className="rounded-xl border border-foreground/[0.06] bg-card/90 p-4"
             >
               <div className="flex items-start gap-3">
-                <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-zinc-600" />
+                <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/60" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-medium", badge)}>
                       {type}
                     </span>
-                    <span className="truncate text-[12px] font-mono text-zinc-400">
+                    <span className="truncate text-[12px] font-mono text-muted-foreground">
                       {s.key}
                     </span>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-zinc-500">
+                  <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" /> {formatAge(s.ageMs)} ago
                     </span>
@@ -145,7 +145,7 @@ export function SessionsView() {
                     <span>
                       In: {formatTokens(s.inputTokens)} / Out: {formatTokens(s.outputTokens)}
                     </span>
-                    <span className="rounded bg-zinc-800/60 px-1.5 py-0.5 text-[10px] font-mono">
+                    <span className="rounded bg-muted/80 px-1.5 py-0.5 text-[10px] font-mono">
                       {s.model}
                     </span>
                   </div>
@@ -166,7 +166,7 @@ export function SessionsView() {
                       <button
                         type="button"
                         onClick={() => setConfirmDelete(null)}
-                        className="rounded px-2 py-1 text-[10px] text-zinc-500 hover:text-zinc-300"
+                        className="rounded px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground/70"
                       >
                         Cancel
                       </button>
@@ -175,7 +175,7 @@ export function SessionsView() {
                     <button
                       type="button"
                       onClick={() => setConfirmDelete(s.key)}
-                      className="rounded p-1.5 text-zinc-600 transition-colors hover:bg-red-500/15 hover:text-red-400"
+                      className="rounded p-1.5 text-muted-foreground/60 transition-colors hover:bg-red-500/15 hover:text-red-400"
                       title="Kill session"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -187,7 +187,7 @@ export function SessionsView() {
           );
         })}
         {sessions.length === 0 && (
-          <div className="flex items-center justify-center py-12 text-sm text-zinc-600">
+          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground/60">
             No active sessions
           </div>
         )}

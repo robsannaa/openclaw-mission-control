@@ -84,7 +84,7 @@ function MessageContent({ text }: { text: string }) {
         elements.push(
           <pre
             key={`code-${i}`}
-            className="my-2 overflow-x-auto rounded-lg bg-zinc-900/80 p-3 text-[12px] leading-relaxed text-zinc-300"
+            className="my-2 overflow-x-auto rounded-lg bg-card p-3 text-[12px] leading-relaxed text-foreground/70"
           >
             <code>{codeLines.join("\n")}</code>
           </pre>
@@ -115,7 +115,7 @@ function MessageContent({ text }: { text: string }) {
     elements.push(
       <pre
         key="code-end"
-        className="my-2 overflow-x-auto rounded-lg bg-zinc-900/80 p-3 text-[12px] leading-relaxed text-zinc-300"
+        className="my-2 overflow-x-auto rounded-lg bg-card p-3 text-[12px] leading-relaxed text-foreground/70"
       >
         <code>{codeLines.join("\n")}</code>
       </pre>
@@ -136,7 +136,7 @@ function InlineFormatted({ text }: { text: string }) {
       parts.push(
         <code
           key={key++}
-          className="rounded bg-zinc-800 px-1.5 py-0.5 text-[12px] text-violet-300"
+          className="rounded bg-muted px-1.5 py-0.5 text-[12px] text-violet-300"
         >
           {codeMatch[1]}
         </code>
@@ -147,7 +147,7 @@ function InlineFormatted({ text }: { text: string }) {
     const boldMatch = remaining.match(/^\*\*(.+?)\*\*/);
     if (boldMatch) {
       parts.push(
-        <strong key={key++} className="font-semibold text-zinc-100">
+        <strong key={key++} className="font-semibold text-foreground">
           {boldMatch[1]}
         </strong>
       );
@@ -157,7 +157,7 @@ function InlineFormatted({ text }: { text: string }) {
     const italicMatch = remaining.match(/^\*(.+?)\*/);
     if (italicMatch) {
       parts.push(
-        <em key={key++} className="italic text-zinc-300">
+        <em key={key++} className="italic text-foreground/70">
           {italicMatch[1]}
         </em>
       );
@@ -311,17 +311,17 @@ function ChatPanel({
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 px-6">
-            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-zinc-800/60 text-3xl">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/80 text-3xl">
               {agentEmoji(agentId)}
             </div>
             <div className="text-center">
-              <h3 className="text-base font-semibold text-zinc-200">
+              <h3 className="text-base font-semibold text-foreground/90">
                 Chat with {agentName}
               </h3>
-              <p className="mt-1 text-sm text-zinc-500">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Send a message to start a conversation with your agent.
               </p>
-              <p className="mt-0.5 text-[11px] text-zinc-600">
+              <p className="mt-0.5 text-[11px] text-muted-foreground/60">
                 Powered by {formatModel(agentModel)}
               </p>
             </div>
@@ -340,7 +340,7 @@ function ChatPanel({
                     setInputValue(prompt);
                     setTimeout(() => inputRef.current?.focus(), 50);
                   }}
-                  className="rounded-lg border border-white/[0.06] bg-zinc-800/40 px-3 py-2 text-[12px] text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-300"
+                  className="rounded-lg border border-foreground/[0.06] bg-muted/60 px-3 py-2 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
                 >
                   {prompt}
                 </button>
@@ -372,7 +372,7 @@ function ChatPanel({
                     className={cn(
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm",
                       isUser
-                        ? "bg-zinc-700/60 text-zinc-300"
+                        ? "bg-muted/80 text-foreground/70"
                         : cn("border", agentColor(agentId))
                     )}
                   >
@@ -390,8 +390,8 @@ function ChatPanel({
                     className={cn(
                       "max-w-[80%] rounded-xl px-4 py-3 text-[13px]",
                       isUser
-                        ? "bg-violet-600/20 text-zinc-200"
-                        : "bg-zinc-800/60 text-zinc-300"
+                        ? "bg-violet-600/20 text-foreground/90"
+                        : "bg-muted/80 text-foreground/70"
                     )}
                   >
                     <MessageContent text={text} />
@@ -400,7 +400,7 @@ function ChatPanel({
                         "mt-2 text-[10px]",
                         isUser
                           ? "text-right text-violet-400/40"
-                          : "text-zinc-600"
+                          : "text-muted-foreground/60"
                       )}
                     >
                       {formatTime(
@@ -426,9 +426,9 @@ function ChatPanel({
                 >
                   <span className="text-base">{agentEmoji(agentId)}</span>
                 </div>
-                <div className="flex items-center gap-2 rounded-xl bg-zinc-800/60 px-4 py-3">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-500" />
-                  <span className="text-[12px] text-zinc-500">
+                <div className="flex items-center gap-2 rounded-xl bg-muted/80 px-4 py-3">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  <span className="text-[12px] text-muted-foreground">
                     {agentName} is thinking...
                   </span>
                 </div>
@@ -473,9 +473,9 @@ function ChatPanel({
       </div>
 
       {/* ── Input area ──────────────────────────── */}
-      <div className="shrink-0 border-t border-white/[0.06] bg-[#0c0c10]/60 px-4 py-3">
+      <div className="shrink-0 border-t border-foreground/[0.06] bg-card/60 px-4 py-3">
         <div className="mx-auto flex max-w-3xl items-end gap-3">
-          <div className="flex flex-1 items-end rounded-xl border border-white/[0.08] bg-zinc-900/80 px-4 py-3 focus-within:border-violet-500/30 focus-within:ring-1 focus-within:ring-violet-500/20">
+          <div className="flex flex-1 items-end rounded-xl border border-foreground/[0.08] bg-card px-4 py-3 focus-within:border-violet-500/30 focus-within:ring-1 focus-within:ring-violet-500/20">
             <textarea
               ref={inputRef}
               value={inputValue}
@@ -484,7 +484,7 @@ function ChatPanel({
               placeholder={`Message ${agentName}...`}
               rows={1}
               disabled={isLoading}
-              className="max-h-[200px] flex-1 resize-none bg-transparent text-[13px] text-zinc-200 outline-none placeholder:text-zinc-600 disabled:opacity-50"
+              className="max-h-[200px] flex-1 resize-none bg-transparent text-[13px] text-foreground/90 outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
             />
           </div>
 
@@ -494,7 +494,7 @@ function ChatPanel({
               type="button"
               onClick={clearChat}
               title="Clear conversation"
-              className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl bg-zinc-800/60 text-zinc-500 transition-colors hover:bg-zinc-700/60 hover:text-zinc-300"
+              className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl bg-muted/80 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground/70"
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -508,7 +508,7 @@ function ChatPanel({
               "flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-xl transition-colors",
               inputValue.trim() && !isLoading
                 ? "bg-violet-600 text-white hover:bg-violet-500"
-                : "bg-zinc-800 text-zinc-600"
+                : "bg-muted text-muted-foreground/60"
             )}
           >
             {isLoading ? (
@@ -518,7 +518,7 @@ function ChatPanel({
             )}
           </button>
         </div>
-        <p className="mx-auto mt-2 max-w-3xl text-center text-[10px] text-zinc-700">
+        <p className="mx-auto mt-2 max-w-3xl text-center text-[10px] text-muted-foreground/40">
           Messages are sent to your OpenClaw agent. Press Enter to send,
           Shift+Enter for new line.
         </p>
@@ -612,7 +612,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* ── Top bar: agent selector ─────────────── */}
-      <div className="shrink-0 border-b border-white/[0.06] bg-[#0c0c10]/60 px-4 py-3">
+      <div className="shrink-0 border-b border-foreground/[0.06] bg-card/60 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             {/* Agent dropdown */}
@@ -622,26 +622,26 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                 onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
                 className={cn(
                   "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm transition-colors",
-                  "border-white/[0.08] bg-zinc-900/80 hover:bg-zinc-800/80"
+                  "border-foreground/[0.08] bg-card hover:bg-muted"
                 )}
               >
                 <span className="text-lg">
                   {agentEmoji(selectedAgent)}
                 </span>
-                <span className="font-medium text-zinc-200">
+                <span className="font-medium text-foreground/90">
                   {currentAgent?.name || selectedAgent}
                 </span>
-                <ChevronDown className="h-3.5 w-3.5 text-zinc-500" />
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
 
               {agentDropdownOpen && (
-                <div className="absolute left-0 top-full z-50 mt-1 min-w-[240px] overflow-hidden rounded-lg border border-white/[0.08] bg-zinc-900/95 py-1 shadow-xl backdrop-blur-sm">
+                <div className="absolute left-0 top-full z-50 mt-1 min-w-[240px] overflow-hidden rounded-lg border border-foreground/[0.08] bg-card/95 py-1 shadow-xl backdrop-blur-sm">
                   {agentsLoading ? (
-                    <div className="px-3 py-2 text-sm text-zinc-500">
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
                       Discovering agents...
                     </div>
                   ) : agents.length === 0 ? (
-                    <div className="px-3 py-2 text-sm text-zinc-500">
+                    <div className="px-3 py-2 text-sm text-muted-foreground">
                       No agents found
                     </div>
                   ) : (
@@ -654,7 +654,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                           "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
                           agent.id === selectedAgent
                             ? "bg-violet-500/10 text-violet-300"
-                            : "text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                            : "text-foreground/70 hover:bg-muted hover:text-foreground"
                         )}
                       >
                         <span className="text-lg">
@@ -670,7 +670,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                                 <Circle className="h-2 w-2 fill-emerald-400 text-emerald-400" />
                               )}
                           </div>
-                          <span className="text-[11px] text-zinc-500">
+                          <span className="text-[11px] text-muted-foreground">
                             {formatModel(agent.model)} &bull;{" "}
                             {agent.sessionCount} session
                             {agent.sessionCount !== 1 ? "s" : ""}
@@ -690,16 +690,16 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
 
             {/* Model badge */}
             {currentAgent && (
-              <div className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-zinc-800/40 px-2 py-1">
-                <Cpu className="h-3 w-3 text-zinc-500" />
-                <span className="text-[11px] text-zinc-500">
+              <div className="flex items-center gap-1.5 rounded-md border border-foreground/[0.06] bg-muted/60 px-2 py-1">
+                <Cpu className="h-3 w-3 text-muted-foreground" />
+                <span className="text-[11px] text-muted-foreground">
                   {formatModel(currentAgent.model)}
                 </span>
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-1 text-[10px] text-zinc-600">
+          <div className="flex items-center gap-1 text-[10px] text-muted-foreground/60">
             <span>
               {agents.length} agent{agents.length !== 1 ? "s" : ""} discovered
             </span>

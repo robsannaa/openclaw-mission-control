@@ -244,13 +244,13 @@ function RadialGauge({
         />
       </svg>
       <div className="absolute flex flex-col items-center justify-center" style={{ width: size, height: size }}>
-        <span className="text-[15px] font-bold text-zinc-100">
+        <span className="text-[15px] font-bold text-foreground">
           {Math.round(percent)}
-          <span className="text-[10px] text-zinc-500">%</span>
+          <span className="text-[10px] text-muted-foreground">%</span>
         </span>
       </div>
-      <p className="mt-1 text-[10px] font-medium text-zinc-500">{label}</p>
-      {unit && <p className="text-[9px] text-zinc-700">{unit}</p>}
+      <p className="mt-1 text-[10px] font-medium text-muted-foreground">{label}</p>
+      {unit && <p className="text-[9px] text-muted-foreground/40">{unit}</p>}
     </div>
   );
 }
@@ -259,7 +259,7 @@ function RadialGauge({
 
 function MiniBar({ percent, color }: { percent: number; color: string }) {
   return (
-    <div className="h-1.5 w-full rounded-full bg-white/[0.04]">
+    <div className="h-1.5 w-full rounded-full bg-foreground/[0.04]">
       <div
         className="h-1.5 rounded-full transition-all duration-700 ease-out"
         style={{ width: `${Math.min(100, Math.max(0, percent))}%`, backgroundColor: color }}
@@ -273,8 +273,8 @@ function MiniBar({ percent, color }: { percent: number; color: string }) {
 function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; connected: boolean }) {
   if (!stats) {
     return (
-      <div className="rounded-xl border border-white/[0.06] bg-zinc-900/50 p-6">
-        <div className="flex items-center gap-2 text-[12px] text-zinc-600">
+      <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-6">
+        <div className="flex items-center gap-2 text-[12px] text-muted-foreground/60">
           <Gauge className="h-4 w-4 animate-pulse" />
           Connecting to system stats stream...
         </div>
@@ -292,7 +292,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+        <h2 className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
           <Server className="h-3.5 w-3.5" /> System Monitor
         </h2>
         <div className="flex items-center gap-1.5">
@@ -302,14 +302,14 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
               connected ? "bg-emerald-500 animate-pulse" : "bg-red-500"
             )}
           />
-          <span className="text-[9px] text-zinc-600">
+          <span className="text-[9px] text-muted-foreground/60">
             {connected ? "LIVE" : "RECONNECTING"}
           </span>
         </div>
       </div>
 
       {/* Gauges row */}
-      <div className="grid grid-cols-3 gap-4 rounded-xl border border-white/[0.06] bg-zinc-900/50 px-4 py-5">
+      <div className="grid grid-cols-3 gap-4 rounded-xl border border-foreground/[0.06] bg-card/90 px-4 py-5">
         <div className="relative flex justify-center">
           <RadialGauge
             value={stats.cpu.usage}
@@ -342,56 +342,56 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
       {/* Detail cards grid */}
       <div className="grid grid-cols-2 gap-2">
         {/* CPU details */}
-        <div className="rounded-xl border border-white/[0.06] bg-zinc-900/50 p-3 space-y-2">
+        <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3 space-y-2">
           <div className="flex items-center gap-2">
             <Cpu className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="text-[11px] font-semibold text-zinc-300">CPU</span>
+            <span className="text-[11px] font-semibold text-foreground/70">CPU</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Usage</span>
-              <span className="font-mono text-zinc-300">{stats.cpu.usage}%</span>
+              <span className="text-muted-foreground/60">Usage</span>
+              <span className="font-mono text-foreground/70">{stats.cpu.usage}%</span>
             </div>
             <MiniBar percent={stats.cpu.usage} color={cpuColor} />
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Load (1/5/15m)</span>
-              <span className="font-mono text-zinc-400">
+              <span className="text-muted-foreground/60">Load (1/5/15m)</span>
+              <span className="font-mono text-muted-foreground">
                 {stats.cpu.load1} / {stats.cpu.load5} / {stats.cpu.load15}
               </span>
             </div>
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Speed</span>
-              <span className="font-mono text-zinc-400">{stats.cpu.speed} MHz</span>
+              <span className="text-muted-foreground/60">Speed</span>
+              <span className="font-mono text-muted-foreground">{stats.cpu.speed} MHz</span>
             </div>
-            <p className="truncate text-[9px] text-zinc-700" title={stats.cpu.model}>
+            <p className="truncate text-[9px] text-muted-foreground/40" title={stats.cpu.model}>
               {stats.cpu.model}
             </p>
           </div>
         </div>
 
         {/* Memory details */}
-        <div className="rounded-xl border border-white/[0.06] bg-zinc-900/50 p-3 space-y-2">
+        <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3 space-y-2">
           <div className="flex items-center gap-2">
             <MemoryStick className="h-3.5 w-3.5 text-violet-400" />
-            <span className="text-[11px] font-semibold text-zinc-300">Memory</span>
+            <span className="text-[11px] font-semibold text-foreground/70">Memory</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Used</span>
-              <span className="font-mono text-zinc-300">
+              <span className="text-muted-foreground/60">Used</span>
+              <span className="font-mono text-foreground/70">
                 {formatBytesCompact(stats.memory.used)}
               </span>
             </div>
             <MiniBar percent={stats.memory.percent} color={memColor} />
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Free</span>
-              <span className="font-mono text-zinc-400">
+              <span className="text-muted-foreground/60">Free</span>
+              <span className="font-mono text-muted-foreground">
                 {formatBytesCompact(stats.memory.free)}
               </span>
             </div>
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Total</span>
-              <span className="font-mono text-zinc-400">
+              <span className="text-muted-foreground/60">Total</span>
+              <span className="font-mono text-muted-foreground">
                 {formatBytesCompact(stats.memory.total)}
               </span>
             </div>
@@ -399,28 +399,28 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* Disk details */}
-        <div className="rounded-xl border border-white/[0.06] bg-zinc-900/50 p-3 space-y-2">
+        <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3 space-y-2">
           <div className="flex items-center gap-2">
             <HardDrive className="h-3.5 w-3.5 text-blue-400" />
-            <span className="text-[11px] font-semibold text-zinc-300">Disk</span>
+            <span className="text-[11px] font-semibold text-foreground/70">Disk</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Used</span>
-              <span className="font-mono text-zinc-300">
+              <span className="text-muted-foreground/60">Used</span>
+              <span className="font-mono text-foreground/70">
                 {formatBytesCompact(stats.disk.used)}
               </span>
             </div>
             <MiniBar percent={stats.disk.percent} color={diskColor} />
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Free</span>
-              <span className="font-mono text-zinc-400">
+              <span className="text-muted-foreground/60">Free</span>
+              <span className="font-mono text-muted-foreground">
                 {formatBytesCompact(stats.disk.free)}
               </span>
             </div>
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Total</span>
-              <span className="font-mono text-zinc-400">
+              <span className="text-muted-foreground/60">Total</span>
+              <span className="font-mono text-muted-foreground">
                 {formatBytesCompact(stats.disk.total)}
               </span>
             </div>
@@ -428,39 +428,39 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* System info */}
-        <div className="rounded-xl border border-white/[0.06] bg-zinc-900/50 p-3 space-y-2">
+        <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3 space-y-2">
           <div className="flex items-center gap-2">
             <Timer className="h-3.5 w-3.5 text-amber-400" />
-            <span className="text-[11px] font-semibold text-zinc-300">System</span>
+            <span className="text-[11px] font-semibold text-foreground/70">System</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Hostname</span>
-              <span className="font-mono text-zinc-400">{stats.system.hostname}</span>
+              <span className="text-muted-foreground/60">Hostname</span>
+              <span className="font-mono text-muted-foreground">{stats.system.hostname}</span>
             </div>
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Platform</span>
-              <span className="font-mono text-zinc-400">
+              <span className="text-muted-foreground/60">Platform</span>
+              <span className="font-mono text-muted-foreground">
                 {stats.system.platform} {stats.system.arch}
               </span>
             </div>
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Uptime</span>
-              <span className="font-mono text-zinc-400">{stats.system.uptimeDisplay}</span>
+              <span className="text-muted-foreground/60">Uptime</span>
+              <span className="font-mono text-muted-foreground">{stats.system.uptimeDisplay}</span>
             </div>
             <div className="flex justify-between text-[10px]">
-              <span className="text-zinc-600">Processes</span>
-              <span className="font-mono text-zinc-400">{stats.system.processCount}</span>
+              <span className="text-muted-foreground/60">Processes</span>
+              <span className="font-mono text-muted-foreground">{stats.system.processCount}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* OpenClaw storage stats */}
-      <div className="rounded-xl border border-white/[0.06] bg-zinc-900/50 p-3 space-y-2">
+      <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3 space-y-2">
         <div className="flex items-center gap-2">
           <Database className="h-3.5 w-3.5 text-pink-400" />
-          <span className="text-[11px] font-semibold text-zinc-300">OpenClaw Storage</span>
+          <span className="text-[11px] font-semibold text-foreground/70">OpenClaw Storage</span>
         </div>
         <div className="grid grid-cols-4 gap-3">
           <OcStatMini
@@ -510,9 +510,9 @@ function OcStatMini({
   return (
     <div className="text-center">
       <Icon className={cn("mx-auto h-3.5 w-3.5", color)} />
-      <p className="mt-1 text-[13px] font-semibold text-zinc-200">{value}</p>
-      <p className="text-[9px] text-zinc-600">{label}</p>
-      {sub && <p className="text-[8px] text-zinc-700">{sub}</p>}
+      <p className="mt-1 text-[13px] font-semibold text-foreground/90">{value}</p>
+      <p className="text-[9px] text-muted-foreground/60">{label}</p>
+      {sub && <p className="text-[8px] text-muted-foreground/40">{sub}</p>}
     </div>
   );
 }
@@ -558,7 +558,7 @@ export function DashboardView() {
 
   if (!live) {
     return (
-      <div className="flex flex-1 items-center justify-center text-sm text-zinc-600">
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
         <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
         Connecting to system...
       </div>
@@ -571,7 +571,7 @@ export function DashboardView() {
   return (
     <div className="flex flex-1 flex-col overflow-y-auto">
       {/* ── Gateway status bar ────────────────────── */}
-      <div className="shrink-0 border-b border-white/[0.06] bg-[#0a0a0e]/80 px-6 py-2.5">
+      <div className="shrink-0 border-b border-foreground/[0.06] bg-card/80 px-6 py-2.5">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative flex items-center gap-2">
@@ -584,15 +584,15 @@ export function DashboardView() {
               {isOnline && (
                 <div className="absolute left-0 h-2.5 w-2.5 animate-ping rounded-full bg-emerald-500/50" />
               )}
-              <span className="text-[13px] font-medium text-zinc-200">
+              <span className="text-[13px] font-medium text-foreground/90">
                 Gateway {isOnline ? "Online" : "Offline"}
               </span>
             </div>
-            <span className="text-[11px] text-zinc-600">
+            <span className="text-[11px] text-muted-foreground/60">
               v{gw.version} &bull; port {gw.port} &bull; {gw.latencyMs}ms
             </span>
           </div>
-          <span className="text-[10px] text-zinc-600">
+          <span className="text-[10px] text-muted-foreground/60">
             Refreshed {Math.floor((Date.now() - lastRefresh) / 1000)}s ago &bull; auto-refresh 5s
           </span>
         </div>
@@ -644,24 +644,24 @@ export function DashboardView() {
         <div className="grid gap-5 lg:grid-cols-2">
           {/* Agents */}
           <div>
-            <h2 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+            <h2 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
               <Bot className="h-3.5 w-3.5" /> Agents
             </h2>
             <div className="space-y-2.5">
               {live.agents.map((agent) => (
                 <div
                   key={agent.id}
-                  className="rounded-xl border border-white/[0.06] bg-zinc-900/50 p-4"
+                  className="rounded-xl border border-foreground/[0.06] bg-card/90 p-4"
                 >
                   <div className="flex items-center gap-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-500/10 text-xl">
                       {agent.id === "main" ? "🦞" : "💀"}
                     </div>
                     <div className="flex-1">
-                      <p className="text-sm font-semibold text-zinc-100 capitalize">
+                      <p className="text-sm font-semibold text-foreground capitalize">
                         {agent.id}
                       </p>
-                      <div className="flex items-center gap-3 text-[11px] text-zinc-500">
+                      <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                         <span>{agent.sessionCount} session{agent.sessionCount !== 1 ? "s" : ""}</span>
                         <span>{formatTokens(agent.totalTokens)} tokens</span>
                         <span>Active {formatAgo(agent.lastActivity)}</span>
@@ -678,11 +678,11 @@ export function DashboardView() {
                   </div>
                   {/* Token usage bar */}
                   <div className="mt-3">
-                    <div className="flex justify-between text-[10px] text-zinc-600">
+                    <div className="flex justify-between text-[10px] text-muted-foreground/60">
                       <span>Token usage</span>
                       <span>{formatTokens(agent.totalTokens)}</span>
                     </div>
-                    <div className="mt-1 h-1.5 rounded-full bg-zinc-800">
+                    <div className="mt-1 h-1.5 rounded-full bg-muted">
                       <div
                         className="h-1.5 rounded-full bg-violet-500/60 transition-all duration-1000"
                         style={{
@@ -698,14 +698,14 @@ export function DashboardView() {
             {/* Models */}
             {system?.models && system.models.length > 0 && (
               <div className="mt-4">
-                <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-600">
+                <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
                   Model Aliases
                 </h3>
                 <div className="flex flex-wrap gap-1.5">
                   {system.models.map((m) => (
                     <span
                       key={m.id}
-                      className="rounded-md border border-white/[0.04] bg-zinc-900/40 px-2 py-1 text-[10px] text-zinc-500"
+                      className="rounded-md border border-foreground/[0.04] bg-card/80 px-2 py-1 text-[10px] text-muted-foreground"
                     >
                       {m.alias && (
                         <span className="mr-1 text-violet-400">/{m.alias}</span>
@@ -720,7 +720,7 @@ export function DashboardView() {
 
           {/* Cron countdowns */}
           <div>
-            <h2 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+            <h2 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
               <Clock className="h-3.5 w-3.5" /> Cron Schedules
             </h2>
             <div className="space-y-2.5">
@@ -730,7 +730,7 @@ export function DashboardView() {
                 return (
                   <div
                     key={job.id}
-                    className="rounded-xl border border-white/[0.06] bg-zinc-900/50 p-4"
+                    className="rounded-xl border border-foreground/[0.06] bg-card/90 p-4"
                   >
                     <div className="flex items-center gap-2.5">
                       <div
@@ -744,24 +744,24 @@ export function DashboardView() {
                         )}
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-medium text-zinc-200">
+                        <p className="text-[13px] font-medium text-foreground/90">
                           {job.name}
                         </p>
-                        <p className="text-[10px] text-zinc-600">
+                        <p className="text-[10px] text-muted-foreground/60">
                           {job.scheduleDisplay}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[13px] font-mono font-medium text-zinc-300">
+                        <p className="text-[13px] font-mono font-medium text-foreground/70">
                           {countdown}
                         </p>
-                        <p className="text-[10px] text-zinc-600">
+                        <p className="text-[10px] text-muted-foreground/60">
                           ran {formatAgo(job.lastRunAtMs || 0)} ({formatDuration(job.lastDurationMs)})
                         </p>
                       </div>
                     </div>
                     {/* Progress bar */}
-                    <div className="mt-2.5 h-1.5 rounded-full bg-zinc-800">
+                    <div className="mt-2.5 h-1.5 rounded-full bg-muted">
                       <div
                         className={cn(
                           "h-1.5 rounded-full transition-all duration-1000",
@@ -792,14 +792,14 @@ export function DashboardView() {
         {/* ── Recent cron run results ─────────────── */}
         {live.cronRuns.length > 0 && (
           <div>
-            <h2 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+            <h2 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
               <Zap className="h-3.5 w-3.5" /> Recent Cron Results
             </h2>
             <div className="space-y-1.5">
               {live.cronRuns.slice(0, 6).map((run, i) => (
                 <div
                   key={`${run.jobId}-${run.ts}-${i}`}
-                  className="rounded-lg border border-white/[0.04] bg-zinc-900/30 px-4 py-2.5"
+                  className="rounded-lg border border-foreground/[0.04] bg-card/70 px-4 py-2.5"
                 >
                   <div className="flex items-center gap-2">
                     {run.status === "ok" ? (
@@ -807,17 +807,17 @@ export function DashboardView() {
                     ) : (
                       <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
                     )}
-                    <span className="text-[11px] text-zinc-500">
+                    <span className="text-[11px] text-muted-foreground">
                       {formatAgo(run.ts)}
                     </span>
                     {run.durationMs && (
-                      <span className="text-[10px] text-zinc-600">
+                      <span className="text-[10px] text-muted-foreground/60">
                         {formatDuration(run.durationMs)}
                       </span>
                     )}
                   </div>
                   {run.summary && (
-                    <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-zinc-400">
+                    <p className="mt-1 line-clamp-2 text-[11px] leading-5 text-muted-foreground">
                       {run.summary.replace(/[*#|_]/g, "").substring(0, 200)}
                     </p>
                   )}
@@ -832,10 +832,10 @@ export function DashboardView() {
 
         {/* ── Live activity log ───────────────────── */}
         <div>
-          <h2 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-zinc-500">
+          <h2 className="mb-3 flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
             <Radio className="h-3.5 w-3.5" /> Gateway Log
           </h2>
-          <div className="rounded-xl border border-white/[0.06] bg-[#08080c]/60 p-1">
+          <div className="rounded-xl border border-foreground/[0.06] bg-background/60 p-1">
             <div className="max-h-[320px] overflow-y-auto font-mono text-[11px] leading-5">
               {live.logEntries.map((entry, i) => {
                 const isError =
@@ -853,10 +853,10 @@ export function DashboardView() {
                       "flex gap-2 rounded px-2 py-0.5",
                       isError
                         ? "bg-red-500/5 text-red-400"
-                        : "hover:bg-white/[0.02]"
+                        : "hover:bg-foreground/[0.02]"
                     )}
                   >
-                    <span className="shrink-0 text-zinc-600">{time}</span>
+                    <span className="shrink-0 text-muted-foreground/60">{time}</span>
                     <span
                       className={cn(
                         "shrink-0 w-24 truncate",
@@ -864,19 +864,19 @@ export function DashboardView() {
                           ? "text-amber-500"
                           : isWs
                             ? "text-blue-500"
-                            : "text-zinc-500"
+                            : "text-muted-foreground"
                       )}
                     >
                       [{entry.source}]
                     </span>
-                    <span className="min-w-0 truncate text-zinc-400">
+                    <span className="min-w-0 truncate text-muted-foreground">
                       {entry.message}
                     </span>
                   </div>
                 );
               })}
               {live.logEntries.length === 0 && (
-                <p className="px-2 py-4 text-center text-zinc-600">
+                <p className="px-2 py-4 text-center text-muted-foreground/60">
                   No recent log entries
                 </p>
               )}
@@ -910,8 +910,8 @@ function StatCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-white/[0.06] bg-zinc-900/50 p-3",
-        onClick && "cursor-pointer transition-colors hover:border-white/[0.12]"
+        "rounded-xl border border-foreground/[0.06] bg-card/90 p-3",
+        onClick && "cursor-pointer transition-colors hover:border-foreground/[0.12]"
       )}
       onClick={onClick}
     >
@@ -920,8 +920,8 @@ function StatCard({
           <Icon className="h-4 w-4" />
         </div>
         <div>
-          <p className="text-base font-semibold text-zinc-100">{value}</p>
-          <p className="text-[10px] text-zinc-500">{label}</p>
+          <p className="text-base font-semibold text-foreground">{value}</p>
+          <p className="text-[10px] text-muted-foreground">{label}</p>
         </div>
       </div>
       {alert && (
