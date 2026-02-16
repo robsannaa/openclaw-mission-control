@@ -1,0 +1,426 @@
+import { NextRequest, NextResponse } from "next/server";
+import { runCli, runCliJson } from "@/lib/openclaw-cli";
+
+export const dynamic = "force-dynamic";
+
+type RawAllowlistEntry = {
+  id?: string;
+  pattern?: string;
+  lastUsedAt?: number;
+  lastUsedCommand?: string;
+  lastResolvedPath?: string;
+};
+
+type ScopeConfig = {
+  allowlist?: RawAllowlistEntry[] | string[];
+  security?: string;
+  ask?: string;
+  askFallback?: string;
+  autoAllowSkills?: boolean;
+};
+
+type ApprovalsFile = {
+  version?: number;
+  socket?: {
+    path?: string;
+    token?: string;
+  };
+  defaults?: ScopeConfig;
+  agents?: Record<string, ScopeConfig>;
+};
+
+type ApprovalsSnapshot = {
+  path?: string;
+  exists?: boolean;
+  hash?: string;
+  file?: ApprovalsFile;
+};
+
+type SandboxExplain = {
+  docsUrl?: string;
+  agentId?: string;
+  sessionKey?: string;
+  sandbox?: {
+    mode?: string;
+    scope?: string;
+    perSession?: boolean;
+    workspaceAccess?: string;
+    workspaceRoot?: string;
+    sessionIsSandboxed?: boolean;
+    tools?: {
+      allow?: string[];
+      deny?: string[];
+      sources?: {
+        allow?: { source?: string; key?: string };
+        deny?: { source?: string; key?: string };
+      };
+    };
+  };
+  elevated?: {
+    enabled?: boolean;
+    allowedByConfig?: boolean;
+    alwaysAllowedByConfig?: boolean;
+    allowFrom?: Record<string, unknown>;
+    failures?: string[];
+  };
+  fixIt?: string[];
+};
+
+type AllowlistEntry = {
+  agentId: string;
+  pattern: string;
+  id?: string;
+  lastUsedAt?: number;
+  lastUsedCommand?: string;
+  lastResolvedPath?: string;
+};
+
+type ExecPolicyScope = {
+  scope: "defaults" | "agent";
+  agentId?: string;
+  security?: string;
+  ask?: string;
+  askFallback?: string;
+  autoAllowSkills?: boolean;
+  allowlistCount: number;
+};
+
+type CapabilityFlag = {
+  id: string;
+  label: string;
+  allowed: boolean;
+  tools: string[];
+  reason: string;
+};
+
+// Derived from docs: https://docs.openclaw.ai/gateway/protocol#tool-groups
+const TOOL_GROUPS: Record<string, string[]> = {
+  "group:runtime": ["exec", "bash", "process"],
+  "group:filesystem": ["read", "write", "edit", "apply_patch", "image"],
+  "group:session": [
+    "sessions_list",
+    "sessions_history",
+    "sessions_send",
+    "sessions_spawn",
+    "session_status",
+    "subagents",
+  ],
+  "group:memory": ["memories_list", "memories_get"],
+  "group:ui": ["browser", "canvas"],
+  "group:automation": ["gateway", "cron"],
+  "group:messaging": ["message"],
+  "group:nodes": ["nodes"],
+  "group:openclaw": [
+    "exec",
+    "bash",
+    "process",
+    "read",
+    "write",
+    "edit",
+    "apply_patch",
+    "image",
+    "sessions_list",
+    "sessions_history",
+    "sessions_send",
+    "sessions_spawn",
+    "session_status",
+    "subagents",
+    "memories_list",
+    "memories_get",
+    "browser",
+    "canvas",
+    "gateway",
+    "cron",
+    "message",
+    "nodes",
+  ],
+};
+
+function stripAnsi(s: string): string {
+  return s.replace(/\u001b\[[0-9;]*m/g, "");
+}
+
+function parseLooseJson<T>(raw: string): T | null {
+  const clean = stripAnsi(raw).trim();
+  const startObj = clean.indexOf("{");
+  const startArr = clean.indexOf("[");
+  const starts = [startObj, startArr].filter((n) => n >= 0).sort((a, b) => a - b);
+  if (!starts.length) return null;
+  const sliced = clean.slice(starts[0]);
+  try {
+    return JSON.parse(sliced) as T;
+  } catch {
+    return null;
+  }
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function uniqSorted(values: unknown): string[] {
+  return [...new Set(asArray(values).map((v) => String(v).trim()).filter(Boolean))].sort();
+}
+
+function normalizeAllowlistEntries(agentId: string, raw: unknown): AllowlistEntry[] {
+  return asArray(raw)
+    .map((item) => {
+      if (typeof item === "string") return { pattern: item } satisfies RawAllowlistEntry;
+      if (item && typeof item === "object") return item as RawAllowlistEntry;
+      return null;
+    })
+    .filter((v): v is RawAllowlistEntry => Boolean(v?.pattern))
+    .map((v) => ({
+      agentId,
+      pattern: String(v.pattern || ""),
+      id: v.id ? String(v.id) : undefined,
+      lastUsedAt: typeof v.lastUsedAt === "number" ? v.lastUsedAt : undefined,
+      lastUsedCommand: v.lastUsedCommand ? String(v.lastUsedCommand) : undefined,
+      lastResolvedPath: v.lastResolvedPath ? String(v.lastResolvedPath) : undefined,
+    }));
+}
+
+function buildAllowlistEntries(file: ApprovalsFile | undefined): AllowlistEntry[] {
+  if (!file) return [];
+  const out: AllowlistEntry[] = [];
+  out.push(...normalizeAllowlistEntries("*", file.defaults?.allowlist));
+  for (const [agentId, cfg] of Object.entries(file.agents || {})) {
+    out.push(...normalizeAllowlistEntries(agentId, cfg.allowlist));
+  }
+  out.sort((a, b) => {
+    if (a.agentId !== b.agentId) return a.agentId.localeCompare(b.agentId);
+    return a.pattern.localeCompare(b.pattern);
+  });
+  return out;
+}
+
+function redactApprovalsSnapshot(snapshot: ApprovalsSnapshot): ApprovalsSnapshot {
+  const clone = structuredClone(snapshot);
+  if (clone.file?.socket?.token) clone.file.socket.token = "••••••••";
+  return clone;
+}
+
+function buildExecPolicies(file: ApprovalsFile | undefined): ExecPolicyScope[] {
+  if (!file) return [];
+  const out: ExecPolicyScope[] = [];
+  const defaults = file.defaults || {};
+  out.push({
+    scope: "defaults",
+    security: defaults.security,
+    ask: defaults.ask,
+    askFallback: defaults.askFallback,
+    autoAllowSkills: defaults.autoAllowSkills,
+    allowlistCount: normalizeAllowlistEntries("*", defaults.allowlist).length,
+  });
+  for (const [agentId, cfg] of Object.entries(file.agents || {})) {
+    out.push({
+      scope: "agent",
+      agentId,
+      security: cfg.security,
+      ask: cfg.ask,
+      askFallback: cfg.askFallback,
+      autoAllowSkills: cfg.autoAllowSkills,
+      allowlistCount: normalizeAllowlistEntries(agentId, cfg.allowlist).length,
+    });
+  }
+  return out;
+}
+
+function expandConfiguredTools(rawTools: string[]): Set<string> {
+  const out = new Set<string>();
+  for (const toolRaw of rawTools) {
+    const tool = toolRaw.toLowerCase();
+    out.add(tool);
+    if (tool.startsWith("group:")) {
+      for (const member of TOOL_GROUPS[tool] || []) out.add(member);
+    }
+  }
+  return out;
+}
+
+function capabilityModel(
+  sandbox: SandboxExplain["sandbox"],
+  elevated: SandboxExplain["elevated"],
+  allowlist: AllowlistEntry[],
+  file: ApprovalsFile | undefined
+) {
+  const allowConfigured = uniqSorted(sandbox?.tools?.allow).map((v) => v.toLowerCase());
+  const denyConfigured = uniqSorted(sandbox?.tools?.deny).map((v) => v.toLowerCase());
+  const allowExpanded = expandConfiguredTools(allowConfigured);
+  const denyExpanded = expandConfiguredTools(denyConfigured);
+  const allowMode = allowConfigured.length > 0 ? "allowlist" : "open-denylist";
+
+  const isToolAllowed = (tool: string): boolean => {
+    const t = tool.toLowerCase();
+    if (denyExpanded.has("*") || denyExpanded.has(t)) return false;
+    if (allowMode === "open-denylist") return true;
+    return allowExpanded.has("*") || allowExpanded.has(t);
+  };
+
+  const evaluateFlag = (id: string, label: string, tools: string[]): CapabilityFlag => {
+    const allowedCount = tools.filter((t) => isToolAllowed(t)).length;
+    if (allowedCount === tools.length) {
+      return {
+        id,
+        label,
+        tools,
+        allowed: true,
+        reason:
+          tools.length === 1
+            ? `${tools[0]} is currently allowed by sandbox policy.`
+            : `All ${tools.length} tools in this group are currently allowed.`,
+      };
+    }
+    if (allowedCount > 0) {
+      return {
+        id,
+        label,
+        tools,
+        allowed: true,
+        reason: `${allowedCount}/${tools.length} tools in this group are currently allowed.`,
+      };
+    }
+    return {
+      id,
+      label,
+      tools,
+      allowed: false,
+      reason:
+        allowMode === "allowlist"
+          ? "None of these tools are included in the current sandbox allowlist."
+          : "All tools in this group are currently denied by sandbox policy.",
+    };
+  };
+
+  const flags: CapabilityFlag[] = [
+    evaluateFlag("runtime", "Runtime Command Tools", TOOL_GROUPS["group:runtime"] || []),
+    evaluateFlag("filesystem", "Filesystem Mutation Tools", ["write", "edit", "apply_patch"]),
+    evaluateFlag("sessions", "Session Control Tools", TOOL_GROUPS["group:session"] || []),
+    evaluateFlag("messaging", "Messaging Tool", TOOL_GROUPS["group:messaging"] || []),
+    evaluateFlag("automation", "Gateway/Cron Tools", TOOL_GROUPS["group:automation"] || []),
+  ];
+
+  flags.push({
+    id: "elevated",
+    label: "Elevated Exec Gate",
+    tools: ["tools.elevated.enabled"],
+    allowed: Boolean(elevated?.enabled),
+    reason: elevated?.enabled
+      ? "Elevated execution is enabled."
+      : "Elevated execution is disabled.",
+  });
+
+  return {
+    sandboxMode: sandbox?.mode || "unknown",
+    sessionIsSandboxed: Boolean(sandbox?.sessionIsSandboxed),
+    workspaceAccess: sandbox?.workspaceAccess || "unknown",
+    toolPolicyMode: allowMode,
+    allowedToolsConfigured: allowConfigured,
+    deniedToolsConfigured: denyConfigured,
+    flags,
+    allowlistCount: allowlist.length,
+    policyScopeCount: buildExecPolicies(file).length,
+  };
+}
+
+async function readSnapshot() {
+  const [approvals, sandbox] = await Promise.all([
+    runCliJson<ApprovalsSnapshot>(["approvals", "get"], 12000),
+    runCliJson<SandboxExplain>(["sandbox", "explain"], 12000),
+  ]);
+
+  const sanitizedApprovals = redactApprovalsSnapshot(approvals);
+  const allowlist = buildAllowlistEntries(sanitizedApprovals.file);
+  const execPolicies = buildExecPolicies(sanitizedApprovals.file);
+  const capabilities = capabilityModel(
+    sandbox.sandbox,
+    sandbox.elevated,
+    allowlist,
+    sanitizedApprovals.file
+  );
+
+  return {
+    ts: Date.now(),
+    approvals: sanitizedApprovals,
+    allowlist,
+    execPolicies,
+    sandbox,
+    capabilities,
+  };
+}
+
+function cliError(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+async function mutateAllowlist(action: "add" | "remove", agentId: string, pattern: string) {
+  const args = [
+    "approvals",
+    "allowlist",
+    action,
+    "--json",
+    "--agent",
+    agentId || "*",
+    pattern,
+  ];
+  const raw = await runCli(args, 12000);
+  const parsed = parseLooseJson<ApprovalsSnapshot>(raw);
+  if (!parsed) {
+    throw new Error(`Failed to parse CLI response for ${action} allowlist.`);
+  }
+  return redactApprovalsSnapshot(parsed);
+}
+
+export async function GET() {
+  try {
+    const snapshot = await readSnapshot();
+    return NextResponse.json(snapshot);
+  } catch (err) {
+    return NextResponse.json({ error: cliError(err) }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const action = String(body.action || "");
+
+    if (action === "allow-pattern" || action === "revoke-pattern") {
+      const pattern = String(body.pattern || "").trim();
+      const agentId = String(body.agentId || "*").trim() || "*";
+      if (!pattern) {
+        return NextResponse.json({ error: "pattern is required" }, { status: 400 });
+      }
+      await mutateAllowlist(action === "allow-pattern" ? "add" : "remove", agentId, pattern);
+      const snapshot = await readSnapshot();
+      return NextResponse.json({ ok: true, action, snapshot });
+    }
+
+    if (action === "set-elevated") {
+      const enabled = Boolean(body.enabled);
+      await runCli(
+        [
+          "config",
+          "set",
+          "tools.elevated.enabled",
+          enabled ? "true" : "false",
+          "--json",
+        ],
+        12000
+      );
+      const snapshot = await readSnapshot();
+      return NextResponse.json({
+        ok: true,
+        action,
+        enabled,
+        restartRecommended: true,
+        snapshot,
+      });
+    }
+
+    return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });
+  } catch (err) {
+    return NextResponse.json({ error: cliError(err) }, { status: 500 });
+  }
+}

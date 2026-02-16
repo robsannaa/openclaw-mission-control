@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { requestRestart } from "@/lib/restart-store";
 import {
   CheckCircle, XCircle, Search, RefreshCw,
@@ -45,6 +46,29 @@ type SkillDetail = Skill & {
 type Summary = { total: number; eligible: number; disabled: number; blocked: number; missingRequirements: number };
 type Toast = { msg: string; type: "success" | "error" };
 type AvailabilityState = "ready" | "needs-setup" | "blocked" | "unavailable";
+type SkillOrigin = "bundled" | "workspace" | "shared" | "other";
+type SkillsFilter = "all" | "eligible" | "unavailable" | "bundled" | "workspace";
+
+const SKILL_ORIGIN_META: Record<SkillOrigin, { title: string; description: string }> = {
+  bundled: {
+    title: "Bundled Skills",
+    description: "Built into your OpenClaw install. Toggle controls policy only; runtime still depends on requirements.",
+  },
+  workspace: {
+    title: "Workspace Skills",
+    description: "Installed for this workspace (typically via ClawHub).",
+  },
+  shared: {
+    title: "Shared Local Skills",
+    description: "Loaded from local shared skill directories (for example ~/.openclaw/skills).",
+  },
+  other: {
+    title: "Other Sources",
+    description: "Custom or external skill sources.",
+  },
+};
+
+const SKILL_ORIGIN_ORDER: SkillOrigin[] = ["bundled", "workspace", "shared", "other"];
 
 /* ── Helpers ────────────────────────────────────── */
 
@@ -89,24 +113,40 @@ function getAvailability(skill: Pick<Skill, "eligible" | "missing" | "blockedByA
   };
 }
 
-function sourceLabel(source: string): string {
-  if (source === "openclaw-bundled") return "Bundled";
-  if (source === "openclaw-workspace") return "Installed";
-  return source;
+function getSkillOrigin(skill: Pick<Skill, "source" | "bundled">): SkillOrigin {
+  const source = (skill.source || "").toLowerCase();
+  if (skill.bundled || source.includes("bundled")) return "bundled";
+  if (source.includes("workspace")) return "workspace";
+  if (source.includes("managed") || source.includes("local") || source.includes(".openclaw/skills")) return "shared";
+  return "other";
+}
+
+function sourceLabel(source: string, bundled?: boolean): string {
+  const normalized = (source || "").toLowerCase();
+  if (bundled || normalized.includes("bundled")) return "Bundled • Built-in";
+  if (normalized.includes("workspace")) return "Workspace • Installed";
+  if (normalized.includes("managed") || normalized.includes("local")) return "Shared • Local";
+  return `Custom • ${source}`;
 }
 
 function sourceColor(source: string): string {
-  if (source === "openclaw-bundled") return "bg-sky-500/10 text-sky-400 border-sky-500/20";
-  if (source === "openclaw-workspace") return "bg-violet-500/10 text-violet-400 border-violet-500/20";
+  const normalized = (source || "").toLowerCase();
+  if (normalized.includes("bundled")) return "bg-sky-500/10 text-sky-400 border-sky-500/20";
+  if (normalized.includes("workspace")) return "bg-violet-500/10 text-violet-400 border-violet-500/20";
+  if (normalized.includes("managed") || normalized.includes("local")) return "bg-cyan-500/10 text-cyan-400 border-cyan-500/20";
   return "bg-zinc-500/10 text-muted-foreground border-zinc-500/20";
 }
 
 function sourceHint(source: string): string {
-  if (source === "openclaw-bundled") {
+  const normalized = (source || "").toLowerCase();
+  if (normalized.includes("bundled")) {
     return "Bundled with OpenClaw. Enabling only allows usage; dependencies/config still decide runtime readiness.";
   }
-  if (source === "openclaw-workspace") {
+  if (normalized.includes("workspace")) {
     return "Installed in your workspace (usually via ClawHub).";
+  }
+  if (normalized.includes("managed") || normalized.includes("local")) {
+    return "Installed in a shared local skills directory.";
   }
   return "Custom source.";
 }
@@ -389,8 +429,8 @@ function InstallTerminal({
 /* ── Skill Card (list view) ─────────────────────── */
 
 function skillStatus(skill: Skill): { label: string; color: string; toggleColor: "green" | "amber" | "default" } {
-  if (skill.disabled) return { label: "Disabled", color: "text-muted-foreground/60", toggleColor: "default" };
-  return { label: "Enabled", color: "text-emerald-400", toggleColor: "green" };
+  if (skill.disabled) return { label: "Configured off", color: "text-muted-foreground/60", toggleColor: "default" };
+  return { label: "Configured on", color: "text-emerald-400", toggleColor: "green" };
 }
 
 function SkillCard({ skill, onClick, onToggle, toggling }: { skill: Skill; onClick: () => void; onToggle: (enabled: boolean) => void; toggling?: boolean }) {
@@ -424,7 +464,7 @@ function SkillCard({ skill, onClick, onToggle, toggling }: { skill: Skill; onCli
           </div>
           <p className="mt-0.5 line-clamp-2 text-[11px] leading-[1.5] text-muted-foreground">{skill.description}</p>
           <div className="mt-2 flex items-center gap-2">
-            <span className={cn("rounded border px-1.5 py-0.5 text-[9px] font-medium", sourceColor(skill.source))}>{sourceLabel(skill.source)}</span>
+            <span className={cn("rounded border px-1.5 py-0.5 text-[9px] font-medium", sourceColor(skill.source))}>{sourceLabel(skill.source, skill.bundled)}</span>
             <span className={cn("rounded border px-1.5 py-0.5 text-[9px] font-medium", availability.badgeClass)}>{availability.label}</span>
             {!skill.disabled && missing && <span className="text-[9px] text-muted-foreground/80">{missingTotal} requirement{missingTotal === 1 ? "" : "s"} missing</span>}
           </div>
@@ -443,7 +483,7 @@ function SkillCard({ skill, onClick, onToggle, toggling }: { skill: Skill; onCli
           <span className={cn("text-[8px] font-medium", status.color)}>
             {status.label}
           </span>
-          <span className="text-[8px] text-muted-foreground/60">Policy</span>
+          <span className="text-[8px] text-muted-foreground/60">Config</span>
         </div>
       </div>
     </div>
@@ -508,7 +548,7 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
             </div>
             <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">{detail.description}</p>
             <div className="mt-2 flex items-center gap-3 text-[11px]">
-              <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", sourceColor(detail.source))}>{sourceLabel(detail.source)}</span>
+              <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-medium", sourceColor(detail.source))}>{sourceLabel(detail.source, detail.bundled)}</span>
               {detail.homepage && <a href={detail.homepage} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-violet-400 hover:underline"><Globe className="h-3 w-3" />Homepage</a>}
             </div>
             <p className="mt-2 text-[11px] text-muted-foreground/70">{sourceHint(detail.source)}</p>
@@ -937,15 +977,19 @@ function ClawHubPanel({
 /* ── Main SkillsView ────────────────────────────── */
 
 export function SkillsView() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [skills, setSkills] = useState<Skill[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"skills" | "clawhub">("skills");
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "eligible" | "unavailable" | "installed">("all");
+  const [filter, setFilter] = useState<SkillsFilter>("all");
   const [selectedSkill, setSelectedSkill] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
+  const tab: "skills" | "clawhub" =
+    (searchParams.get("tab") || "").toLowerCase() === "clawhub" ? "clawhub" : "skills";
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -969,9 +1013,34 @@ export function SkillsView() {
     }
     if (filter === "eligible") return s.eligible;
     if (filter === "unavailable") return !s.eligible || s.blockedByAllowlist;
-    if (filter === "installed") return s.source === "openclaw-workspace";
+    if (filter === "workspace") return getSkillOrigin(s) === "workspace";
+    if (filter === "bundled") return getSkillOrigin(s) === "bundled";
     return true;
   }), [skills, search, filter]);
+
+  const grouped = useMemo(() => {
+    const buckets: Record<SkillOrigin, Skill[]> = {
+      bundled: [],
+      workspace: [],
+      shared: [],
+      other: [],
+    };
+    for (const skill of filtered) {
+      buckets[getSkillOrigin(skill)].push(skill);
+    }
+    return SKILL_ORIGIN_ORDER.map((origin) => {
+      const sectionSkills = buckets[origin];
+      return {
+        origin,
+        title: SKILL_ORIGIN_META[origin].title,
+        description: SKILL_ORIGIN_META[origin].description,
+        skills: sectionSkills,
+        ready: sectionSkills.filter((skill) => getAvailability(skill).state === "ready").length,
+        needsSetup: sectionSkills.filter((skill) => getAvailability(skill).state === "needs-setup").length,
+        disabled: sectionSkills.filter((skill) => skill.disabled).length,
+      };
+    }).filter((section) => section.skills.length > 0);
+  }, [filtered]);
 
   const handleAction = useCallback((msg: string) => {
     const isError = msg.startsWith("Error");
@@ -1025,6 +1094,14 @@ export function SkillsView() {
     }
   }, [fetchAll]);
 
+  const switchTab = useCallback((next: "skills" | "clawhub") => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("section", "skills");
+    if (next === "clawhub") params.set("tab", "clawhub");
+    else params.delete("tab");
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   if (loading) return <div className="flex flex-1 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-violet-400" /></div>;
 
   // Detail view
@@ -1037,7 +1114,8 @@ export function SkillsView() {
     );
   }
 
-  const installedCount = skills.filter((s) => s.source === "openclaw-workspace").length;
+  const bundledCount = skills.filter((s) => getSkillOrigin(s) === "bundled").length;
+  const workspaceCount = skills.filter((s) => getSkillOrigin(s) === "workspace").length;
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
@@ -1047,20 +1125,20 @@ export function SkillsView() {
           <div>
             <h2 className="text-[18px] font-semibold text-foreground flex items-center gap-2"><Wrench className="h-5 w-5 text-violet-400" />Skills</h2>
             <p className="text-[12px] text-muted-foreground mt-0.5">Browse, install, and configure OpenClaw skills. Click any skill for details.</p>
-            <p className="mt-1 text-[10px] text-muted-foreground/70">Configured state and availability are separate: a skill can be enabled but still unavailable until its requirements are met.</p>
+            <p className="mt-1 text-[10px] text-muted-foreground/70">Skills are grouped by origin (Bundled vs Workspace vs Shared Local). Configured state and runtime availability are shown separately.</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="inline-flex rounded-lg border border-foreground/[0.08] bg-muted/50 p-1">
               <button
                 type="button"
-                onClick={() => setTab("skills")}
+                onClick={() => switchTab("skills")}
                 className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors", tab === "skills" ? "bg-violet-500/15 text-violet-300" : "text-muted-foreground hover:text-foreground/80")}
               >
                 Local Skills
               </button>
               <button
                 type="button"
-                onClick={() => setTab("clawhub")}
+                onClick={() => switchTab("clawhub")}
                 className={cn("rounded-md px-2.5 py-1 text-[11px] font-medium transition-colors", tab === "clawhub" ? "bg-violet-500/15 text-violet-300" : "text-muted-foreground hover:text-foreground/80")}
               >
                 ClawHub
@@ -1072,11 +1150,12 @@ export function SkillsView() {
 
         {/* Summary */}
         {tab === "skills" && summary && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             <SumCard value={summary.total} label="Total" color="text-foreground/90" />
             <SumCard value={summary.eligible} label="Ready" color="text-emerald-400" border="border-emerald-500/20" bg="bg-emerald-500/5" />
+            <SumCard value={bundledCount} label="Bundled" color="text-sky-400" border="border-sky-500/20" bg="bg-sky-500/5" />
+            <SumCard value={workspaceCount} label="Workspace" color="text-violet-400" border="border-violet-500/20" bg="bg-violet-500/5" />
             <SumCard value={summary.missingRequirements} label="Missing Deps" color="text-amber-400" border="border-amber-500/20" bg="bg-amber-500/5" />
-            <SumCard value={installedCount} label="Installed" color="text-violet-400" border="border-violet-500/20" bg="bg-violet-500/5" />
             <SumCard value={summary.disabled} label="Disabled" color="text-red-400" border="border-red-500/20" bg="bg-red-500/5" />
           </div>
         )}
@@ -1088,24 +1167,41 @@ export function SkillsView() {
             <input placeholder="Search skills..." value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/60 text-foreground/70" />
             {search && <button onClick={() => setSearch("")} className="text-muted-foreground/60 hover:text-muted-foreground"><X className="h-3.5 w-3.5" /></button>}
           </div>
-          <div className="flex gap-1">{(["all", "eligible", "unavailable", "installed"] as const).map((f) => (
+          <div className="flex gap-1">{(["all", "eligible", "unavailable", "bundled", "workspace"] as const).map((f) => (
             <button key={f} type="button" onClick={() => setFilter(f)} className={cn("rounded-md px-2.5 py-1.5 text-[11px] font-medium transition-colors", filter === f ? "bg-violet-500/15 text-violet-300" : "text-muted-foreground hover:bg-muted/80 hover:text-muted-foreground")}>
-              {f === "all" ? "All" : f === "eligible" ? "Ready" : f === "unavailable" ? "Unavailable" : "Installed"}
+              {f === "all" ? "All" : f === "eligible" ? "Ready" : f === "unavailable" ? "Unavailable" : f === "bundled" ? "Bundled" : "Workspace"}
             </button>
           ))}</div>
         </div>}
       </div>
 
       {tab === "skills" && <div className="flex-1 overflow-y-auto px-4 md:px-6 pb-6">
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((s) => (
-            <SkillCard
-              key={s.name}
-              skill={s}
-              onClick={() => setSelectedSkill(s.name)}
-              onToggle={(enabled) => handleToggleSkill(s.name, enabled)}
-              toggling={togglingSkill === s.name}
-            />
+        <div className="space-y-5">
+          {grouped.map((section) => (
+            <section key={section.origin} className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.015] p-3.5">
+              <div className="flex flex-wrap items-end justify-between gap-3 border-b border-foreground/[0.05] pb-3">
+                <div>
+                  <h3 className="text-[13px] font-semibold text-foreground/90">{section.title} <span className="text-muted-foreground/60">({section.skills.length})</span></h3>
+                  <p className="mt-1 text-[11px] text-muted-foreground/75">{section.description}</p>
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-300">{section.ready} ready</span>
+                  <span className="rounded border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-amber-300">{section.needsSetup} needs setup</span>
+                  <span className="rounded border border-red-500/25 bg-red-500/10 px-1.5 py-0.5 text-red-300">{section.disabled} configured off</span>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {section.skills.map((s) => (
+                  <SkillCard
+                    key={s.name}
+                    skill={s}
+                    onClick={() => setSelectedSkill(s.name)}
+                    onToggle={(enabled) => handleToggleSkill(s.name, enabled)}
+                    toggling={togglingSkill === s.name}
+                  />
+                ))}
+              </div>
+            </section>
           ))}
         </div>
         {filtered.length === 0 && (

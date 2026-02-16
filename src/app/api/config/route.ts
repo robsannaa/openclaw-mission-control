@@ -29,6 +29,48 @@ function redactSensitive(obj: unknown, depth = 0): unknown {
   return obj;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientGatewayError(err: unknown): boolean {
+  const msg = String(err).toLowerCase();
+  return (
+    msg.includes("gateway closed") ||
+    msg.includes("1006") ||
+    msg.includes("abnormal closure") ||
+    msg.includes("econnrefused") ||
+    msg.includes("socket hang up")
+  );
+}
+
+function formatGatewayError(err: unknown): string {
+  const msg = String(err);
+  if (isTransientGatewayError(err)) {
+    return "Gateway temporarily unavailable while loading configuration. Please retry in a moment.";
+  }
+  return msg;
+}
+
+async function gatewayCallWithRetry<T>(
+  method: string,
+  params: Record<string, unknown> | undefined,
+  timeout: number,
+  retries = 1
+): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      return await gatewayCall<T>(method, params, timeout);
+    } catch (err) {
+      lastErr = err;
+      if (attempt >= retries || !isTransientGatewayError(err)) break;
+      await sleep(300 * (attempt + 1));
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * GET /api/config
  *
@@ -41,19 +83,44 @@ export async function GET(request: NextRequest) {
 
   try {
     if (scope === "schema") {
-      const data = await gatewayCall<Record<string, unknown>>(
-        "config.schema",
-        undefined,
-        15000
-      );
-      return NextResponse.json(data);
+      try {
+        const data = await gatewayCallWithRetry<Record<string, unknown>>(
+          "config.schema",
+          undefined,
+          15000,
+          1
+        );
+        return NextResponse.json(data);
+      } catch (err) {
+        return NextResponse.json({
+          schema: {},
+          uiHints: {},
+          warning: formatGatewayError(err),
+        });
+      }
     }
 
-    // Default: config + schema together
-    const [configData, schemaData] = await Promise.all([
-      gatewayCall<Record<string, unknown>>("config.get", undefined, 10000),
-      gatewayCall<Record<string, unknown>>("config.schema", undefined, 15000),
-    ]);
+    // Default: config first, schema best-effort.
+    const configData = await gatewayCallWithRetry<Record<string, unknown>>(
+      "config.get",
+      undefined,
+      10000,
+      1
+    );
+
+    let schemaData: Record<string, unknown> | null = null;
+    let warning: string | undefined;
+    try {
+      schemaData = await gatewayCallWithRetry<Record<string, unknown>>(
+        "config.schema",
+        undefined,
+        15000,
+        1
+      );
+    } catch (err) {
+      warning = formatGatewayError(err);
+      console.warn("Config schema unavailable, serving config without schema:", err);
+    }
 
     const parsed = (configData.parsed || {}) as Record<string, unknown>;
     const resolved = (configData.resolved || {}) as Record<string, unknown>;
@@ -64,12 +131,13 @@ export async function GET(request: NextRequest) {
       rawConfig: parsed,
       resolvedConfig: resolved,
       baseHash: configData.hash || "",
-      schema: schemaData.schema || {},
-      uiHints: schemaData.uiHints || {},
+      schema: schemaData?.schema || {},
+      uiHints: schemaData?.uiHints || {},
+      warning,
     });
   } catch (err) {
     console.error("Config GET error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json({ error: formatGatewayError(err) }, { status: 500 });
   }
 }
 

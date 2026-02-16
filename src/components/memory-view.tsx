@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Brain,
   Search,
@@ -127,7 +128,16 @@ function groupByPeriod(entries: DailyEntry[]): { key: string; entries: DailyEntr
   return ordered;
 }
 
+function normalizeMemoryPath(rawPath: string): string {
+  const trimmed = rawPath.trim().replace(/^\/+/, "");
+  if (trimmed.startsWith("memory/")) return trimmed.slice("memory/".length);
+  return trimmed;
+}
+
 export function MemoryView() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<"journal" | "graph">("journal");
   const [daily, setDaily] = useState<DailyEntry[]>([]);
   const [memoryMd, setMemoryMd] = useState<MemoryMd>(null);
@@ -147,6 +157,7 @@ export function MemoryView() {
   const [collapsedPeriods, setCollapsedPeriods] = useState<Set<string>>(new Set());
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasInitializedCollapse = useRef(false);
+  const jumpTarget = searchParams.get("memoryPath") || searchParams.get("memoryFile");
 
   // Context menu state
   const [ctxMenu, setCtxMenu] = useState<CtxMenuState>(null);
@@ -394,6 +405,35 @@ export function MemoryView() {
     void fetchMemoryData(true);
   }, [fetchMemoryData]);
 
+  const selectLongTermMemory = useCallback(() => {
+    if (!memoryMd) return;
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    setSelected("memory");
+    setSaveStatus(null);
+    setDetailContent(memoryMd.content);
+    setDetailMeta({
+      title: "Long-Term Memory",
+      words: memoryMd.words,
+      size: memoryMd.size,
+      fileKey: "memory",
+      mtime: memoryMd.mtime,
+    });
+  }, [memoryMd]);
+
+  const clearSearchJumpParams = useCallback(() => {
+    const next = new URLSearchParams(searchParams.toString());
+    let changed = false;
+    for (const key of ["memoryPath", "memoryFile", "memoryLine", "memoryQuery"]) {
+      if (next.has(key)) {
+        next.delete(key);
+        changed = true;
+      }
+    }
+    if (!changed) return;
+    const query = next.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [pathname, router, searchParams]);
+
   const filteredDaily = search
     ? daily.filter(
         (e) =>
@@ -417,7 +457,7 @@ export function MemoryView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, periodGroupKeys]);
 
-  const loadFile = (file: string, title: string) => {
+  const loadFile = useCallback((file: string, title: string) => {
     // Flush any pending save
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setSelected(file);
@@ -437,7 +477,38 @@ export function MemoryView() {
         setDetailContent("Failed to load.");
         setDetailMeta({ title, fileKey: file });
       });
-  };
+  }, []);
+
+  useEffect(() => {
+    if (loading || !jumpTarget) return;
+    const normalized = normalizeMemoryPath(jumpTarget);
+    if (!normalized) {
+      clearSearchJumpParams();
+      return;
+    }
+
+    setActiveTab("journal");
+    const isLongTerm =
+      normalized.toLowerCase() === "memory.md" || normalized.toLowerCase() === "memory";
+
+    if (isLongTerm && memoryMd) {
+      selectLongTermMemory();
+    } else {
+      const entry = daily.find((d) => d.name === normalized);
+      if (entry) loadFile(entry.name, entry.date);
+      else loadFile(normalized, normalized);
+    }
+
+    clearSearchJumpParams();
+  }, [
+    clearSearchJumpParams,
+    daily,
+    jumpTarget,
+    loadFile,
+    loading,
+    memoryMd,
+    selectLongTermMemory,
+  ]);
 
   const togglePeriod = (key: string) => {
     setCollapsedPeriods((prev) => {
@@ -521,19 +592,7 @@ export function MemoryView() {
           {memoryMd && (
             <button
               type="button"
-              onClick={() => {
-                if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                setSelected("memory");
-                setSaveStatus(null);
-                setDetailContent(memoryMd.content);
-                setDetailMeta({
-                  title: "Long-Term Memory",
-                  words: memoryMd.words,
-                  size: memoryMd.size,
-                  fileKey: "memory",
-                  mtime: memoryMd.mtime,
-                });
-              }}
+              onClick={selectLongTermMemory}
               className={cn(
                 "mb-4 flex w-full flex-col gap-1.5 rounded-xl border p-4 text-left transition-colors",
                 selected === "memory"

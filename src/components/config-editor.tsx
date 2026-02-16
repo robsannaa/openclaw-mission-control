@@ -283,13 +283,11 @@ function RestartBanner({ onRestart, onDismiss }: { onRestart: () => void; onDism
    ================================================================ */
 
 function FieldLabel({
-  path,
   label,
   help,
   sensitive,
   required,
 }: {
-  path: string;
   label: string;
   help?: string;
   sensitive?: boolean;
@@ -663,7 +661,6 @@ function SectionFields({
         return (
           <div key={key} className="space-y-1">
             <FieldLabel
-              path={fullPath}
               label={label}
               help={help}
               sensitive={sensitive && !showSensitive}
@@ -866,7 +863,6 @@ function NestedSection({
               return (
                 <div key={key} className="space-y-1">
                   <FieldLabel
-                    path={fullPath}
                     label={fLabel}
                     help={fHelp}
                     sensitive={sensitive && !showSensitive}
@@ -899,6 +895,8 @@ export function ConfigEditor() {
   const [baseHash, setBaseHash] = useState("");
   const [schema, setSchema] = useState<Record<string, JsonSchema>>({});
   const [hints, setHints] = useState<Record<string, UiHint>>({});
+  const [fetchWarning, setFetchWarning] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -918,18 +916,28 @@ export function ConfigEditor() {
 
   const fetchConfig = useCallback(async () => {
     setLoading(true);
+    setFetchWarning(null);
     try {
-      const res = await fetch("/api/config");
+      const res = await fetch("/api/config", { cache: "no-store" });
       const data = await res.json();
-      if (data.error) throw new Error(data.error);
+      const hasConfigPayload = Boolean(data?.rawConfig || data?.config);
+      if (!res.ok && !hasConfigPayload) {
+        throw new Error(data?.error || `HTTP ${res.status}`);
+      }
       setRawConfig(data.rawConfig || data.config || {});
       setBaseHash(data.baseHash || "");
       if (data.schema?.properties) {
         setSchema(data.schema.properties);
+      } else {
+        setSchema({});
       }
-      if (data.uiHints) setHints(data.uiHints);
+      setHints(data.uiHints || {});
+      if (data.warning) setFetchWarning(String(data.warning));
+      setLoadError(null);
     } catch (err) {
-      console.error("Config fetch error:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setLoadError(msg);
+      console.warn("Config fetch error:", err);
     }
     setLoading(false);
   }, []);
@@ -1063,9 +1071,24 @@ export function ConfigEditor() {
 
   if (!rawConfig) {
     return (
-      <div className="flex flex-1 items-center justify-center text-[13px] text-muted-foreground">
-        <AlertCircle className="mr-2 h-4 w-4" />
-        Failed to load configuration
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-[13px] text-muted-foreground">
+        <div className="flex items-center">
+          <AlertCircle className="mr-2 h-4 w-4" />
+          Failed to load configuration
+        </div>
+        {loadError && (
+          <p className="max-w-xl text-center text-[11px] text-muted-foreground/80">
+            {loadError}
+          </p>
+        )}
+        <button
+          type="button"
+          onClick={fetchConfig}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] bg-muted/50 px-3 py-1.5 text-[11px] text-foreground/80 transition-colors hover:bg-muted/80"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Retry
+        </button>
       </div>
     );
   }
@@ -1141,6 +1164,15 @@ export function ConfigEditor() {
           </div>
         </div>
       </div>
+
+      {fetchWarning && (
+        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/[0.06] px-4 py-2 md:px-6">
+          <p className="flex items-center gap-2 text-[11px] text-amber-700 dark:text-amber-200">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {fetchWarning}
+          </p>
+        </div>
+      )}
 
       {/* Restart banner */}
       {showRestart && (

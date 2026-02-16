@@ -68,13 +68,6 @@ type PendingRequest = {
   expiresAtMs: number;
 };
 
-type Skill = {
-  name: string;
-  source: "workspace" | "system";
-  version?: string;
-  installedAt?: number;
-};
-
 type Toast = { message: string; type: "success" | "error" };
 
 /* ── Helpers ──────────────────────────────────────── */
@@ -543,7 +536,6 @@ function UnpairButton({
 
 export function ChannelsView() {
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [skills, setSkills] = useState<Skill[]>([]);
   const [pairedDevices, setPairedDevices] = useState<PairedDevice[]>([]);
   const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
   const [loading, setLoading] = useState(true);
@@ -561,13 +553,12 @@ export function ChannelsView() {
     []
   );
 
-  /* ── Fetch system data (channels, skills) ──── */
+  /* ── Fetch system data (channels) ──── */
   useEffect(() => {
     fetch("/api/system")
       .then((r) => r.json())
       .then((data) => {
         setChannels(data.channels || []);
-        setSkills(data.skills || []);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -655,9 +646,6 @@ export function ChannelsView() {
       </div>
     );
   }
-
-  const workspaceSkills = skills.filter((s) => s.source === "workspace");
-  const systemSkills = skills.filter((s) => s.source === "system");
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto">
@@ -812,53 +800,6 @@ export function ChannelsView() {
           </div>
         </section>
 
-        {/* ── Skills ───────────────────── */}
-        <section>
-          <h2 className="mb-4 text-sm font-semibold text-foreground/90">
-            Installed Skills ({skills.length})
-          </h2>
-
-          {workspaceSkills.length > 0 && (
-            <div className="mb-4">
-              <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-                Workspace Skills
-              </h3>
-              <div className="flex flex-wrap gap-2">
-                {workspaceSkills.map((s) => (
-                  <div
-                    key={s.name}
-                    className="rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2"
-                  >
-                    <p className="text-[12px] font-medium text-violet-300">
-                      {s.name}
-                    </p>
-                    {s.version && (
-                      <p className="text-[10px] text-muted-foreground">
-                        v{s.version}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <h3 className="mb-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/60">
-              System Skills
-            </h3>
-            <div className="flex flex-wrap gap-1.5">
-              {systemSkills.map((s) => (
-                <span
-                  key={s.name}
-                  className="rounded-md border border-foreground/[0.06] bg-card/90 px-2.5 py-1 text-[11px] text-muted-foreground"
-                >
-                  {s.name}
-                </span>
-              ))}
-            </div>
-          </div>
-        </section>
       </div>
 
       {/* Toast */}

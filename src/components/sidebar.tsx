@@ -26,31 +26,44 @@ import {
   BarChart3,
   Menu,
   X,
+  Shield,
+  Package,
+  ChevronRight,
 } from "lucide-react";
 import { getChatUnreadCount, subscribeChatStore } from "@/lib/chat-store";
+import {
+  notifyGatewayRestarting,
+  useGatewayStatusStore,
+  type GatewayStatus,
+} from "@/lib/gateway-status-store";
 
 const navItems: {
   section: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
+  href?: string;
+  tab?: string;
+  isSubItem?: boolean;
   dividerAfter?: boolean;
   comingSoon?: boolean;
 }[] = [
   { section: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { section: "agents", label: "Agents", icon: Users },
-  { section: "chat", label: "Chat", icon: MessageCircle, dividerAfter: true },
+  { section: "chat", label: "Chat", icon: MessageCircle },
+  { section: "agents", label: "Agents", icon: Users, dividerAfter: true },
   { section: "tasks", label: "Tasks", icon: ListChecks },
-  { section: "cron", label: "Cron Jobs", icon: Clock, dividerAfter: true },
   { section: "sessions", label: "Sessions", icon: MessageSquare },
-  { section: "system", label: "System", icon: Radio },
-  { section: "skills", label: "Skills", icon: Wrench, dividerAfter: true },
+  { section: "cron", label: "Cron Jobs", icon: Clock },
+  { section: "system", label: "System", icon: Radio, dividerAfter: true },
   { section: "memory", label: "Memory", icon: Brain },
   { section: "docs", label: "Docs", icon: FolderOpen },
   { section: "vectors", label: "Vector DB", icon: Database, dividerAfter: true },
+  { section: "skills", label: "Skills", icon: Wrench },
+  { section: "skills", label: "ClawHub", icon: Package, href: "/?section=skills&tab=clawhub", tab: "clawhub", isSubItem: true },
   { section: "models", label: "Models", icon: Cpu },
-  { section: "usage", label: "Usage", icon: BarChart3 },
   { section: "audio", label: "Audio & Voice", icon: Volume2 },
-  { section: "terminal", label: "Terminal", icon: SquareTerminal, dividerAfter: true },
+  { section: "permissions", label: "Permissions", icon: Shield, dividerAfter: true },
+  { section: "usage", label: "Usage", icon: BarChart3 },
+  { section: "terminal", label: "Terminal", icon: SquareTerminal },
   { section: "logs", label: "Logs", icon: Terminal },
   { section: "config", label: "Config", icon: Settings },
 ];
@@ -58,6 +71,10 @@ const navItems: {
 function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   const searchParams = useSearchParams();
   const section = searchParams.get("section") || "dashboard";
+  const tab = (searchParams.get("tab") || "").toLowerCase();
+  const [skillsExpanded, setSkillsExpanded] = useState(true);
+  const isClawHubActive = section === "skills" && tab === "clawhub";
+  const showSkillsChildren = isClawHubActive ? true : skillsExpanded;
 
   // Subscribe to chat unread count reactively
   const chatUnread = useSyncExternalStore(
@@ -69,12 +86,19 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex flex-1 flex-col gap-0.5 px-3 pt-4 overflow-y-auto">
       {navItems.map((item) => {
+        const isSkillsParent = item.section === "skills" && item.label === "Skills";
+        if (item.isSubItem && item.section === "skills" && !showSkillsChildren) return null;
+
         const Icon = item.icon;
-        const isActive = section === item.section && !item.comingSoon;
+        const isActive =
+          !item.comingSoon &&
+          section === item.section &&
+          (item.tab ? tab === item.tab : item.section !== "skills" || tab !== "clawhub");
         const showBadge = item.section === "chat" && chatUnread > 0;
         const isDisabled = item.comingSoon;
         const linkClass = cn(
           "flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-colors",
+          item.isSubItem && "ml-7 py-1.5 text-[12px]",
           isDisabled
             ? "cursor-not-allowed opacity-60 text-muted-foreground dark:text-zinc-500"
             : isActive
@@ -82,7 +106,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
               : "text-muted-foreground dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-200"
         );
         return (
-          <div key={item.section}>
+          <div key={`${item.section}:${item.label}`}>
             {isDisabled ? (
               <span className={linkClass} aria-disabled>
                 <Icon className="h-[18px] w-[18px] shrink-0" />
@@ -92,19 +116,49 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                 </span>
               </span>
             ) : (
-              <Link
-                href={`/?section=${item.section}`}
-                onClick={onNavigate}
-                className={linkClass}
-              >
-                <Icon className="h-[18px] w-[18px] shrink-0" />
-                <span className="flex-1">{item.label}</span>
-                {showBadge && (
-                  <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-violet-600 px-1.5 text-[10px] font-bold text-white">
-                    {chatUnread > 9 ? "9+" : chatUnread}
-                  </span>
-                )}
-              </Link>
+              isSkillsParent ? (
+                <div className={linkClass}>
+                  <Link
+                    href={item.href || `/?section=${item.section}`}
+                    onClick={onNavigate}
+                    className="flex min-w-0 flex-1 items-center gap-3"
+                  >
+                    <Icon className="h-[18px] w-[18px] shrink-0" />
+                    <span className="flex-1">{item.label}</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSkillsExpanded((prev) => !prev);
+                    }}
+                    className="rounded p-0.5 text-muted-foreground/70 transition-colors hover:text-foreground/90"
+                    aria-label={showSkillsChildren ? "Collapse skills submenu" : "Expand skills submenu"}
+                  >
+                    <ChevronRight
+                      className={cn(
+                        "h-3.5 w-3.5 transition-transform",
+                        showSkillsChildren && "rotate-90"
+                      )}
+                    />
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href={item.href || `/?section=${item.section}`}
+                  onClick={onNavigate}
+                  className={linkClass}
+                >
+                  <Icon className="h-[18px] w-[18px] shrink-0" />
+                  <span className="flex-1">{item.label}</span>
+                  {showBadge && (
+                    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-violet-600 px-1.5 text-[10px] font-bold text-white">
+                      {chatUnread > 9 ? "9+" : chatUnread}
+                    </span>
+                  )}
+                </Link>
+              )
             )}
             {item.dividerAfter && (
               <div className="my-2 border-t border-border" />
@@ -117,8 +171,6 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 /* ── Gateway status + restart badge ─────────────── */
-
-type GatewayStatus = "online" | "degraded" | "offline" | "loading";
 
 const STATUS_COLORS: Record<GatewayStatus, string> = {
   online: "bg-emerald-400",
@@ -142,74 +194,12 @@ const STATUS_LABELS: Record<GatewayStatus, string> = {
 };
 
 function GatewayBadge() {
-  const [status, setStatus] = useState<GatewayStatus>("loading");
-  const [restarting, setRestarting] = useState(false);
+  const { status, restarting } = useGatewayStatusStore();
   const [showMenu, setShowMenu] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    let fastPollCount = 0;
-
-    const poll = () => {
-      fetch("/api/gateway")
-        .then((r) => r.json())
-        .then((data) => {
-          if (!active) return;
-          const newStatus = data.status as GatewayStatus;
-          setStatus(newStatus);
-          // If we were fast-polling and gateway is back online, revert to normal
-          if (fastPollCount > 0 && newStatus === "online") {
-            fastPollCount = 0;
-            switchToNormalPoll();
-          }
-        })
-        .catch(() => { if (active) setStatus("offline"); });
-    };
-
-    const switchToNormalPoll = () => {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(poll, 10000);
-    };
-
-    const switchToFastPoll = () => {
-      if (intervalId) clearInterval(intervalId);
-      fastPollCount = 1;
-      intervalId = setInterval(() => {
-        fastPollCount++;
-        if (fastPollCount > 30) switchToNormalPoll();
-        else poll();
-      }, 2000);
-    };
-
-    const handleRestarting = () => {
-      if (active) {
-        setStatus("loading");
-        setRestarting(true);
-        switchToFastPoll();
-        setTimeout(poll, 1500);
-        setTimeout(() => { if (active) setRestarting(false); }, 5000);
-      }
-    };
-
-    window.addEventListener("gateway-restarting", handleRestarting);
-    poll();
-    intervalId = setInterval(poll, 10000);
-
-    return () => {
-      active = false;
-      if (intervalId) clearInterval(intervalId);
-      window.removeEventListener("gateway-restarting", handleRestarting);
-    };
-  }, []);
-
   const handleRestart = useCallback(async () => {
-    setRestarting(true);
     setShowMenu(false);
-    // Notify both header and sidebar status badges
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("gateway-restarting"));
-    }
+    notifyGatewayRestarting();
     try {
       await fetch("/api/gateway", {
         method: "POST",
@@ -223,10 +213,7 @@ function GatewayBadge() {
 
   const handleStop = useCallback(async () => {
     setShowMenu(false);
-    // Notify both header and sidebar status badges
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("gateway-restarting"));
-    }
+    notifyGatewayRestarting();
     try {
       await fetch("/api/gateway", {
         method: "POST",

@@ -31,6 +31,12 @@ import { SearchModal } from "./search-modal";
 import { PairingNotifications } from "./pairing-notifications";
 import { ThemeToggle } from "./theme-toggle";
 import { chatStore, type ChatMessage } from "@/lib/chat-store";
+import {
+  notifyGatewayRestarting as notifyGatewayRestartingStore,
+  useGatewayStatusStore,
+  type GatewayHealth,
+  type GatewayStatus,
+} from "@/lib/gateway-status-store";
 
 /* ── Types ──────────────────────────────────────── */
 
@@ -39,9 +45,6 @@ type AgentInfo = {
   name: string;
   model: string;
 };
-
-type GatewayHealth = Record<string, unknown>;
-type GatewayStatus = "online" | "degraded" | "offline" | "loading";
 
 /* ── Agent Chat Panel (persistent, global state) ── */
 
@@ -401,85 +404,11 @@ function usePauseState() {
  * to tell the status poller to immediately re-check and enter fast-poll mode.
  */
 export function notifyGatewayRestarting() {
-  if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent("gateway-restarting"));
-  }
+  notifyGatewayRestartingStore();
 }
 
 function useGatewayStatus() {
-  const [status, setStatus] = useState<GatewayStatus>("loading");
-  const [health, setHealth] = useState<GatewayHealth | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    let intervalId: ReturnType<typeof setInterval> | null = null;
-    let fastPollCount = 0;
-
-    const poll = async () => {
-      try {
-        const res = await fetch("/api/gateway");
-        const data = await res.json();
-        if (active) {
-          const newStatus = (data.status as GatewayStatus) || "offline";
-          setStatus(newStatus);
-          setHealth((data.health as GatewayHealth) || null);
-
-          // If we were fast-polling and gateway is back online, revert to normal
-          if (fastPollCount > 0 && newStatus === "online") {
-            fastPollCount = 0;
-            switchToNormalPoll();
-          }
-        }
-      } catch {
-        if (active) {
-          setStatus("offline");
-          setHealth(null);
-        }
-      }
-    };
-
-    const switchToNormalPoll = () => {
-      if (intervalId) clearInterval(intervalId);
-      intervalId = setInterval(poll, 12000);
-    };
-
-    const switchToFastPoll = () => {
-      if (intervalId) clearInterval(intervalId);
-      fastPollCount = 1;
-      // Poll every 2s for up to 30 checks (~60s), then back to normal
-      intervalId = setInterval(() => {
-        fastPollCount++;
-        if (fastPollCount > 30) {
-          switchToNormalPoll();
-        } else {
-          poll();
-        }
-      }, 2000);
-    };
-
-    // Listen for restart events — immediately go to "loading" and fast-poll
-    const handleRestarting = () => {
-      if (active) {
-        setStatus("loading");
-        setHealth(null);
-        switchToFastPoll();
-        // First check after a short delay to let the process stop
-        setTimeout(poll, 1500);
-      }
-    };
-
-    window.addEventListener("gateway-restarting", handleRestarting);
-
-    poll();
-    intervalId = setInterval(poll, 12000);
-
-    return () => {
-      active = false;
-      if (intervalId) clearInterval(intervalId);
-      window.removeEventListener("gateway-restarting", handleRestarting);
-    };
-  }, []);
-
+  const { status, health } = useGatewayStatusStore();
   return { status, health };
 }
 

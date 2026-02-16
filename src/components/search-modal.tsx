@@ -5,8 +5,8 @@ import {
   useState,
   useRef,
   useCallback,
-  Fragment,
 } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Search, Brain, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +58,9 @@ function highlightSnippet(text: string): string {
 /* ── component ───────────────────────────────────── */
 
 export function SearchModal({ open, onClose }: Props) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -106,6 +109,19 @@ export function SearchModal({ open, onClose }: Props) {
     debounceRef.current = setTimeout(() => doSearch(value), 300);
   };
 
+  const openResult = useCallback((result: SearchResult) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("section", "memory");
+    params.set("memoryPath", result.path);
+    params.set("memoryLine", String(result.startLine));
+    if (query.trim()) params.set("memoryQuery", query.trim());
+    else params.delete("memoryQuery");
+
+    const next = params.toString();
+    router.push(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    onClose();
+  }, [onClose, pathname, query, router, searchParams]);
+
   // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -121,7 +137,8 @@ export function SearchModal({ open, onClose }: Props) {
       setSelectedIdx((i) => Math.max(i - 1, 0));
     }
     if (e.key === "Enter" && results[selectedIdx]) {
-      // Could navigate to the result; for now just scroll to it
+      e.preventDefault();
+      openResult(results[selectedIdx]);
     }
   };
 
@@ -216,6 +233,7 @@ export function SearchModal({ open, onClose }: Props) {
                           : "hover:bg-muted/60"
                       )}
                       onMouseEnter={() => setSelectedIdx(idx)}
+                      onClick={() => openResult(result)}
                     >
                       {/* Header row */}
                       <div className="flex min-w-0 items-center gap-2">
@@ -269,6 +287,12 @@ export function SearchModal({ open, onClose }: Props) {
                   ↑↓
                 </kbd>{" "}
                 navigate
+              </span>
+              <span>
+                <kbd className="rounded border border-foreground/[0.06] bg-muted/60 px-1 py-0.5">
+                  enter
+                </kbd>{" "}
+                open
               </span>
               <span>
                 <kbd className="rounded border border-foreground/[0.06] bg-muted/60 px-1 py-0.5">

@@ -288,17 +288,28 @@ body > * {
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Accent text colors — boost contrast on white backgrounds ── */
+:root:not(.dark) .text-violet-100 { color: #6d28d9 !important; }
+:root:not(.dark) .text-violet-200 { color: #6d28d9 !important; }
 :root:not(.dark) .text-violet-300 { color: #7c3aed !important; }
 :root:not(.dark) .text-violet-400 { color: #7c3aed !important; }
 :root:not(.dark) .text-violet-400\/40 { color: rgba(124, 58, 237, 0.5) !important; }
+:root:not(.dark) .text-emerald-100 { color: #047857 !important; }
+:root:not(.dark) .text-emerald-200 { color: #047857 !important; }
 :root:not(.dark) .text-emerald-300 { color: #059669 !important; }
 :root:not(.dark) .text-emerald-400 { color: #059669 !important; }
+:root:not(.dark) .text-amber-100 { color: #92400e !important; }
 :root:not(.dark) .text-amber-300 { color: #b45309 !important; }
 :root:not(.dark) .text-amber-400 { color: #b45309 !important; }
+:root:not(.dark) .text-red-100 { color: #b91c1c !important; }
+:root:not(.dark) .text-red-200 { color: #b91c1c !important; }
 :root:not(.dark) .text-red-300 { color: #dc2626 !important; }
 :root:not(.dark) .text-red-400 { color: #dc2626 !important; }
+:root:not(.dark) .text-blue-100 { color: #1d4ed8 !important; }
+:root:not(.dark) .text-blue-200 { color: #1d4ed8 !important; }
 :root:not(.dark) .text-blue-300 { color: #2563eb !important; }
 :root:not(.dark) .text-blue-400 { color: #2563eb !important; }
+:root:not(.dark) .text-cyan-100 { color: #0e7490 !important; }
+:root:not(.dark) .text-cyan-200 { color: #0e7490 !important; }
 :root:not(.dark) .text-cyan-300 { color: #0891b2 !important; }
 :root:not(.dark) .text-cyan-400 { color: #0891b2 !important; }
 :root:not(.dark) .text-sky-200 { color: #0284c7 !important; }
@@ -308,6 +319,9 @@ body > * {
 :root:not(.dark) .text-amber-200 { color: #b45309 !important; }
 :root:not(.dark) .text-pink-400 { color: #db2777 !important; }
 :root:not(.dark) .text-rose-400\/60 { color: rgba(225, 29, 72, 0.7) !important; }
+:root:not(.dark) .text-zinc-100 { color: #3f3f46 !important; }
+:root:not(.dark) .text-zinc-200 { color: #3f3f46 !important; }
+:root:not(.dark) .text-zinc-300 { color: #52525b !important; }
 
 /* ── Accent hover text ── */
 :root:not(.dark) .hover\:text-violet-300:hover { color: #6d28d9 !important; }

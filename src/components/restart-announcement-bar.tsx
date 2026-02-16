@@ -8,7 +8,7 @@ import {
   dismissRestart,
   setRestarting,
 } from "@/lib/restart-store";
-import { notifyGatewayRestarting } from "@/components/header";
+import { notifyGatewayRestarting } from "@/lib/gateway-status-store";
 import { AlertTriangle, RefreshCw, X, Loader2 } from "lucide-react";
 
 /**

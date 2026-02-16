@@ -19,6 +19,7 @@ import { VectorView } from "@/components/vector-view";
 import { AgentsView } from "@/components/agents-view";
 import { UsageView } from "@/components/usage-view";
 import { TerminalView } from "@/components/terminal-view";
+import { PermissionsView } from "@/components/permissions-view";
 import { setChatActive } from "@/lib/chat-store";
 
 function SectionContent({ section }: { section: string }) {
@@ -55,6 +56,8 @@ function SectionContent({ section }: { section: string }) {
       return <UsageView />;
     case "terminal":
       return <TerminalView />;
+    case "permissions":
+      return <PermissionsView />;
     default:
       return <DashboardView />;
   }
