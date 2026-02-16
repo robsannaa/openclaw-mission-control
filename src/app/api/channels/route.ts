@@ -5,14 +5,13 @@ export const dynamic = "force-dynamic";
 
 /* ── Types ── */
 
-type ChannelListItem = {
+type ChannelListLegacyItem = {
   channel: string;
   enabled: boolean;
   accounts: string[];
-  status?: string;
 };
 
-type ChannelStatusItem = {
+type ChannelStatusLegacyItem = {
   channel: string;
   account: string;
   status: string;
@@ -20,6 +19,164 @@ type ChannelStatusItem = {
   connected?: boolean;
   error?: string;
 };
+
+type ChannelStatusRuntime = {
+  channel: string;
+  account: string;
+  status: string;
+  linked?: boolean;
+  connected?: boolean;
+  error?: string;
+};
+
+type NormalizedChannel = {
+  channel: string;
+  enabled: boolean;
+  configured: boolean;
+  hasConfig: boolean;
+  accounts: string[];
+  statuses: ChannelStatusRuntime[];
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function toStr(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  return Array.from(new Set(values.filter((v): v is string => Boolean(v))));
+}
+
+function deriveAccountStatus(row: Record<string, unknown>): string {
+  if (row.running === true) return "connected";
+  if (typeof row.lastError === "string" && row.lastError.trim().length > 0) return "error";
+  if (row.enabled === false) return "disabled";
+  if (row.configured === false) return "not-configured";
+  return "idle";
+}
+
+function normalizeChannels(
+  channelListRaw: unknown,
+  statusRaw: unknown,
+  channelsConfig: Record<string, unknown>
+): NormalizedChannel[] {
+  const listObj = isRecord(channelListRaw) ? channelListRaw : {};
+  const statusObj = isRecord(statusRaw) ? statusRaw : {};
+
+  // Legacy schema support:
+  // channels list -> { channels: [{ channel, enabled, accounts }] }
+  // channels status -> { channels: [{ channel, account, status, ... }] }
+  const legacyList = Array.isArray(listObj.channels)
+    ? (listObj.channels as unknown[]).filter((row): row is ChannelListLegacyItem => {
+        if (!isRecord(row)) return false;
+        return typeof row.channel === "string";
+      })
+    : [];
+  if (legacyList.length > 0) {
+    const legacyStatuses = Array.isArray(statusObj.channels)
+      ? (statusObj.channels as unknown[]).filter((row): row is ChannelStatusLegacyItem => {
+          if (!isRecord(row)) return false;
+          return typeof row.channel === "string";
+        })
+      : [];
+    return legacyList.map((ch) => {
+      const statuses = legacyStatuses.filter((s) => s.channel === ch.channel);
+      const hasConfig = Boolean(channelsConfig[ch.channel]);
+      const accounts = Array.isArray(ch.accounts) ? ch.accounts.map((a) => String(a)) : [];
+      const configured = hasConfig || accounts.length > 0 || statuses.length > 0 || Boolean(ch.enabled);
+      return {
+        channel: ch.channel,
+        enabled: Boolean(ch.enabled),
+        configured,
+        hasConfig,
+        accounts,
+        statuses: statuses.map((s) => ({
+          channel: s.channel,
+          account: s.account,
+          status: s.status,
+          linked: s.linked,
+          connected: s.connected,
+          error: s.error,
+        })),
+      };
+    });
+  }
+
+  // Modern schema support:
+  // channels list -> { chat: { telegram: ["default"] } ... }
+  // channels status -> { channels: {...}, channelAccounts: { telegram: [{accountId,...}] } }
+  const chatMap = isRecord(listObj.chat) ? listObj.chat : {};
+  const statusChannels = isRecord(statusObj.channels) ? statusObj.channels : {};
+  const statusAccounts = isRecord(statusObj.channelAccounts) ? statusObj.channelAccounts : {};
+
+  const channelIds = new Set<string>([
+    ...Object.keys(chatMap),
+    ...Object.keys(statusChannels),
+    ...Object.keys(statusAccounts),
+    ...Object.keys(channelsConfig),
+  ]);
+
+  const out: NormalizedChannel[] = [];
+  for (const channel of channelIds) {
+    const configEntry = isRecord(channelsConfig[channel]) ? channelsConfig[channel] : undefined;
+    const hasConfig = Boolean(configEntry);
+
+    const chatAccounts = Array.isArray(chatMap[channel])
+      ? (chatMap[channel] as unknown[]).map((a) => String(a))
+      : [];
+
+    const accountRows = Array.isArray(statusAccounts[channel])
+      ? (statusAccounts[channel] as unknown[]).filter(isRecord)
+      : [];
+
+    const statuses: ChannelStatusRuntime[] = accountRows.map((row) => ({
+      channel,
+      account: toStr(row.accountId) || "default",
+      status: deriveAccountStatus(row),
+      linked: row.configured === true,
+      connected: row.running === true,
+      error: toStr(row.lastError),
+    }));
+
+    const statusSummary = isRecord(statusChannels[channel]) ? statusChannels[channel] : {};
+    const accountIds = uniqueStrings([
+      ...chatAccounts,
+      ...statuses.map((s) => s.account),
+    ]);
+
+    const enabledFromConfig = hasConfig
+      ? ((configEntry as Record<string, unknown>).enabled as boolean | undefined) !== false
+      : undefined;
+
+    const enabled =
+      typeof enabledFromConfig === "boolean"
+        ? enabledFromConfig
+        : statuses.some((s) => s.connected || s.status === "idle") ||
+          statusSummary.running === true ||
+          statusSummary.configured === true ||
+          chatAccounts.length > 0;
+
+    const configured =
+      hasConfig ||
+      statusSummary.configured === true ||
+      statuses.some((s) => s.linked || s.connected) ||
+      chatAccounts.length > 0;
+
+    out.push({
+      channel,
+      enabled,
+      configured,
+      hasConfig,
+      accounts: accountIds.length > 0 ? accountIds : configured ? ["default"] : [],
+      statuses,
+    });
+  }
+
+  return out;
+}
 
 /**
  * GET /api/channels
@@ -37,8 +194,8 @@ export async function GET(request: NextRequest) {
     if (scope === "all" || scope === "list") {
       // Get channel list + status + config in parallel
       const [channelList, statusResult, configResult] = await Promise.all([
-        runCliJson<{ channels: ChannelListItem[] }>(["channels", "list"], 10000).catch(() => ({ channels: [] })),
-        runCliJson<{ channels: ChannelStatusItem[] }>(["channels", "status"], 10000).catch(() => ({ channels: [] })),
+        runCliJson<Record<string, unknown>>(["channels", "list"], 10000).catch(() => ({})),
+        runCliJson<Record<string, unknown>>(["channels", "status"], 10000).catch(() => ({})),
         gatewayCall<Record<string, unknown>>("config.get", undefined, 10000).catch(() => null),
       ]);
 
@@ -46,19 +203,8 @@ export async function GET(request: NextRequest) {
       const resolved = (configResult?.resolved || {}) as Record<string, unknown>;
       const channelsConfig = (resolved.channels || {}) as Record<string, unknown>;
 
-      // Build enriched channel info
-      const channels = (channelList.channels || []).map((ch) => {
-        const statuses = (statusResult.channels || []).filter(
-          (s) => s.channel === ch.channel
-        );
-        const chConfig = channelsConfig[ch.channel] as Record<string, unknown> | undefined;
-        return {
-          ...ch,
-          statuses,
-          hasConfig: !!chConfig,
-          configured: ch.enabled && !!chConfig,
-        };
-      });
+      // Build enriched channel info from modern + legacy schemas.
+      const channels = normalizeChannels(channelList, statusResult, channelsConfig);
 
       // Also include known channels that might not be in `channels list` yet
       // (user may want to set them up)
@@ -79,7 +225,7 @@ export async function GET(request: NextRequest) {
           icon: "✈️",
           setupType: "token" as const,
           setupCommand: "openclaw channels add --channel telegram --token <BOT_TOKEN>",
-          setupHint: "Create a bot via @BotFather in Telegram, then paste the token.",
+          setupHint: "Create a bot via https://t.me/BotFather, then paste the token.",
           configHint: "Fastest channel to set up. Supports groups, topics, inline buttons.",
           tokenLabel: "Bot Token",
           tokenPlaceholder: "123456:ABC-DEF1234ghIkl...",
@@ -91,7 +237,7 @@ export async function GET(request: NextRequest) {
           icon: "🎮",
           setupType: "token" as const,
           setupCommand: "openclaw channels add --channel discord --token <BOT_TOKEN>",
-          setupHint: "Create a Discord bot at discord.com/developers, then paste the token.",
+          setupHint: "Create a Discord bot at https://discord.com/developers/applications, then paste the token.",
           configHint: "Supports servers, channels, and DMs.",
           tokenLabel: "Bot Token",
           tokenPlaceholder: "MTIzNDU2Nzg5MDEyMzQ1...",
@@ -103,7 +249,7 @@ export async function GET(request: NextRequest) {
           icon: "💼",
           setupType: "token" as const,
           setupCommand: "openclaw channels add --channel slack --token <BOT_TOKEN> --app-token <APP_TOKEN>",
-          setupHint: "Create a Slack app at api.slack.com/apps with Socket Mode enabled.",
+          setupHint: "Create a Slack app at https://api.slack.com/apps with Socket Mode enabled.",
           configHint: "Uses Bolt SDK. Supports workspace apps.",
           tokenLabel: "Bot Token",
           tokenPlaceholder: "xoxb-...",
@@ -221,7 +367,7 @@ export async function GET(request: NextRequest) {
     }
 
     // scope=status
-    const status = await runCliJson<{ channels: ChannelStatusItem[] }>(
+    const status = await runCliJson<Record<string, unknown>>(
       ["channels", "status"],
       10000
     );

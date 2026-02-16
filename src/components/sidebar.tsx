@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState, useCallback, useSyncExternalStore } from "react";
+import { Suspense, useEffect, useState, useCallback, useSyncExternalStore, useRef } from "react";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -49,11 +49,11 @@ const navItems: {
 }[] = [
   { section: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { section: "chat", label: "Chat", icon: MessageCircle },
+  { section: "channels", label: "Channels", icon: Radio },
   { section: "agents", label: "Agents", icon: Users, dividerAfter: true },
   { section: "tasks", label: "Tasks", icon: ListChecks },
   { section: "sessions", label: "Sessions", icon: MessageSquare },
   { section: "cron", label: "Cron Jobs", icon: Clock },
-  { section: "system", label: "System", icon: Radio, dividerAfter: true },
   { section: "memory", label: "Memory", icon: Brain },
   { section: "docs", label: "Docs", icon: FolderOpen },
   { section: "vectors", label: "Vector DB", icon: Database, dividerAfter: true },
@@ -196,6 +196,29 @@ const STATUS_LABELS: Record<GatewayStatus, string> = {
 function GatewayBadge() {
   const { status, restarting } = useGatewayStatusStore();
   const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!showMenu) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowMenu(false);
+      }
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setShowMenu(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [showMenu]);
 
   const handleRestart = useCallback(async () => {
     setShowMenu(false);
@@ -226,7 +249,7 @@ function GatewayBadge() {
   }, []);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={menuRef}>
       <button
         type="button"
         onClick={() => setShowMenu(!showMenu)}

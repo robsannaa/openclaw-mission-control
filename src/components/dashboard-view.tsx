@@ -966,7 +966,7 @@ export function DashboardView() {
       title: "Gateway is offline",
       detail: "The OpenClaw gateway process is not responding. Most features will not work.",
       fixLabel: "Restart Gateway",
-      fixHref: "/?section=system",
+      fixHref: "/?section=channels",
     });
   }
 

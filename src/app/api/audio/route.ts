@@ -357,10 +357,28 @@ export async function POST(request: NextRequest) {
         // Keep voice testing fast and deterministic; avoid agent round-trips here.
         const textRaw = typeof body.text === "string" ? body.text : "";
         const text = textRaw.trim() || "This is a voice sample for OpenClaw.";
-        const params: Record<string, unknown> = { text };
-        if (body.provider) params.provider = body.provider;
-        if (body.voice) params.voice = body.voice;
-        if (body.model) params.model = body.model;
+        const providerRaw = typeof body.provider === "string" ? body.provider.trim().toLowerCase() : "";
+        const voiceRaw = typeof body.voice === "string" ? body.voice.trim() : "";
+        const modelRaw = typeof body.model === "string" ? body.model.trim() : "";
+
+        // Gateway tts.convert currently reads provider/voice/model overrides from [[tts:...]] directives in text.
+        const directiveParts: string[] = [];
+        if (providerRaw === "openai" || providerRaw === "elevenlabs" || providerRaw === "edge") {
+          directiveParts.push(`provider=${providerRaw}`);
+        }
+        if (voiceRaw) {
+          // ElevenLabs expects voiceId; OpenAI/Edge use voice.
+          directiveParts.push(
+            providerRaw === "elevenlabs" ? `voiceId=${voiceRaw}` : `voice=${voiceRaw}`
+          );
+        }
+        if (modelRaw) {
+          directiveParts.push(`model=${modelRaw}`);
+        }
+        const textWithOverrides = directiveParts.length > 0
+          ? `[[tts:${directiveParts.join(" ")}]] ${text}`
+          : text;
+        const params: Record<string, unknown> = { text: textWithOverrides };
 
         try {
           const result = await gatewayCall<Record<string, unknown>>(

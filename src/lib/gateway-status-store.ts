@@ -17,6 +17,12 @@ let snapshot: Snapshot = {
   restarting: false,
 };
 
+const SERVER_SNAPSHOT: Snapshot = {
+  status: "loading",
+  health: null,
+  restarting: false,
+};
+
 const listeners = new Set<() => void>();
 let subscribers = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -139,11 +145,7 @@ export function getGatewayStatusSnapshot() {
 }
 
 export function getGatewayStatusServerSnapshot(): Snapshot {
-  return {
-    status: "loading",
-    health: null,
-    restarting: false,
-  };
+  return SERVER_SNAPSHOT;
 }
 
 export function useGatewayStatusStore() {
@@ -153,4 +155,3 @@ export function useGatewayStatusStore() {
     getGatewayStatusServerSnapshot
   );
 }
-

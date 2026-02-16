@@ -1,5 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readdir, readFile } from "fs/promises";
+import { join } from "path";
 import { runCliJson, runCli, gatewayCall } from "@/lib/openclaw-cli";
+import { getOpenClawHome } from "@/lib/paths";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+const OPENCLAW_HOME = getOpenClawHome();
 
 /* ── Provider → environment variable key mapping ── */
 const PROVIDER_ENV_KEYS: Record<string, string> = {
@@ -37,6 +44,340 @@ type ModelStatus = {
   allowed: string[];
 };
 
+type LiveModelInfo = {
+  fullModel: string | null;
+  model: string | null;
+  provider: string | null;
+  updatedAt: number | null;
+  sessionKey: string | null;
+};
+
+type ParsedAgentModelConfig = {
+  usesDefaults: boolean;
+  primary: string | null;
+  fallbacks: string[] | null;
+};
+
+type DefaultsModelConfig = {
+  primary: string;
+  fallbacks: string[];
+};
+
+type AgentRuntimeStatus = {
+  defaultModel: string;
+  resolvedDefault: string;
+  fallbacks: string[];
+};
+
+type DefaultsMatchSnapshot = {
+  gateway: DefaultsModelConfig | null;
+  file: DefaultsModelConfig | null;
+};
+
+const NO_STORE_HEADERS = { "Cache-Control": "no-store" } as const;
+const VERIFY_TIMEOUT_MS = 7000;
+const VERIFY_INTERVAL_MS = 300;
+
+function jsonNoStore(body: unknown, init?: ResponseInit) {
+  return NextResponse.json(body, {
+    ...init,
+    headers: {
+      ...NO_STORE_HEADERS,
+      ...(init?.headers || {}),
+    },
+  });
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeModelConfig(modelValue: unknown): DefaultsModelConfig {
+  if (typeof modelValue === "string") {
+    return { primary: modelValue, fallbacks: [] };
+  }
+  if (!isRecord(modelValue)) {
+    return { primary: "", fallbacks: [] };
+  }
+  const primary =
+    typeof modelValue.primary === "string" ? modelValue.primary : "";
+  const fallbacks = Array.isArray(modelValue.fallbacks)
+    ? modelValue.fallbacks.map((f) => String(f))
+    : [];
+  return { primary, fallbacks };
+}
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((v, i) => v === b[i]);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForMatch<T>(
+  read: () => Promise<T>,
+  match: (snapshot: T) => boolean,
+  timeoutMs = VERIFY_TIMEOUT_MS,
+  intervalMs = VERIFY_INTERVAL_MS
+): Promise<{ matched: boolean; snapshot: T | null }> {
+  const deadline = Date.now() + timeoutMs;
+  let last: T | null = null;
+  while (Date.now() <= deadline) {
+    try {
+      last = await read();
+      if (match(last)) {
+        return { matched: true, snapshot: last };
+      }
+    } catch {
+      // retry until timeout
+    }
+    await sleep(intervalMs);
+  }
+  return { matched: false, snapshot: last };
+}
+
+function isGatewayTransientError(error: unknown): boolean {
+  const parts = [String(error || "")];
+  if (isRecord(error)) {
+    if (typeof error.message === "string") parts.push(error.message);
+    if (typeof error.stderr === "string") parts.push(error.stderr);
+  }
+  const msg = parts.join(" ").toLowerCase();
+  return (
+    msg.includes("gateway closed") ||
+    msg.includes("1006") ||
+    msg.includes("gateway call failed") ||
+    msg.includes("econnrefused") ||
+    msg.includes("socket hang up") ||
+    msg.includes("timed out")
+  );
+}
+
+async function gatewayCallWithRetry<T>(
+  method: string,
+  params?: Record<string, unknown>,
+  timeout = 15000,
+  maxAttempts = 3
+): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await gatewayCall<T>(method, params, timeout);
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+      const transient = isGatewayTransientError(error);
+      const baseDelay = transient ? 300 : 150;
+      await sleep(Math.min(baseDelay * attempt, transient ? 1200 : 600));
+    }
+  }
+  throw lastError || new Error("Unknown gateway error");
+}
+
+async function applyConfigPatchWithRetry(
+  rawPatch: Record<string, unknown>,
+  maxAttempts = 8
+): Promise<void> {
+  const raw = JSON.stringify(rawPatch);
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const configData = await gatewayCall<Record<string, unknown>>(
+        "config.get",
+        undefined,
+        6000
+      );
+      const hash = String(configData.hash || "");
+      if (!hash) {
+        throw new Error("Missing config hash");
+      }
+      await gatewayCall("config.patch", { raw, baseHash: hash }, 15000);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt === maxAttempts) {
+        throw error;
+      }
+      await sleep(Math.min(400 * attempt, 2500));
+    }
+  }
+  throw lastError || new Error("Unknown config.patch error");
+}
+
+async function readDefaultsModelConfig(): Promise<DefaultsModelConfig | null> {
+  try {
+    const configData = await gatewayCallWithRetry<Record<string, unknown>>(
+      "config.get",
+      undefined,
+      10000
+    );
+    const parsed = (configData.parsed || {}) as Record<string, unknown>;
+    const agents = (parsed.agents || {}) as Record<string, unknown>;
+    const defaults = (agents.defaults || {}) as Record<string, unknown>;
+    return normalizeModelConfig(defaults.model);
+  } catch {
+    return null;
+  }
+}
+
+async function readDefaultsModelConfigFromFile(): Promise<DefaultsModelConfig | null> {
+  try {
+    const raw = await readFile(join(OPENCLAW_HOME, "openclaw.json"), "utf-8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const agents = (parsed.agents || {}) as Record<string, unknown>;
+    const defaults = (agents.defaults || {}) as Record<string, unknown>;
+    return normalizeModelConfig(defaults.model);
+  } catch {
+    return null;
+  }
+}
+
+async function patchDefaultsModelConfig(
+  primary: string,
+  fallbacks: string[]
+): Promise<void> {
+  await applyConfigPatchWithRetry({
+    agents: {
+      defaults: {
+        model: { primary, fallbacks },
+      },
+    },
+  });
+}
+
+async function waitForPersistedDefaults(
+  expectedPrimary: string,
+  expectedFallbacks: string[]
+): Promise<{ matched: boolean; snapshot: DefaultsMatchSnapshot | null }> {
+  return waitForMatch<DefaultsMatchSnapshot>(
+    async () => {
+      const [gateway, file] = await Promise.all([
+        readDefaultsModelConfig(),
+        readDefaultsModelConfigFromFile(),
+      ]);
+      return { gateway, file };
+    },
+    (snapshot) =>
+      Boolean(snapshot.gateway) &&
+      Boolean(snapshot.file) &&
+      snapshot.gateway!.primary === expectedPrimary &&
+      snapshot.file!.primary === expectedPrimary &&
+      arraysEqual(snapshot.gateway!.fallbacks, expectedFallbacks) &&
+      arraysEqual(snapshot.file!.fallbacks, expectedFallbacks)
+  );
+}
+
+async function readParsedAgentModelConfig(
+  agentId: string
+): Promise<ParsedAgentModelConfig | null> {
+  try {
+    const configData = await gatewayCallWithRetry<Record<string, unknown>>(
+      "config.get",
+      undefined,
+      10000
+    );
+    const parsed = (configData.parsed || {}) as Record<string, unknown>;
+    const agents = (parsed.agents || {}) as Record<string, unknown>;
+    const list = ((agents.list || []) as Record<string, unknown>[]);
+    const agent = list.find((a) => a.id === agentId);
+    if (!agent) return null;
+    const model = agent.model as
+      | string
+      | { primary?: string; fallbacks?: string[] }
+      | undefined;
+    if (typeof model === "string") {
+      return { usesDefaults: false, primary: model, fallbacks: null };
+    }
+    if (model && isRecord(model)) {
+      const primary = typeof model.primary === "string" ? model.primary : null;
+      const fallbacks = Array.isArray(model.fallbacks)
+        ? model.fallbacks.map((f) => String(f))
+        : [];
+      return { usesDefaults: false, primary, fallbacks };
+    }
+    return { usesDefaults: true, primary: null, fallbacks: null };
+  } catch {
+    return null;
+  }
+}
+
+async function readLiveModelForAgent(agentId: string): Promise<LiveModelInfo | null> {
+  try {
+    const sessionsPath = join(
+      OPENCLAW_HOME,
+      "agents",
+      agentId,
+      "sessions",
+      "sessions.json"
+    );
+    const raw = await readFile(sessionsPath, "utf-8");
+    const parsed = JSON.parse(raw) as Record<string, Record<string, unknown>>;
+    let bestKey: string | null = null;
+    let bestUpdatedAt = -1;
+    let bestModel: string | null = null;
+    let bestProvider: string | null = null;
+
+    for (const [key, value] of Object.entries(parsed || {})) {
+      if (!value || typeof value !== "object") continue;
+      const updatedAt = Number(value.updatedAt || 0);
+      if (!Number.isFinite(updatedAt) || updatedAt <= bestUpdatedAt) continue;
+      const model = typeof value.model === "string" ? value.model : null;
+      const provider =
+        typeof value.modelProvider === "string" ? value.modelProvider : null;
+      bestUpdatedAt = updatedAt;
+      bestKey = key;
+      bestModel = model;
+      bestProvider = provider;
+    }
+
+    if (bestUpdatedAt <= 0) return null;
+    const fullModel =
+      bestModel && bestModel.includes("/")
+        ? bestModel
+        : bestModel
+          ? `${bestProvider || "unknown"}/${bestModel}`
+          : null;
+
+    return {
+      fullModel,
+      model: bestModel,
+      provider: bestProvider,
+      updatedAt: bestUpdatedAt,
+      sessionKey: bestKey,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function readLiveModels(agentIds: string[]): Promise<Record<string, LiveModelInfo>> {
+  const ids = Array.from(new Set(agentIds.filter(Boolean)));
+  if (ids.length === 0) {
+    try {
+      const dirs = await readdir(join(OPENCLAW_HOME, "agents"), {
+        withFileTypes: true,
+      });
+      for (const dir of dirs) {
+        if (dir.isDirectory()) ids.push(dir.name);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  const pairs = await Promise.all(
+    ids.map(async (id) => [id, await readLiveModelForAgent(id)] as const)
+  );
+  const out: Record<string, LiveModelInfo> = {};
+  for (const [id, info] of pairs) {
+    if (info) out[id] = info;
+  }
+  return out;
+}
+
 /**
  * GET /api/models - Returns model configuration and available models.
  *
@@ -63,25 +404,48 @@ export async function GET(request: NextRequest) {
       const list = await runCliJson<{ models: ModelInfo[] }>(listArgs, 10000);
 
       // Get per-agent configs from gateway (non-critical — gracefully degrade)
-      let agentsList: { id: string; name: string; modelPrimary: string | null; modelFallbacks: string[] | null; usesDefaults: boolean }[] = [];
+      let defaultsModel: DefaultsModelConfig | null = null;
+      let agentsList: {
+        id: string;
+        name: string;
+        modelPrimary: string | null;
+        modelFallbacks: string[] | null;
+        usesDefaults: boolean;
+        subagents: string[];
+        parentId: string | null;
+      }[] = [];
       let configHash: string | null = null;
       try {
-        const configData = await gatewayCall<Record<string, unknown>>(
+        const configData = await gatewayCallWithRetry<Record<string, unknown>>(
           "config.get",
           undefined,
           10000
         );
         configHash = (configData.hash as string) || null;
         // config.get returns { resolved: { agents: { defaults, list } }, parsed: {...}, hash: "..." }
+        const parsed = (configData.parsed || {}) as Record<string, unknown>;
         const resolved = (configData.resolved || {}) as Record<string, unknown>;
         const agentsBlock = (resolved.agents || {}) as Record<string, unknown>;
-        agentsList = (
-          (agentsBlock.list || []) as Record<string, unknown>[]
-        ).map((a) => {
+        const parsedDefaultsAgents = (parsed.agents || {}) as Record<string, unknown>;
+        const parsedDefaultsBlock = (parsedDefaultsAgents.defaults || {}) as Record<string, unknown>;
+        const resolvedDefaultsBlock = (agentsBlock.defaults || {}) as Record<string, unknown>;
+        const resolvedDefaultsModel = normalizeModelConfig(resolvedDefaultsBlock.model);
+        const parsedDefaultsModel = normalizeModelConfig(parsedDefaultsBlock.model);
+        defaultsModel = resolvedDefaultsModel.primary
+          ? resolvedDefaultsModel
+          : parsedDefaultsModel.primary
+            ? parsedDefaultsModel
+            : null;
+        const entries = (agentsBlock.list || []) as Record<string, unknown>[];
+        const parsedAgents = entries.map((a) => {
           const agentModel = a.model as
             | string
             | { primary?: string; fallbacks?: string[] }
             | undefined;
+          const subagentsBlock = (a.subagents || {}) as Record<string, unknown>;
+          const subagents = Array.isArray(subagentsBlock.allowAgents)
+            ? (subagentsBlock.allowAgents as string[])
+            : [];
           let primary: string | null = null;
           let fallbacks: string[] | null = null;
           if (typeof agentModel === "string") {
@@ -96,16 +460,69 @@ export async function GET(request: NextRequest) {
             modelPrimary: primary,
             modelFallbacks: fallbacks,
             usesDefaults: !agentModel,
+            subagents,
           };
         });
+        const parentById: Record<string, string> = {};
+        for (const agent of parsedAgents) {
+          for (const childId of agent.subagents) {
+            if (!parentById[childId]) {
+              parentById[childId] = agent.id;
+            }
+          }
+        }
+        agentsList = parsedAgents.map((agent) => ({
+          ...agent,
+          parentId: parentById[agent.id] || null,
+        }));
       } catch (gwErr) {
         console.warn("Models API: gateway config.get unavailable, continuing without agent configs:", gwErr);
       }
 
-      return NextResponse.json({
-        status,
+      // Read last actually-used model per agent from sessions metadata.
+      const liveModels = await readLiveModels(agentsList.map((a) => a.id));
+      const agentStatuses: Record<string, AgentRuntimeStatus> = {};
+      if (agentsList.length > 0) {
+        const statuses = await Promise.all(
+          agentsList.map(async (agent) => {
+            try {
+              const s = await runCliJson<ModelStatus>(
+                ["models", "status", "--agent", agent.id],
+                10000
+              );
+              return [
+                agent.id,
+                {
+                  defaultModel: s.defaultModel,
+                  resolvedDefault: s.resolvedDefault,
+                  fallbacks: s.fallbacks || [],
+                } satisfies AgentRuntimeStatus,
+              ] as const;
+            } catch {
+              return null;
+            }
+          })
+        );
+        for (const entry of statuses) {
+          if (!entry) continue;
+          agentStatuses[entry[0]] = entry[1];
+        }
+      }
+      const statusForResponse = defaultsModel
+        ? {
+            ...status,
+            defaultModel: defaultsModel.primary || status.defaultModel,
+            fallbacks: defaultsModel.fallbacks,
+          }
+        : status;
+
+      return jsonNoStore({
+        status: statusForResponse,
+        defaults: defaultsModel,
         models: list.models || [],
         agents: agentsList,
+        agentStatuses,
+        liveModels,
         configHash,
       });
     }
@@ -149,7 +566,7 @@ export async function GET(request: NextRequest) {
         remainingMs: p.remainingMs,
       }));
 
-      return NextResponse.json({
+      return jsonNoStore({
         count: list.count,
         models: list.models || [],
         authProviders,
@@ -161,10 +578,10 @@ export async function GET(request: NextRequest) {
     const args = ["models", "list"];
     if (agentId) args.push("--agent", agentId);
     const list = await runCliJson<{ models: ModelInfo[] }>(args, 10000);
-    return NextResponse.json({ models: list.models || [] });
+    return jsonNoStore({ models: list.models || [] });
   } catch (err) {
     console.error("Models API GET error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return jsonNoStore({ error: String(err) }, { status: 500 });
   }
 }
 
@@ -190,39 +607,152 @@ export async function POST(request: NextRequest) {
 
     switch (action) {
       case "set-primary": {
-        await runCli(["models", "set", body.model], 10000);
-        return NextResponse.json({ ok: true, action, model: body.model });
+        const desiredPrimary = String(body.model || "");
+        if (!desiredPrimary) {
+          return jsonNoStore(
+            { error: "Model is required" },
+            { status: 400 }
+          );
+        }
+        const defaults = await readDefaultsModelConfig();
+        if (!defaults) {
+          return jsonNoStore(
+            { error: "Failed to read defaults model config" },
+            { status: 500 }
+          );
+        }
+        const nextFallbacks = defaults.fallbacks.filter((f) => f !== desiredPrimary);
+        await patchDefaultsModelConfig(desiredPrimary, nextFallbacks);
+        const verified = await waitForPersistedDefaults(desiredPrimary, nextFallbacks);
+        if (!verified.matched) {
+          return jsonNoStore(
+            {
+              error: `Model change could not be verified for defaults primary (${desiredPrimary})`,
+              observed: verified.snapshot,
+            },
+            { status: 409 }
+          );
+        }
+        return NextResponse.json({ ok: true, action, model: desiredPrimary });
       }
 
       case "add-fallback": {
-        await runCli(["models", "fallbacks", "add", body.model], 10000);
-        return NextResponse.json({ ok: true, action, model: body.model });
+        const fallbackModel = String(body.model || "");
+        if (!fallbackModel) {
+          return jsonNoStore(
+            { error: "Fallback model is required" },
+            { status: 400 }
+          );
+        }
+        const defaults = await readDefaultsModelConfig();
+        if (!defaults) {
+          return jsonNoStore(
+            { error: "Failed to read defaults model config" },
+            { status: 500 }
+          );
+        }
+        const nextFallbacks = defaults.fallbacks.includes(fallbackModel)
+          ? defaults.fallbacks
+          : [...defaults.fallbacks, fallbackModel];
+        await patchDefaultsModelConfig(defaults.primary, nextFallbacks);
+        const verified = await waitForPersistedDefaults(defaults.primary, nextFallbacks);
+        if (!verified.matched) {
+          return jsonNoStore(
+            {
+              error: `Fallback add could not be verified (${fallbackModel})`,
+              observed: verified.snapshot,
+            },
+            { status: 409 }
+          );
+        }
+        return NextResponse.json({ ok: true, action, model: fallbackModel });
       }
 
       case "remove-fallback": {
-        await runCli(["models", "fallbacks", "remove", body.model], 10000);
-        return NextResponse.json({ ok: true, action, model: body.model });
+        const fallbackModel = String(body.model || "");
+        if (!fallbackModel) {
+          return jsonNoStore(
+            { error: "Fallback model is required" },
+            { status: 400 }
+          );
+        }
+        const defaults = await readDefaultsModelConfig();
+        if (!defaults) {
+          return jsonNoStore(
+            { error: "Failed to read defaults model config" },
+            { status: 500 }
+          );
+        }
+        const nextFallbacks = defaults.fallbacks.filter((f) => f !== fallbackModel);
+        await patchDefaultsModelConfig(defaults.primary, nextFallbacks);
+        const verified = await waitForPersistedDefaults(defaults.primary, nextFallbacks);
+        if (!verified.matched) {
+          return jsonNoStore(
+            {
+              error: `Fallback removal could not be verified (${fallbackModel})`,
+              observed: verified.snapshot,
+            },
+            { status: 409 }
+          );
+        }
+        return NextResponse.json({ ok: true, action, model: fallbackModel });
       }
 
       case "set-fallbacks": {
-        // Clear all fallbacks then add in order
-        await runCli(["models", "fallbacks", "clear"], 10000);
-        for (const fb of body.fallbacks as string[]) {
-          await runCli(["models", "fallbacks", "add", fb], 10000);
+        const defaults = await readDefaultsModelConfig();
+        if (!defaults) {
+          return jsonNoStore(
+            { error: "Failed to read defaults model config" },
+            { status: 500 }
+          );
+        }
+        const expectedFallbacks = Array.isArray(body.fallbacks)
+          ? body.fallbacks.map((f: unknown) => String(f))
+          : [];
+        await patchDefaultsModelConfig(defaults.primary, expectedFallbacks);
+        const verified = await waitForPersistedDefaults(
+          defaults.primary,
+          expectedFallbacks
+        );
+        if (!verified.matched) {
+          return jsonNoStore(
+            {
+              error: "Fallback list update could not be verified",
+              expectedFallbacks,
+              observed: verified.snapshot,
+            },
+            { status: 409 }
+          );
         }
         return NextResponse.json({ ok: true, action, fallbacks: body.fallbacks });
       }
 
       case "reorder": {
-        // Full reorder: set primary + rebuild fallback list
-        if (body.primary) {
-          await runCli(["models", "set", body.primary], 10000);
+        const expectedPrimary = (body.primary as string) || "";
+        if (!expectedPrimary) {
+          return jsonNoStore(
+            { error: "Primary model is required" },
+            { status: 400 }
+          );
         }
-        if (body.fallbacks) {
-          await runCli(["models", "fallbacks", "clear"], 10000);
-          for (const fb of body.fallbacks as string[]) {
-            await runCli(["models", "fallbacks", "add", fb], 10000);
-          }
+        const expectedFallbacks = Array.isArray(body.fallbacks)
+          ? body.fallbacks.map((f: unknown) => String(f))
+          : [];
+        await patchDefaultsModelConfig(expectedPrimary, expectedFallbacks);
+        const verified = await waitForPersistedDefaults(
+          expectedPrimary,
+          expectedFallbacks
+        );
+        if (!verified.matched) {
+          return jsonNoStore(
+            {
+              error: "Model reorder could not be verified",
+              expectedPrimary,
+              expectedFallbacks,
+              observed: verified.snapshot,
+            },
+            { status: 409 }
+          );
         }
         return NextResponse.json({
           ok: true,
@@ -234,12 +764,11 @@ export async function POST(request: NextRequest) {
 
       case "set-agent-model": {
         // Use config.patch to set per-agent model
-        const configData = await gatewayCall<Record<string, unknown>>(
+        const configData = await gatewayCallWithRetry<Record<string, unknown>>(
           "config.get",
           undefined,
           10000
         );
-        const hash = configData.hash as string;
         const parsed = (configData.parsed || {}) as Record<string, unknown>;
         const agents = (parsed.agents || {}) as Record<string, unknown>;
         const list = ((agents.list || []) as Record<string, unknown>[]);
@@ -258,15 +787,47 @@ export async function POST(request: NextRequest) {
             : body.primary;
 
         // Patch just this agent's model
-        const patchRaw = JSON.stringify({
+        await applyConfigPatchWithRetry({
           agents: {
             list: list.map((a, i) =>
               i === agentIdx ? { ...a, model: modelValue } : a
             ),
           },
         });
-
-        await gatewayCall("config.patch", { raw: patchRaw, baseHash: hash }, 15000);
+        const expectedPrimary = body.primary as string;
+        const expectedFallbacks =
+          body.fallbacks != null && Array.isArray(body.fallbacks)
+            ? body.fallbacks.map((f: unknown) => String(f))
+            : null;
+        const verified = await waitForMatch(
+          () => readParsedAgentModelConfig(String(body.agentId)),
+          (cfg) => {
+            if (!cfg) return false;
+            if (cfg.usesDefaults) return false;
+            if (cfg.primary !== expectedPrimary) return false;
+            if (expectedFallbacks == null) {
+              return cfg.fallbacks === null;
+            }
+            if (
+              expectedFallbacks &&
+              !arraysEqual(cfg.fallbacks || [], expectedFallbacks)
+            ) {
+              return false;
+            }
+            return true;
+          }
+        );
+        if (!verified.matched) {
+          return jsonNoStore(
+            {
+              error: `Agent model update could not be verified for ${body.agentId}`,
+              expectedPrimary,
+              expectedFallbacks,
+              observed: verified.snapshot,
+            },
+            { status: 409 }
+          );
+        }
         return NextResponse.json({
           ok: true,
           action,
@@ -277,12 +838,11 @@ export async function POST(request: NextRequest) {
 
       case "reset-agent-model": {
         // Remove per-agent model override (inherit defaults)
-        const configData2 = await gatewayCall<Record<string, unknown>>(
+        const configData2 = await gatewayCallWithRetry<Record<string, unknown>>(
           "config.get",
           undefined,
           10000
         );
-        const hash2 = configData2.hash as string;
         const parsed2 = (configData2.parsed || {}) as Record<string, unknown>;
         const agents2 = (parsed2.agents || {}) as Record<string, unknown>;
         const list2 = ((agents2.list || []) as Record<string, unknown>[]);
@@ -296,12 +856,25 @@ export async function POST(request: NextRequest) {
 
         const updatedList = list2.map((a, i) => {
           if (i !== agentIdx) return a;
-          const { model: __removed, ...rest } = a;
+          const rest = { ...a };
+          delete rest.model;
           return rest;
         });
 
-        const patchRaw = JSON.stringify({ agents: { list: updatedList } });
-        await gatewayCall("config.patch", { raw: patchRaw, baseHash: hash2 }, 15000);
+        await applyConfigPatchWithRetry({ agents: { list: updatedList } });
+        const verified = await waitForMatch(
+          () => readParsedAgentModelConfig(String(body.agentId)),
+          (cfg) => Boolean(cfg) && cfg!.usesDefaults
+        );
+        if (!verified.matched) {
+          return jsonNoStore(
+            {
+              error: `Agent reset-to-default could not be verified for ${body.agentId}`,
+              observed: verified.snapshot,
+            },
+            { status: 409 }
+          );
+        }
         return NextResponse.json({ ok: true, action, agentId: body.agentId });
       }
 
@@ -345,14 +918,7 @@ export async function POST(request: NextRequest) {
           try {
             const envKey = PROVIDER_ENV_KEYS[provider];
             if (envKey) {
-              const configData = await gatewayCall<Record<string, unknown>>(
-                "config.get",
-                undefined,
-                10000
-              );
-              const hash = configData.hash as string;
-              const patchRaw = JSON.stringify({ env: { [envKey]: token } });
-              await gatewayCall("config.patch", { raw: patchRaw, baseHash: hash }, 15000);
+              await applyConfigPatchWithRetry({ env: { [envKey]: token } });
               return NextResponse.json({ ok: true, action, provider, method: "env" });
             }
           } catch { /* ignore */ }

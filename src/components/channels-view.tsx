@@ -1,597 +1,121 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useCallback, useRef } from "react";
 import {
-  Radio,
   Check,
   X,
-  Smartphone,
-  Monitor,
-  Globe,
-  Terminal,
-  Shield,
-  ShieldOff,
-  Clock,
   RefreshCw,
   AlertTriangle,
-  ChevronDown,
-  ChevronUp,
-  Bell,
-  UserCheck,
-  UserX,
-  Key,
+  ExternalLink,
+  Rocket,
+  Play,
+  Plug,
+  Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* ── Types ────────────────────────────────────────── */
 
-type Channel = {
-  name: string;
+type ChannelRuntimeStatus = {
+  channel: string;
+  account: string;
+  status: string;
+  linked?: boolean;
+  connected?: boolean;
+  error?: string;
+};
+
+type ChannelCatalogItem = {
+  channel: string;
+  label: string;
+  icon: string;
+  setupType: "qr" | "token" | "cli" | "auto";
+  setupCommand: string;
+  setupHint: string;
+  configHint?: string;
+  tokenLabel?: string;
+  tokenPlaceholder?: string;
+  docsUrl?: string;
   enabled: boolean;
+  configured: boolean;
   accounts: string[];
-  dmPolicy: string;
-  groupPolicy?: string;
-};
-
-type TokenInfo = {
-  role: string;
-  scopes: string[];
-  createdAtMs: number;
-  rotatedAtMs?: number;
-  lastUsedAtMs: number;
-};
-
-type PairedDevice = {
-  deviceId: string;
-  displayName?: string;
-  platform: string;
-  clientId: string;
-  clientMode: string;
-  role: string;
-  roles: string[];
-  scopes: string[];
-  tokens: TokenInfo[];
-  createdAtMs: number;
-  approvedAtMs: number;
-};
-
-type PendingRequest = {
-  requestId: string;
-  deviceId: string;
-  displayName?: string;
-  platform: string;
-  clientId: string;
-  clientMode: string;
-  requestedRole: string;
-  requestedScopes: string[];
-  createdAtMs: number;
-  expiresAtMs: number;
+  statuses: ChannelRuntimeStatus[];
 };
 
 type Toast = { message: string; type: "success" | "error" };
 
-/* ── Helpers ──────────────────────────────────────── */
+const URL_PATTERN = /(https?:\/\/[^\s]+)/g;
 
-function formatAgo(ms: number): string {
-  if (!ms) return "never";
-  const diff = Date.now() - ms;
-  const mins = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  if (hours < 24) return `${hours}h ago`;
-  return `${days}d ago`;
-}
-
-function formatDate(ms: number): string {
-  if (!ms) return "—";
-  return new Date(ms).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function formatTimeLeft(expiresMs: number): string {
-  const left = expiresMs - Date.now();
-  if (left <= 0) return "expired";
-  const mins = Math.ceil(left / 60000);
-  if (mins < 60) return `${mins}m left`;
-  return `${Math.floor(mins / 60)}h ${mins % 60}m left`;
-}
-
-function shortId(id: string): string {
-  if (id.length > 16) return id.substring(0, 8) + "…" + id.substring(id.length - 4);
-  return id;
-}
-
-const CLIENT_ICONS: Record<string, React.ReactNode> = {
-  "openclaw-control-ui": <Globe className="h-5 w-5 text-cyan-400" />,
-  "openclaw-macos": <Monitor className="h-5 w-5 text-violet-400" />,
-  cli: <Terminal className="h-5 w-5 text-emerald-400" />,
-};
-
-const PLATFORM_ICONS: Record<string, React.ReactNode> = {
-  iphone: <Smartphone className="h-5 w-5 text-blue-400" />,
-  android: <Smartphone className="h-5 w-5 text-green-400" />,
-};
-
-function getDeviceIcon(device: { clientId: string; platform: string }) {
-  if (CLIENT_ICONS[device.clientId]) return CLIENT_ICONS[device.clientId];
-  const platform = device.platform.toLowerCase();
-  for (const [key, icon] of Object.entries(PLATFORM_ICONS)) {
-    if (platform.includes(key)) return icon;
-  }
-  return <Smartphone className="h-5 w-5 text-muted-foreground" />;
-}
-
-const MODE_LABELS: Record<string, string> = {
-  webchat: "Web Chat",
-  node: "Node",
-  cli: "CLI",
-  ui: "Desktop App",
-};
-
-const ROLE_COLORS: Record<string, string> = {
-  node: "bg-violet-500/15 text-violet-400 border-violet-500/20",
-  operator: "bg-cyan-500/15 text-cyan-400 border-cyan-500/20",
-};
-
-/* ── Pending Request Card ─────────────────────────── */
-
-function PendingRequestCard({
-  request,
-  busy,
-  onApprove,
-  onReject,
-}: {
-  request: PendingRequest;
-  busy: boolean;
-  onApprove: () => void;
-  onReject: () => void;
-}) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const isExpired = request.expiresAtMs <= now;
-
+function LinkifiedText({ text, className }: { text: string; className?: string }) {
+  const parts = text.split(URL_PATTERN);
   return (
-    <div
-      className={cn(
-        "rounded-xl border p-4 transition-colors",
-        isExpired
-          ? "border-zinc-800/50 bg-card/60 opacity-60"
-          : "border-amber-500/20 bg-amber-500/[0.04]"
-      )}
-    >
-      <div className="flex items-start gap-3">
-        {/* Icon */}
-        <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-500/10">
-          {getDeviceIcon(request)}
-        </div>
-
-        {/* Info */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-foreground/90">
-              {request.displayName || request.platform || "Unknown device"}
-            </span>
-            {isExpired && (
-              <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-medium text-red-400">
-                Expired
-              </span>
-            )}
-          </div>
-
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-            <span>{MODE_LABELS[request.clientMode] || request.clientMode}</span>
-            <span>{request.platform}</span>
-            <span>
-              Requesting:{" "}
-              <span className="font-medium text-amber-400">
-                {request.requestedRole}
-              </span>
-            </span>
-            <span className="flex items-center gap-1">
-              <Clock className="h-3 w-3" />
-              {isExpired ? "Expired" : formatTimeLeft(request.expiresAtMs)}
-            </span>
-          </div>
-
-          {request.requestedScopes.length > 0 && (
-            <div className="mt-1.5 flex flex-wrap gap-1">
-              {request.requestedScopes.map((s) => (
-                <span
-                  key={s}
-                  className="rounded bg-muted/80 px-1.5 py-0.5 text-[9px] text-muted-foreground"
-                >
-                  {s}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div className="mt-1 text-[10px] text-muted-foreground/40">
-            ID: {shortId(request.requestId || request.deviceId)}
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={onReject}
-            disabled={busy || isExpired}
-            className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-40"
+    <span className={className}>
+      {parts.map((part, index) =>
+        /^https?:\/\/[^\s]+$/.test(part) ? (
+          <a
+            key={`${part}-${index}`}
+            href={part}
+            target="_blank"
+            rel="noreferrer"
+            className="underline decoration-violet-400/60 underline-offset-2 transition-colors hover:text-violet-300"
           >
-            <UserX className="h-3 w-3" />
-            Reject
-          </button>
-          <button
-            type="button"
-            onClick={onApprove}
-            disabled={busy || isExpired}
-            className="flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-[11px] font-medium text-emerald-400 transition-colors hover:bg-emerald-500/20 disabled:opacity-40"
-          >
-            <UserCheck className="h-3 w-3" />
-            Approve
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Paired Device Card ───────────────────────────── */
-
-function PairedDeviceCard({
-  device,
-  busy,
-  onRevoke,
-}: {
-  device: PairedDevice;
-  busy: boolean;
-  onRevoke: (role: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [confirmRevoke, setConfirmRevoke] = useState<string | null>(null);
-
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(id);
-  }, []);
-
-  // Most recent token usage
-  const lastUsed = Math.max(0, ...device.tokens.map((t) => t.lastUsedAtMs || 0));
-  const isRecent = now - lastUsed < 300000; // 5 min
-
-  return (
-    <div className="rounded-xl border border-foreground/[0.06] bg-card/80 transition-colors hover:bg-card">
-      {/* Main row */}
-      <button
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center gap-4 px-4 py-3 text-left"
-      >
-        {/* Icon */}
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-foreground/[0.03]">
-          {getDeviceIcon(device)}
-        </div>
-
-        {/* Info */}
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] font-medium text-foreground/90">
-              {device.displayName || device.platform}
-            </span>
-            {/* Online indicator */}
-            <span
-              className={cn(
-                "h-1.5 w-1.5 rounded-full",
-                isRecent
-                  ? "bg-emerald-400 shadow-[0_0_4px] shadow-emerald-400/50"
-                  : "bg-muted"
-              )}
-              title={isRecent ? "Active recently" : "Inactive"}
-            />
-          </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
-            <span>{MODE_LABELS[device.clientMode] || device.clientMode}</span>
-            <span>{device.platform}</span>
-            <span>Last seen {formatAgo(lastUsed)}</span>
-          </div>
-        </div>
-
-        {/* Roles */}
-        <div className="flex shrink-0 items-center gap-1.5">
-          {device.roles.map((r) => (
-            <span
-              key={r}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                ROLE_COLORS[r] || "bg-muted/70 text-muted-foreground border-zinc-700"
-              )}
-            >
-              {r === "node" ? (
-                <Shield className="h-2.5 w-2.5" />
-              ) : (
-                <Key className="h-2.5 w-2.5" />
-              )}
-              {r}
-            </span>
-          ))}
-        </div>
-
-        {/* Expand toggle */}
-        {expanded ? (
-          <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground/60" />
+            {part}
+          </a>
         ) : (
-          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground/60" />
-        )}
-      </button>
-
-      {/* Expanded details */}
-      {expanded && (
-        <div className="border-t border-foreground/[0.04] px-4 py-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-[11px]">
-            <div>
-              <span className="text-muted-foreground/60">Device ID</span>
-              <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
-                {device.deviceId}
-              </p>
-            </div>
-            <div>
-              <span className="text-muted-foreground/60">Client</span>
-              <p className="mt-0.5 text-muted-foreground">{device.clientId}</p>
-            </div>
-            <div>
-              <span className="text-muted-foreground/60">Paired on</span>
-              <p className="mt-0.5 text-muted-foreground">
-                {formatDate(device.approvedAtMs || device.createdAtMs)}
-              </p>
-            </div>
-            <div>
-              <span className="text-muted-foreground/60">Scopes</span>
-              <div className="mt-0.5 flex flex-wrap gap-1">
-                {device.scopes.length > 0 ? (
-                  device.scopes.map((s) => (
-                    <span
-                      key={s}
-                      className="rounded bg-muted/80 px-1.5 py-0.5 text-[9px] text-muted-foreground"
-                    >
-                      {s}
-                    </span>
-                  ))
-                ) : (
-                  <span className="text-muted-foreground/60">none</span>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Tokens */}
-          <div className="mt-3">
-            <h4 className="mb-2 text-[11px] font-medium text-muted-foreground">
-              Tokens ({device.tokens.length})
-            </h4>
-            <div className="space-y-1.5">
-              {device.tokens.map((tok) => (
-                <div
-                  key={tok.role}
-                  className="flex items-center gap-3 rounded-lg border border-foreground/[0.04] bg-foreground/[0.02] px-3 py-2"
-                >
-                  <Key className="h-3 w-3 shrink-0 text-muted-foreground/60" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium",
-                          ROLE_COLORS[tok.role] ||
-                            "bg-muted/70 text-muted-foreground border-zinc-700"
-                        )}
-                      >
-                        {tok.role}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground/60">
-                        Last used {formatAgo(tok.lastUsedAtMs)}
-                      </span>
-                      {tok.rotatedAtMs && (
-                        <span className="text-[10px] text-muted-foreground/40">
-                          · Rotated {formatAgo(tok.rotatedAtMs)}
-                        </span>
-                      )}
-                    </div>
-                    {tok.scopes.length > 0 && (
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        {tok.scopes.map((s) => (
-                          <span
-                            key={s}
-                            className="rounded bg-muted/60 px-1 py-0.5 text-[9px] text-muted-foreground/60"
-                          >
-                            {s}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Revoke */}
-                  {confirmRevoke === tok.role ? (
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      <span className="text-[10px] text-red-400">Revoke?</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onRevoke(tok.role);
-                          setConfirmRevoke(null);
-                        }}
-                        disabled={busy}
-                        className="rounded px-1.5 py-0.5 text-[10px] font-medium text-red-400 transition-colors hover:bg-red-500/10 disabled:opacity-40"
-                      >
-                        Yes
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setConfirmRevoke(null)}
-                        className="rounded px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:bg-muted"
-                      >
-                        No
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmRevoke(tok.role)}
-                      disabled={busy}
-                      className="shrink-0 rounded-lg p-1.5 text-muted-foreground/40 opacity-0 transition-all hover:bg-red-500/10 hover:text-red-400 group-hover:opacity-100 disabled:opacity-40"
-                      title={`Revoke ${tok.role} token`}
-                      style={{ opacity: 1 }}
-                    >
-                      <ShieldOff className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Unpair all button */}
-          <div className="mt-3 flex justify-end">
-            <UnpairButton
-              device={device}
-              busy={busy}
-              onRevoke={onRevoke}
-            />
-          </div>
-        </div>
+          <span key={`${part}-${index}`}>{part}</span>
+        )
       )}
-    </div>
+    </span>
   );
 }
-
-/* ── Unpair (revoke all roles) button ─────────────── */
-
-function UnpairButton({
-  device,
-  busy,
-  onRevoke,
-}: {
-  device: PairedDevice;
-  busy: boolean;
-  onRevoke: (role: string) => void;
-}) {
-  const [confirming, setConfirming] = useState(false);
-
-  if (confirming) {
-    return (
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] text-red-400">
-          Revoke all tokens and unpair this device?
-        </span>
-        <button
-          type="button"
-          onClick={() => {
-            for (const tok of device.tokens) {
-              onRevoke(tok.role);
-            }
-            setConfirming(false);
-          }}
-          disabled={busy}
-          className="flex items-center gap-1 rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-1 text-[11px] font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-40"
-        >
-          <ShieldOff className="h-3 w-3" />
-          Confirm Unpair
-        </button>
-        <button
-          type="button"
-          onClick={() => setConfirming(false)}
-          className="rounded-lg px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-muted"
-        >
-          Cancel
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => setConfirming(true)}
-      disabled={busy}
-      className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/5 px-2.5 py-1.5 text-[11px] text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-40"
-    >
-      <ShieldOff className="h-3 w-3" />
-      Unpair Device
-    </button>
-  );
-}
-
-/* ── Main ChannelsView ────────────────────────────── */
 
 export function ChannelsView() {
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [pairedDevices, setPairedDevices] = useState<PairedDevice[]>([]);
-  const [pendingRequests, setPendingRequests] = useState<PendingRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [devicesLoading, setDevicesLoading] = useState(true);
+  const [channels, setChannels] = useState<ChannelCatalogItem[]>([]);
+  const [channelsLoading, setChannelsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
+  const [wizardChannel, setWizardChannel] = useState("");
+  const [wizardToken, setWizardToken] = useState("");
+  const [wizardAppToken, setWizardAppToken] = useState("");
+  const [wizardAccount, setWizardAccount] = useState("");
+  const [wizardRunning, setWizardRunning] = useState(false);
+  const [wizardOutput, setWizardOutput] = useState("");
+  const [wizardError, setWizardError] = useState("");
+
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const flash = useCallback(
-    (message: string, type: "success" | "error" = "success") => {
-      if (toastTimer.current) clearTimeout(toastTimer.current);
-      setToast({ message, type });
-      toastTimer.current = setTimeout(() => setToast(null), 4000);
-    },
-    []
-  );
-
-  /* ── Fetch system data (channels) ──── */
-  useEffect(() => {
-    fetch("/api/system")
-      .then((r) => r.json())
-      .then((data) => {
-        setChannels(data.channels || []);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+  const flash = useCallback((message: string, type: "success" | "error" = "success") => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ message, type });
+    toastTimer.current = setTimeout(() => setToast(null), 4000);
   }, []);
 
-  /* ── Fetch devices (paired + pending) ──────── */
-  const fetchDevices = useCallback(async () => {
+  const fetchChannels = useCallback(async () => {
     try {
-      const res = await fetch("/api/devices");
+      const res = await fetch("/api/channels?scope=all", { cache: "no-store" });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
-      setPairedDevices(data.paired || []);
-      setPendingRequests(data.pending || []);
+      setChannels((data.channels || []) as ChannelCatalogItem[]);
     } catch (err) {
-      console.error("Failed to fetch devices:", err);
+      flash(String(err), "error");
     } finally {
-      setDevicesLoading(false);
+      setChannelsLoading(false);
     }
-  }, []);
+  }, [flash]);
 
   useEffect(() => {
-    fetchDevices();
-    // Poll for pending requests every 10s
-    const interval = setInterval(fetchDevices, 10000);
-    return () => clearInterval(interval);
-  }, [fetchDevices]);
+    void fetchChannels();
+  }, [fetchChannels]);
 
-  /* ── Device actions ────────────────────────── */
-  const deviceAction = useCallback(
+  const runChannelAction = useCallback(
     async (body: Record<string, unknown>, successMsg: string) => {
       setBusy(true);
       try {
-        const res = await fetch("/api/devices", {
+        const res = await fetch("/api/channels", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -599,173 +123,442 @@ export function ChannelsView() {
         const data = await res.json();
         if (data.error) throw new Error(data.error);
         flash(successMsg);
-        await fetchDevices();
+        await fetchChannels();
       } catch (err) {
         flash(String(err), "error");
       } finally {
         setBusy(false);
       }
     },
-    [fetchDevices, flash]
+    [fetchChannels, flash]
   );
 
-  const approveRequest = useCallback(
-    (requestId: string) => {
-      deviceAction(
-        { action: "approve", requestId },
-        "Device pairing approved"
-      );
+  const setupCandidates = channels.filter((ch) => !ch.configured && ch.setupType !== "auto");
+  const selectedWizardChannel = channels.find((ch) => ch.channel === wizardChannel) || null;
+  const requiresAppToken = selectedWizardChannel?.channel === "slack";
+  const needsToken = selectedWizardChannel?.setupType === "token";
+  const canRunWizard =
+    !!selectedWizardChannel &&
+    (selectedWizardChannel.setupType !== "token" ||
+      (wizardToken.trim().length > 0 && (!requiresAppToken || wizardAppToken.trim().length > 0)));
+
+  const openWizard = useCallback(
+    (channelId?: string) => {
+      const fallback = setupCandidates[0]?.channel || channels[0]?.channel || "";
+      setWizardChannel(channelId || fallback);
+      setWizardStep(1);
+      setWizardToken("");
+      setWizardAppToken("");
+      setWizardAccount("");
+      setWizardOutput("");
+      setWizardError("");
+      setWizardOpen(true);
     },
-    [deviceAction]
+    [channels, setupCandidates]
   );
 
-  const rejectRequest = useCallback(
-    (requestId: string) => {
-      deviceAction(
-        { action: "reject", requestId },
-        "Device pairing rejected"
+  const runWizardSetup = useCallback(async () => {
+    if (!selectedWizardChannel) return;
+    setWizardRunning(true);
+    setWizardError("");
+    setWizardOutput("");
+
+    try {
+      if (selectedWizardChannel.setupType === "auto") {
+        setWizardOutput("No setup required. This channel is available automatically.");
+        setWizardStep(3);
+        return;
+      }
+
+      const account = wizardAccount.trim();
+      const setupCommand = selectedWizardChannel.setupCommand.toLowerCase();
+      const needsLogin =
+        selectedWizardChannel.setupType === "qr" ||
+        setupCommand.includes("channels login");
+
+      const payload: Record<string, unknown> = {
+        action: needsLogin ? "login" : "add",
+        channel: selectedWizardChannel.channel,
+      };
+      if (account) payload.account = account;
+
+      if (selectedWizardChannel.setupType === "token") {
+        if (!wizardToken.trim()) {
+          throw new Error(`${selectedWizardChannel.tokenLabel || "Token"} is required.`);
+        }
+        payload.token = wizardToken.trim();
+        if (wizardAppToken.trim()) payload.appToken = wizardAppToken.trim();
+      }
+
+      const res = await fetch("/api/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      if (data.interactive) {
+        setWizardOutput(
+          data.message ||
+            "Interactive login is required. Run the command below in the Terminal tab."
+        );
+      } else {
+        setWizardOutput(
+          typeof data.output === "string" && data.output.trim().length > 0
+            ? data.output
+            : `${selectedWizardChannel.label} setup command completed.`
+        );
+      }
+
+      // Idempotent: if setup worked, ensure channel is enabled.
+      await fetch("/api/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "enable", channel: selectedWizardChannel.channel }),
+      }).catch(() => null);
+
+      await fetchChannels();
+      setWizardStep(3);
+      flash(
+        data.interactive
+          ? `${selectedWizardChannel.label}: continue in Terminal for interactive login`
+          : `${selectedWizardChannel.label} configured`
       );
-    },
-    [deviceAction]
-  );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setWizardError(message);
+      flash(message, "error");
+    } finally {
+      setWizardRunning(false);
+    }
+  }, [
+    fetchChannels,
+    flash,
+    selectedWizardChannel,
+    wizardAccount,
+    wizardAppToken,
+    wizardToken,
+  ]);
 
-  const revokeToken = useCallback(
-    (deviceId: string, role: string) => {
-      deviceAction(
-        { action: "revoke", deviceId, role },
-        `Token revoked (${role})`
-      );
-    },
-    [deviceAction]
-  );
+  const statusTone = (status: string) => {
+    const s = status.toLowerCase();
+    if (s.includes("connected") || s.includes("ready") || s.includes("online") || s.includes("idle")) {
+      return "text-emerald-400";
+    }
+    if (s.includes("error") || s.includes("failed") || s.includes("offline") || s.includes("not-configured")) {
+      return "text-red-400";
+    }
+    return "text-amber-400";
+  };
 
-  if (loading && devicesLoading) {
+  if (channelsLoading) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
-        Loading...
+        Loading channels...
       </div>
     );
   }
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto">
-      <div className="mx-auto w-full max-w-4xl space-y-8 px-4 md:px-6 py-6">
-        {/* ── Pending Requests ──────────── */}
-        {pendingRequests.length > 0 && (
-          <section>
-            <div className="mb-3 flex items-center gap-2">
-              <Bell className="h-4 w-4 text-amber-400" />
-              <h2 className="text-sm font-semibold text-foreground/90">
-                Pairing Requests
-              </h2>
-              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-400">
-                {pendingRequests.length}
-              </span>
-            </div>
-            <p className="mb-3 text-[11px] text-muted-foreground/60">
-              Devices requesting to pair with your OpenClaw Gateway. Approve to
-              grant access or reject to deny. Requests expire after 5 minutes.
-            </p>
-            <div className="space-y-2">
-              {pendingRequests.map((req) => (
-                <PendingRequestCard
-                  key={req.requestId || req.deviceId}
-                  request={req}
-                  busy={busy}
-                  onApprove={() =>
-                    approveRequest(req.requestId || req.deviceId)
-                  }
-                  onReject={() =>
-                    rejectRequest(req.requestId || req.deviceId)
-                  }
-                />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* ── Paired Devices ───────────── */}
+      <div className="mx-auto w-full max-w-4xl space-y-8 px-4 py-6 md:px-6">
         <section>
-          <div className="mb-3 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-violet-400" />
-              <h2 className="text-sm font-semibold text-foreground/90">
-                Paired Devices
-              </h2>
-              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
-                {pairedDevices.length}
-              </span>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground/90">Channels</h2>
+              <p className="mt-0.5 text-[11px] text-muted-foreground/70">
+                Connect and manage Discord, Telegram, WhatsApp, Slack, and more.
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={() => {
-                setDevicesLoading(true);
-                fetchDevices();
-              }}
-              disabled={busy}
-              className="flex items-center gap-1 rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] disabled:opacity-40"
-            >
-              <RefreshCw
-                className={cn(
-                  "h-3 w-3",
-                  devicesLoading && "animate-spin"
-                )}
-              />
-              Refresh
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setChannelsLoading(true);
+                  void fetchChannels();
+                }}
+                disabled={busy || channelsLoading}
+                className="flex items-center gap-1 rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] disabled:opacity-40"
+              >
+                <RefreshCw className={cn("h-3 w-3", channelsLoading && "animate-spin")} />
+                Refresh
+              </button>
+              <button
+                type="button"
+                onClick={() => openWizard()}
+                className="inline-flex items-center gap-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-[11px] font-medium text-violet-300 transition-colors hover:bg-violet-500/20"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Channel
+              </button>
+            </div>
           </div>
 
-          {pendingRequests.length === 0 && (
-            <div className="mb-3 flex items-center gap-2 rounded-lg border border-foreground/[0.04] bg-foreground/[0.01] px-3 py-2 text-[11px] text-muted-foreground/60">
-              <Bell className="h-3 w-3 shrink-0 text-muted-foreground/40" />
-              No pending pairing requests. New device requests will appear here
-              automatically.
+          {wizardOpen && (
+            <div className="mb-4 rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Rocket className="h-4 w-4 text-violet-300" />
+                  <h3 className="text-[13px] font-semibold text-foreground/90">Channel Setup Wizard</h3>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setWizardOpen(false)}
+                  className="rounded-md px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
+                >
+                  Close
+                </button>
+              </div>
+
+              <div className="mb-3 flex items-center gap-2 text-[11px]">
+                {[1, 2, 3].map((step) => (
+                  <div key={step} className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-semibold",
+                        wizardStep >= step
+                          ? "border-violet-400/40 bg-violet-500/20 text-violet-200"
+                          : "border-foreground/[0.1] bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {step}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {step === 1 ? "Choose" : step === 2 ? "Configure" : "Finish"}
+                    </span>
+                    {step < 3 && <span className="text-muted-foreground/40">→</span>}
+                  </div>
+                ))}
+              </div>
+
+              {wizardStep === 1 && (
+                <div className="space-y-3">
+                  <p className="text-[12px] text-muted-foreground">
+                    Pick a channel to connect. The wizard will guide you through required steps.
+                  </p>
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {channels.map((ch) => (
+                      <button
+                        key={ch.channel}
+                        type="button"
+                        onClick={() => setWizardChannel(ch.channel)}
+                        className={cn(
+                          "flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors",
+                          wizardChannel === ch.channel
+                            ? "border-violet-500/30 bg-violet-500/10"
+                            : "border-foreground/[0.08] bg-card/60 hover:bg-card"
+                        )}
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="text-base">{ch.icon}</span>
+                          <div className="min-w-0">
+                            <p className="truncate text-[12px] font-medium text-foreground/90">{ch.label}</p>
+                            <p className="text-[10px] text-muted-foreground">
+                              {ch.setupType === "token"
+                                ? "Token setup"
+                                : ch.setupType === "qr"
+                                  ? "Interactive login"
+                                  : ch.setupType === "auto"
+                                    ? "Built in"
+                                    : "CLI setup"}
+                            </p>
+                          </div>
+                        </div>
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-medium",
+                            ch.configured
+                              ? "bg-emerald-500/15 text-emerald-300"
+                              : "bg-amber-500/15 text-amber-300"
+                          )}
+                        >
+                          {ch.configured ? "Configured" : "Needs setup"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(2)}
+                      disabled={!selectedWizardChannel}
+                      className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                    >
+                      Next
+                      <Play className="h-3 w-3" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {wizardStep === 2 && selectedWizardChannel && (
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-foreground/[0.08] bg-card/70 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base">{selectedWizardChannel.icon}</span>
+                        <div>
+                          <p className="text-[12px] font-semibold text-foreground/90">{selectedWizardChannel.label}</p>
+                        </div>
+                      </div>
+                      {selectedWizardChannel.docsUrl && (
+                        <a
+                          href={selectedWizardChannel.docsUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground/80"
+                        >
+                          Docs
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                    <div className="mt-2 rounded-md border border-violet-500/25 bg-violet-500/[0.08] px-3 py-2.5">
+                      <p className="text-[13px] font-medium leading-relaxed text-foreground/95">
+                        <LinkifiedText text={selectedWizardChannel.setupHint} />
+                      </p>
+                    </div>
+                    {selectedWizardChannel.setupCommand && (
+                      <div className="mt-2 rounded-md border border-foreground/[0.06] bg-muted/60 px-2 py-1.5 font-mono text-[10px] text-muted-foreground">
+                        {selectedWizardChannel.setupCommand}
+                      </div>
+                    )}
+                    {selectedWizardChannel.configHint && (
+                      <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground/85">
+                        <LinkifiedText text={selectedWizardChannel.configHint} />
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+                    {needsToken && (
+                      <label className="space-y-1 md:col-span-2">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                          {selectedWizardChannel.tokenLabel || "Token"}
+                        </span>
+                        <input
+                          value={wizardToken}
+                          onChange={(e) => setWizardToken(e.target.value)}
+                          type="password"
+                          placeholder={selectedWizardChannel.tokenPlaceholder || "Paste token"}
+                          className="w-full rounded-md border border-foreground/[0.08] bg-muted px-2.5 py-2 text-[12px] text-foreground/85 outline-none focus:border-violet-500/30"
+                        />
+                      </label>
+                    )}
+                    {requiresAppToken && (
+                      <label className="space-y-1 md:col-span-2">
+                        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                          App Token
+                        </span>
+                        <input
+                          value={wizardAppToken}
+                          onChange={(e) => setWizardAppToken(e.target.value)}
+                          type="password"
+                          placeholder="xapp-..."
+                          className="w-full rounded-md border border-foreground/[0.08] bg-muted px-2.5 py-2 text-[12px] text-foreground/85 outline-none focus:border-violet-500/30"
+                        />
+                      </label>
+                    )}
+                    <label className="space-y-1 md:col-span-2">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70">
+                        Account (optional)
+                      </span>
+                      <input
+                        value={wizardAccount}
+                        onChange={(e) => setWizardAccount(e.target.value)}
+                        placeholder="default"
+                        className="w-full rounded-md border border-foreground/[0.08] bg-muted px-2.5 py-2 text-[12px] text-foreground/85 outline-none focus:border-violet-500/30"
+                      />
+                    </label>
+                  </div>
+
+                  {wizardError && (
+                    <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-[11px] text-red-300">
+                      {wizardError}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(1)}
+                      className="rounded-lg border border-foreground/[0.08] px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.04]"
+                    >
+                      Back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void runWizardSetup()}
+                      disabled={!canRunWizard || wizardRunning}
+                      className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                    >
+                      {wizardRunning ? (
+                        <>
+                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          Running...
+                        </>
+                      ) : (
+                        <>
+                          <Plug className="h-3 w-3" />
+                          Run Setup
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {wizardStep === 3 && selectedWizardChannel && (
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.08] px-3 py-2 text-[11px] text-emerald-200">
+                    Setup run completed for <span className="font-semibold">{selectedWizardChannel.label}</span>.
+                    {selectedWizardChannel.setupType === "qr" && " If interactive login is required, continue in Terminal."}
+                  </div>
+                  {wizardOutput && (
+                    <pre className="max-h-40 overflow-auto rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-[10px] text-muted-foreground whitespace-pre-wrap">
+                      {wizardOutput}
+                    </pre>
+                  )}
+                  <div className="flex items-center justify-between">
+                    <button
+                      type="button"
+                      onClick={() => setWizardStep(2)}
+                      className="rounded-lg border border-foreground/[0.08] px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.04]"
+                    >
+                      Reconfigure
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openWizard()}
+                        className="rounded-lg border border-foreground/[0.08] px-3 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.04]"
+                      >
+                        Setup Another
+                      </button>
+                      <Link
+                        href="/?section=terminal"
+                        className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-[11px] font-medium text-white transition-colors hover:bg-violet-500"
+                      >
+                        Open Terminal
+                      </Link>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {devicesLoading && pairedDevices.length === 0 ? (
-            <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground/60">
-              <RefreshCw className="h-4 w-4 animate-spin" />
-              Loading devices...
-            </div>
-          ) : pairedDevices.length === 0 ? (
-            <p className="text-sm text-muted-foreground/60">No paired devices</p>
-          ) : (
-            <div className="space-y-2">
-              {pairedDevices.map((d) => (
-                <PairedDeviceCard
-                  key={d.deviceId}
-                  device={d}
-                  busy={busy}
-                  onRevoke={(role) => revokeToken(d.deviceId, role)}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* ── Channels ─────────────────── */}
-        <section>
-          <h2 className="mb-4 text-sm font-semibold text-foreground/90">
-            Channels
-          </h2>
           <div className="space-y-3">
             {channels.map((ch) => (
               <div
-                key={ch.name}
+                key={ch.channel}
                 className="rounded-xl border border-foreground/[0.06] bg-card/90 p-4"
               >
                 <div className="flex items-center gap-3">
-                  <Radio
-                    className={cn(
-                      "h-5 w-5",
-                      ch.enabled ? "text-emerald-400" : "text-muted-foreground/60"
-                    )}
-                  />
+                  <span className="text-base">{ch.icon}</span>
                   <div>
-                    <p className="text-sm font-semibold capitalize text-foreground">
-                      {ch.name}
-                    </p>
+                    <p className="text-sm font-semibold text-foreground">{ch.label}</p>
                     <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                       <span className="flex items-center gap-1">
                         {ch.enabled ? (
@@ -775,13 +568,47 @@ export function ChannelsView() {
                         )}
                         {ch.enabled ? "Enabled" : "Disabled"}
                       </span>
-                      <span>DM: {ch.dmPolicy}</span>
-                      {ch.groupPolicy && (
-                        <span>Group: {ch.groupPolicy}</span>
-                      )}
+                      <span>{ch.configured ? "Configured" : "Not configured"}</span>
+                      <span className="capitalize">{ch.setupType} setup</span>
                     </div>
                   </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    {ch.docsUrl && (
+                      <a
+                        href={ch.docsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 rounded-lg border border-foreground/[0.08] bg-foreground/[0.02] px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
+                      >
+                        Docs
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => openWizard(ch.channel)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-[11px] text-violet-300 transition-colors hover:bg-violet-500/20"
+                    >
+                      {ch.configured ? "Reconfigure" : "Setup"}
+                    </button>
+                    {ch.configured && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          void runChannelAction(
+                            { action: ch.enabled ? "disable" : "enable", channel: ch.channel },
+                            `${ch.label} ${ch.enabled ? "disabled" : "enabled"}`
+                          )
+                        }
+                        disabled={busy}
+                        className="rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-2.5 py-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-foreground/[0.06] disabled:opacity-40"
+                      >
+                        {ch.enabled ? "Disable" : "Enable"}
+                      </button>
+                    )}
+                  </div>
                 </div>
+
                 <div className="mt-3 flex flex-wrap gap-2">
                   {ch.accounts.map((acc) => (
                     <span
@@ -791,18 +618,45 @@ export function ChannelsView() {
                       {acc}
                     </span>
                   ))}
+                  {ch.accounts.length === 0 && (
+                    <span className="rounded-md border border-foreground/[0.06] bg-muted/60 px-2.5 py-1 text-[11px] text-muted-foreground/70">
+                      No accounts connected yet
+                    </span>
+                  )}
                 </div>
+
+                {ch.statuses.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {ch.statuses.map((status) => (
+                      <span
+                        key={`${status.channel}:${status.account}:${status.status}`}
+                        className={cn(
+                          "rounded-full border border-foreground/[0.08] bg-foreground/[0.02] px-2 py-0.5 text-[10px]",
+                          statusTone(status.status)
+                        )}
+                        title={status.error || status.status}
+                      >
+                        {status.account || "default"} · {status.status}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {ch.setupHint && (
+                  <p className="mt-2 text-[10px] text-muted-foreground/65">
+                    <LinkifiedText text={ch.setupHint} />
+                  </p>
+                )}
               </div>
             ))}
+
             {channels.length === 0 && (
-              <p className="text-sm text-muted-foreground/60">No channels configured</p>
+              <p className="text-sm text-muted-foreground/60">No channels found</p>
             )}
           </div>
         </section>
-
       </div>
 
-      {/* Toast */}
       {toast && (
         <div
           className={cn(

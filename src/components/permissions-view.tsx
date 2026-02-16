@@ -16,6 +16,10 @@ import {
   Plus,
   Trash2,
   Activity,
+  Bell,
+  Smartphone,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +78,33 @@ type PermissionSnapshot = {
 
 type AgentItem = { id: string };
 
+type DeviceToken = {
+  role: string;
+  scopes: string[];
+  lastUsedAtMs?: number;
+};
+
+type PairedDevice = {
+  deviceId: string;
+  displayName?: string;
+  platform: string;
+  clientId: string;
+  clientMode: string;
+  roles: string[];
+  tokens: DeviceToken[];
+};
+
+type PendingDeviceRequest = {
+  requestId?: string;
+  deviceId: string;
+  displayName?: string;
+  platform: string;
+  clientMode: string;
+  requestedRole?: string;
+  requestedScopes?: string[];
+  expiresAtMs?: number;
+};
+
 const QUICK_PERMISSIONS: Array<{
   label: string;
   pattern: string;
@@ -100,12 +131,31 @@ function formatAgo(ts?: number): string {
 export function PermissionsView() {
   const [snapshot, setSnapshot] = useState<PermissionSnapshot | null>(null);
   const [agents, setAgents] = useState<AgentItem[]>([]);
+  const [pairedDevices, setPairedDevices] = useState<PairedDevice[]>([]);
+  const [pendingDevices, setPendingDevices] = useState<PendingDeviceRequest[]>([]);
   const [selectedAgent, setSelectedAgent] = useState("*");
   const [pattern, setPattern] = useState("");
   const [loading, setLoading] = useState(true);
+  const [devicesLoading, setDevicesLoading] = useState(true);
   const [mutating, setMutating] = useState(false);
+  const [deviceMutating, setDeviceMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const loadDevices = useCallback(async () => {
+    setDevicesLoading(true);
+    try {
+      const res = await fetch("/api/devices", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setPairedDevices(Array.isArray(data.paired) ? (data.paired as PairedDevice[]) : []);
+      setPendingDevices(Array.isArray(data.pending) ? (data.pending as PendingDeviceRequest[]) : []);
+    } catch (err) {
+      setError((prev) => prev || (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setDevicesLoading(false);
+    }
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -114,6 +164,7 @@ export function PermissionsView() {
         fetch("/api/permissions", { cache: "no-store" }),
         fetch("/api/agents", { cache: "no-store" }).catch(() => null),
       ]);
+      await loadDevices();
       if (!permRes.ok) throw new Error(`HTTP ${permRes.status}`);
       const perm = (await permRes.json()) as PermissionSnapshot;
       setSnapshot(perm);
@@ -129,7 +180,7 @@ export function PermissionsView() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [loadDevices]);
 
   useEffect(() => {
     void load();
@@ -203,6 +254,52 @@ export function PermissionsView() {
       void mutate({ action: "set-elevated", enabled });
     },
     [mutate]
+  );
+
+  const mutateDevice = useCallback(
+    async (body: Record<string, unknown>, successMsg: string) => {
+      setDeviceMutating(true);
+      setNotice(null);
+      try {
+        const res = await fetch("/api/devices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) {
+          throw new Error(String(data?.error || `HTTP ${res.status}`));
+        }
+        await loadDevices();
+        setNotice(successMsg);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setDeviceMutating(false);
+      }
+    },
+    [loadDevices]
+  );
+
+  const approveDevice = useCallback(
+    (requestId: string) => {
+      void mutateDevice({ action: "approve", requestId }, "Pairing request approved.");
+    },
+    [mutateDevice]
+  );
+
+  const rejectDevice = useCallback(
+    (requestId: string) => {
+      void mutateDevice({ action: "reject", requestId }, "Pairing request rejected.");
+    },
+    [mutateDevice]
+  );
+
+  const revokeDeviceRole = useCallback(
+    (deviceId: string, role: string) => {
+      void mutateDevice({ action: "revoke", deviceId, role }, `Revoked ${role} token.`);
+    },
+    [mutateDevice]
   );
 
   const elevatedEnabled = Boolean(snapshot?.sandbox?.elevated?.enabled);
@@ -563,6 +660,127 @@ export function PermissionsView() {
             </p>
           </section>
         </div>
+
+        <section className="rounded-2xl border border-foreground/[0.08] bg-card/60 p-3">
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-[12px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <Bell className="h-3.5 w-3.5" />
+              Device Access
+            </h2>
+            <button
+              type="button"
+              onClick={() => void loadDevices()}
+              disabled={devicesLoading || deviceMutating}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] bg-card px-3 py-1.5 text-[11px] font-medium text-foreground/80 transition-colors hover:bg-muted/80 disabled:opacity-60"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", (devicesLoading || deviceMutating) && "animate-spin")} />
+              Refresh Devices
+            </button>
+          </div>
+
+          <p className="mb-3 text-[10px] text-muted-foreground/65">
+            Pairing and device tokens control which clients can access your gateway.
+          </p>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-2.5">
+              <h3 className="mb-2 flex items-center gap-1 text-[11px] font-semibold text-amber-700 dark:text-amber-200">
+                <UserCheck className="h-3.5 w-3.5" />
+                Pending Requests ({pendingDevices.length})
+              </h3>
+              {devicesLoading ? (
+                <p className="text-[11px] text-muted-foreground/70">Loading device requests...</p>
+              ) : pendingDevices.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground/70">No pending pairing requests.</p>
+              ) : (
+                <div className="space-y-2">
+                  {pendingDevices.map((request) => (
+                    <div
+                      key={request.requestId || request.deviceId}
+                      className="rounded-lg border border-foreground/[0.08] bg-card/70 px-3 py-2 text-[11px]"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground/90">
+                            {request.displayName || request.platform || request.deviceId}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/70">
+                            {request.clientMode || "unknown"} • role {request.requestedRole || "node"}
+                          </p>
+                        </div>
+                        <Smartphone className="h-3.5 w-3.5 shrink-0 text-muted-foreground/70" />
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => approveDevice(request.requestId || request.deviceId)}
+                          disabled={deviceMutating}
+                          className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/15 px-2 py-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-200 disabled:opacity-50"
+                        >
+                          <UserCheck className="h-3 w-3" />
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => rejectDevice(request.requestId || request.deviceId)}
+                          disabled={deviceMutating}
+                          className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/15 px-2 py-1 text-[10px] font-medium text-red-700 dark:text-red-200 disabled:opacity-50"
+                        >
+                          <UserX className="h-3 w-3" />
+                          Reject
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-foreground/[0.08] bg-background/40 p-2.5">
+              <h3 className="mb-2 text-[11px] font-semibold text-foreground/85">
+                Paired Devices ({pairedDevices.length})
+              </h3>
+              {devicesLoading ? (
+                <p className="text-[11px] text-muted-foreground/70">Loading paired devices...</p>
+              ) : pairedDevices.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground/70">No paired devices.</p>
+              ) : (
+                <div className="max-h-[280px] space-y-2 overflow-y-auto pr-0.5">
+                  {pairedDevices.map((device) => (
+                    <div
+                      key={device.deviceId}
+                      className="rounded-lg border border-foreground/[0.08] bg-card/70 px-3 py-2 text-[11px]"
+                    >
+                      <p className="truncate font-medium text-foreground/90">
+                        {device.displayName || device.platform || device.deviceId}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/70">
+                        {device.clientMode || "unknown"} • {device.clientId || "client"}
+                      </p>
+                      <div className="mt-1 flex flex-wrap gap-1.5">
+                        {(device.roles || []).map((role) => (
+                          <button
+                            key={`${device.deviceId}:${role}`}
+                            type="button"
+                            onClick={() => revokeDeviceRole(device.deviceId, role)}
+                            disabled={deviceMutating}
+                            className="rounded-md border border-red-500/25 bg-red-500/10 px-1.5 py-0.5 text-[10px] text-red-700 transition-colors hover:bg-red-500/20 dark:text-red-200 disabled:opacity-50"
+                            title={`Revoke ${role} token`}
+                          >
+                            revoke:{role}
+                          </button>
+                        ))}
+                        {(device.roles || []).length === 0 && (
+                          <span className="text-[10px] text-muted-foreground/65">No roles reported.</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
       </div>
     </div>
   );

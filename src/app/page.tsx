@@ -34,7 +34,10 @@ function SectionContent({ section }: { section: string }) {
       return <CronView />;
     case "sessions":
       return <SessionsView />;
+    case "channels":
+      return <ChannelsView />;
     case "system":
+      // Backward-compat alias for older links/bookmarks.
       return <ChannelsView />;
     case "memory":
       return <MemoryView />;
