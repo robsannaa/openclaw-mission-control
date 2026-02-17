@@ -960,6 +960,7 @@ function ClawHubPanel({
   const [installed, setInstalled] = useState<Record<string, string>>({});
   const [mode, setMode] = useState<"trending" | "search">("trending");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [busySlug, setBusySlug] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<"install" | "update" | "uninstall" | null>(null);
 
@@ -967,6 +968,9 @@ function ClawHubPanel({
     try {
       const res = await fetch("/api/skills/clawhub?action=list");
       const data = await res.json();
+      if (!res.ok || data?.error) {
+        throw new Error(String(data?.error || `HTTP ${res.status}`));
+      }
       const map: Record<string, string> = {};
       for (const row of data.items || []) {
         const slug = String((row as { slug?: string }).slug || "");
@@ -974,8 +978,10 @@ function ClawHubPanel({
         if (slug) map[slug] = version;
       }
       setInstalled(map);
-    } catch {
+      setError(null);
+    } catch (err) {
       setInstalled({});
+      setError(String(err));
     }
   }, []);
 
@@ -984,6 +990,9 @@ function ClawHubPanel({
     try {
       const res = await fetch("/api/skills/clawhub?action=explore&limit=28&sort=trending");
       const data = await res.json();
+      if (!res.ok || data?.error) {
+        throw new Error(String(data?.error || `HTTP ${res.status}`));
+      }
       const normalized: ClawHubItem[] = (data.items || []).map((item: {
         slug?: string;
         displayName?: string;
@@ -1002,8 +1011,10 @@ function ClawHubPanel({
         updatedAt: item.updatedAt,
       })).filter((item: ClawHubItem) => item.slug);
       setItems(normalized);
-    } catch {
+      setError(null);
+    } catch (err) {
       setItems([]);
+      setError(String(err));
     }
     setLoading(false);
   }, []);
@@ -1015,6 +1026,9 @@ function ClawHubPanel({
     try {
       const res = await fetch(`/api/skills/clawhub?action=search&q=${encodeURIComponent(query)}&limit=28`);
       const data = await res.json();
+      if (!res.ok || data?.error) {
+        throw new Error(String(data?.error || `HTTP ${res.status}`));
+      }
       const normalized: ClawHubItem[] = (data.items || []).map((item: {
         slug?: string;
         version?: string;
@@ -1027,8 +1041,10 @@ function ClawHubPanel({
         score: typeof item.score === "number" ? item.score : undefined,
       })).filter((item: ClawHubItem) => item.slug);
       setItems(normalized);
-    } catch {
+      setError(null);
+    } catch (err) {
       setItems([]);
+      setError(String(err));
     }
     setLoading(false);
   }, [query]);
@@ -1116,7 +1132,7 @@ function ClawHubPanel({
   }, [fetchExplore, fetchInstalled]);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden px-4 md:px-6 pb-6">
+    <div className="space-y-4">
       <div className="mb-4 rounded-xl border border-foreground/[0.08] bg-foreground/[0.02] px-4 py-3">
         <p className="text-[12px] text-muted-foreground/85">
           Bundled skills ship with OpenClaw. ClawHub installs workspace skills into <code className="rounded bg-foreground/[0.06] px-1">workspace/skills</code>.
@@ -1147,7 +1163,13 @@ function ClawHubPanel({
         <p>{Object.keys(installed).length} installed via ClawHub</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      {error && (
+        <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.08] px-4 py-3 text-[12px] text-amber-700 dark:text-amber-200">
+          ClawHub is unavailable right now: {error}
+        </div>
+      )}
+
+      <div>
         {loading ? (
           <div className="flex items-center justify-center py-16"><Loader2 className="h-5 w-5 animate-spin text-violet-400" /></div>
         ) : items.length === 0 ? (
@@ -1269,10 +1291,14 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
       setLoading(false);
       return;
     }
+    if (tab === "clawhub") {
+      setLoading(false);
+      return;
+    }
     queueMicrotask(() => {
       void fetchAll();
     });
-  }, [fetchAll, selectedSkill]);
+  }, [fetchAll, selectedSkill, tab]);
 
   const filtered = useMemo(() => skills.filter((s) => {
     if (search) {
@@ -1429,9 +1455,10 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
         }
       />
 
-      <SectionBody width="wide" padding="compact" innerClassName="space-y-3">
-        {/* Summary */}
-        {tab === "skills" && summary && (
+      {tab === "skills" && (
+        <SectionBody width="wide" padding="compact" innerClassName="space-y-3">
+          {/* Summary */}
+          {summary && (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
             <SumCard value={summary.total} label="Total" color="text-foreground/90" />
             <SumCard value={summary.eligible} label="Ready" color="text-emerald-400" border="border-emerald-500/20" bg="bg-emerald-500/5" />
@@ -1440,10 +1467,10 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
             <SumCard value={summary.missingRequirements} label="Missing Deps" color="text-amber-400" border="border-amber-500/20" bg="bg-amber-500/5" />
             <SumCard value={summary.disabled} label="Disabled" color="text-red-400" border="border-red-500/20" bg="bg-red-500/5" />
           </div>
-        )}
+          )}
 
-        {/* Search + filter */}
-        {tab === "skills" && <div className="flex flex-wrap items-center gap-3">
+          {/* Search + filter */}
+          <div className="flex flex-wrap items-center gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-foreground/[0.08] bg-muted/50 px-3 py-2">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground/60" />
             <input placeholder="Search skills..." value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/60 text-foreground/70" />
@@ -1454,8 +1481,9 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
               {f === "all" ? "All" : f === "eligible" ? "Ready" : f === "unavailable" ? "Unavailable" : f === "bundled" ? "Bundled" : "Workspace"}
             </button>
           ))}</div>
-        </div>}
-      </SectionBody>
+          </div>
+        </SectionBody>
+      )}
 
       {tab === "skills" && <SectionBody width="wide" padding="compact" className="pt-0" innerClassName="space-y-5">
           {grouped.map((section) => (
@@ -1494,10 +1522,12 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
       </SectionBody>}
 
       {tab === "clawhub" && (
-        <ClawHubPanel
-          onAction={handleAction}
-          onInstalled={handleClawHubInstalled}
-        />
+        <SectionBody width="wide" padding="compact" innerClassName="pb-6">
+          <ClawHubPanel
+            onAction={handleAction}
+            onInstalled={handleClawHubInstalled}
+          />
+        </SectionBody>
       )}
       {toast && <ToastBar toast={toast} onDone={() => setToast(null)} />}
     </SectionLayout>

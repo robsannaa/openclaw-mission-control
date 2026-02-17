@@ -357,6 +357,40 @@ function GenericTooltip({
   );
 }
 
+function ModelMixTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: TooltipRow[];
+}) {
+  if (!active || !payload?.length) return null;
+  const row = (payload[0]?.payload || {}) as ChartPoint;
+  const modelName = String(row.model || "");
+  const input = Number(row.input || 0);
+  const output = Number(row.output || 0);
+  const total = input + output;
+  const split = ratio(input, output);
+  return (
+    <div className="rounded-xl border border-foreground/[0.1] bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
+      <p className="text-[11px] font-medium text-foreground/90">{shortModel(modelName)}</p>
+      <div className="mt-1.5 space-y-1 text-[11px]">
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-sky-400">input</span>
+          <span className="font-mono text-foreground/90">{fmtTokensLong(input)} ({split.inPct}%)</span>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <span className="text-orange-400">output</span>
+          <span className="font-mono text-foreground/90">{fmtTokensLong(output)} ({split.outPct}%)</span>
+        </div>
+        <div className="mt-1 border-t border-foreground/[0.08] pt-1.5 text-[11px] font-semibold text-foreground/90">
+          Total {fmtTokensLong(total)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function UsageView() {
   const [data, setData] = useState<UsageData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -621,8 +655,19 @@ export function UsageView() {
                     <BarChart
                       data={modelChart}
                       layout="vertical"
-                      margin={{ top: 6, right: 8, left: 2, bottom: 4 }}
+                      margin={{ top: 6, right: 8, left: 4, bottom: 4 }}
+                      barCategoryGap="26%"
                     >
+                      <defs>
+                        <linearGradient id="mixInput" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#4fb8f4" stopOpacity={0.92} />
+                          <stop offset="100%" stopColor="#39aee8" stopOpacity={0.86} />
+                        </linearGradient>
+                        <linearGradient id="mixOutput" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#f59a52" stopOpacity={0.95} />
+                          <stop offset="100%" stopColor="#ec8441" stopOpacity={0.9} />
+                        </linearGradient>
+                      </defs>
                       <CartesianGrid stroke={USAGE_COLORS.grid} strokeDasharray="3 3" horizontal={false} />
                       <XAxis
                         type="number"
@@ -634,15 +679,16 @@ export function UsageView() {
                       <YAxis
                         type="category"
                         dataKey="model"
-                        width={112}
+                        width={104}
+                        tickFormatter={(v) => shortModel(String(v))}
                         tick={{ fontSize: 11, fill: USAGE_COLORS.text }}
                         axisLine={false}
                         tickLine={false}
                       />
-                      <Tooltip content={<GenericTooltip />} cursor={false} />
+                      <Tooltip content={<ModelMixTooltip />} cursor={false} />
                       <Legend wrapperStyle={{ fontSize: 11, color: USAGE_COLORS.text }} />
-                      <Bar dataKey="input" stackId="tokens" fill={USAGE_COLORS.input} radius={[4, 0, 0, 4]} />
-                      <Bar dataKey="output" stackId="tokens" fill={USAGE_COLORS.output} radius={[0, 4, 4, 0]} />
+                      <Bar dataKey="input" stackId="tokens" fill="url(#mixInput)" radius={[4, 0, 0, 4]} activeBar={false} />
+                      <Bar dataKey="output" stackId="tokens" fill="url(#mixOutput)" radius={[0, 4, 4, 0]} activeBar={false} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

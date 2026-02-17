@@ -8,8 +8,8 @@ import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-
 type Session = {
   key: string;
   kind: string;
-  updatedAt: number;
-  ageMs: number;
+  updatedAt?: number | null;
+  ageMs?: number | null;
   sessionId: string;
   inputTokens: number;
   outputTokens: number;
@@ -32,6 +32,17 @@ function formatAge(ms: number): string {
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h`;
   return `${Math.floor(hours / 24)}d`;
+}
+
+function getAgeMs(session: Session): number | null {
+  const ageMs = Number(session.ageMs);
+  if (Number.isFinite(ageMs) && ageMs >= 0) return ageMs;
+
+  const updatedAt = Number(session.updatedAt);
+  if (Number.isFinite(updatedAt) && updatedAt > 0) {
+    return Math.max(0, Date.now() - updatedAt);
+  }
+  return null;
 }
 
 function sessionLabel(key: string): { type: string; badge: string } {
@@ -116,6 +127,8 @@ export function SessionsView() {
           const { type, badge } = sessionLabel(s.key);
           const isConfirming = confirmDelete === s.key;
           const isDeleting = deleting === s.key;
+          const ageMs = getAgeMs(s);
+          const ageLabel = ageMs === null ? "Unknown" : `${formatAge(ageMs)} ago`;
           return (
             <div
               key={s.key}
@@ -134,7 +147,7 @@ export function SessionsView() {
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px] text-muted-foreground">
                     <span className="flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> {formatAge(s.ageMs)} ago
+                      <Clock className="h-3 w-3" /> {ageLabel}
                     </span>
                     <span className="flex items-center gap-1">
                       <Zap className="h-3 w-3" /> {formatTokens(s.totalTokens)} tokens

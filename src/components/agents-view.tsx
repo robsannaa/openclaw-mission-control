@@ -77,11 +77,17 @@ type Agent = {
   status: "active" | "idle" | "unknown";
 };
 
+type ConfiguredChannel = {
+  channel: string;
+  enabled: boolean;
+};
+
 type AgentsResponse = {
   agents: Agent[];
   owner: string | null;
   defaultModel: string;
   defaultFallbacks: string[];
+  configuredChannels?: ConfiguredChannel[];
 };
 
 /* ================================================================
@@ -299,17 +305,32 @@ function buildGraph(
   const edges: Edge[] = [];
   const agents = data.agents;
 
-  // Gather unique channels and workspaces
-  const channelMap = new Map<string, string[]>(); // channel → account ids
+  // Gather unique channels/workspaces and explicit binding routes.
+  const channelMap = new Map<string, Set<string>>(); // channel → account ids
   const workspaceMap = new Map<string, string[]>(); // workspace → agent names
+  const channelRoutes = new Map<
+    string,
+    Array<{ agentId: string; accountId: string | null; raw: string }>
+  >(); // channel -> explicit routes
+
+  for (const ch of data.configuredChannels || []) {
+    if (ch.enabled && ch.channel) channelMap.set(ch.channel, new Set());
+  }
 
   for (const a of agents) {
     for (const b of a.bindings) {
-      const ch = b.split(" ")[0];
+      const ch = b.split(" ")[0]?.trim();
+      if (!ch) continue;
       const accMatch = b.match(/accountId=(\S+)/);
-      const accId = accMatch ? accMatch[1] : a.id;
-      if (!channelMap.has(ch)) channelMap.set(ch, []);
-      channelMap.get(ch)!.push(accId);
+      const accId = accMatch ? accMatch[1] : null;
+      if (!channelMap.has(ch)) channelMap.set(ch, new Set());
+      if (accId) channelMap.get(ch)!.add(accId);
+      if (!channelRoutes.has(ch)) channelRoutes.set(ch, []);
+      channelRoutes.get(ch)!.push({
+        agentId: a.id,
+        accountId: accId,
+        raw: b,
+      });
     }
     if (!workspaceMap.has(a.workspace)) workspaceMap.set(a.workspace, []);
     workspaceMap.get(a.workspace)!.push(a.name);
@@ -319,6 +340,11 @@ function buildGraph(
   const subagentIds = new Set(agents.flatMap((a) => a.subagents));
   const topLevelAgents = agents.filter((a) => !subagentIds.has(a.id));
   const subAgents = agents.filter((a) => subagentIds.has(a.id));
+  const defaultAgent =
+    agents.find((a) => a.isDefault) ||
+    agents.find((a) => a.id === "main") ||
+    agents[0] ||
+    null;
 
   // ── Dynamic layout ──
   // Center everything around (0, 0) so fitView works well.
@@ -410,7 +436,7 @@ function buildGraph(
       draggable: true,
     });
 
-    // Parent → Sub-agent (dashed "delegates" edge)
+    // Parent → Sub-agent (delegation hierarchy)
     if (parent) {
       edges.push({
         id: `sub-${parent.id}-${sub.id}`,
@@ -420,7 +446,7 @@ function buildGraph(
         targetHandle: "parent",
         type: "default",
         animated: true,
-        style: { stroke: "#06b6d4", strokeWidth: 1.5, strokeDasharray: "6 3" },
+        style: { stroke: "#06b6d4", strokeWidth: 1.5, strokeDasharray: "5 4" },
         label: "delegates",
         labelStyle: { fill: "#06b6d4", fontSize: 10 },
         labelBgStyle: { fill: "var(--card)", fillOpacity: 0.9 },
@@ -433,12 +459,12 @@ function buildGraph(
       });
     }
 
-    // Also connect sub-agent to gateway (thin line)
+    // Also connect sub-agent to gateway (same gateway hierarchy style)
     edges.push({
       id: `gw-${sub.id}`,
       source: "gateway",
       target: `agent-${sub.id}`,
-      style: { stroke: "var(--border)", strokeWidth: 1, strokeDasharray: "4 4" },
+      style: { stroke: "var(--border)", strokeWidth: 1.5 },
       markerEnd: {
         type: MarkerType.ArrowClosed,
         color: "var(--border)",
@@ -449,7 +475,10 @@ function buildGraph(
   }
 
   // ── 4. Channel nodes (left of gateway) ──
-  const channels = Array.from(channelMap.entries());
+  const channels = Array.from(channelMap.entries()).map(([channel, accountIds]) => [
+    channel,
+    Array.from(accountIds),
+  ] as const);
   const chCount = channels.length;
   const chSpacing = Math.max(100, 180);
   const chStartY = GATEWAY_Y - ((chCount - 1) * chSpacing) / 2;
@@ -464,24 +493,38 @@ function buildGraph(
       draggable: true,
     });
 
-    // Channel → Agent (channel sends messages into the agent)
-    for (const a of agents) {
-      if (a.channels.includes(ch)) {
-        edges.push({
-          id: `ch-${ch}-${a.id}`,
-          source: nodeId,
-          target: `agent-${a.id}`,
-          type: "default",
-          style: { stroke: "#0ea5e9", strokeWidth: 1.5 },
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            color: "#0ea5e9",
-            width: 14,
-            height: 10,
-          },
-        });
-      }
-    }
+    // Channel → Agent routes (one edge per explicit binding route).
+    const explicitRoutes = channelRoutes.get(ch) || [];
+    const routes =
+      explicitRoutes.length > 0
+        ? explicitRoutes
+        : defaultAgent
+          ? [{ agentId: defaultAgent.id, accountId: null, raw: "implicit-default" }]
+          : [];
+
+    routes.forEach((route, routeIdx) => {
+      const implicitDefault = route.raw === "implicit-default";
+      edges.push({
+        id: `ch-${ch}-${route.agentId}-${route.accountId || "all"}-${i}-${routeIdx}`,
+        source: nodeId,
+        target: `agent-${route.agentId}`,
+        type: "default",
+        style: { stroke: "#0ea5e9", strokeWidth: implicitDefault ? 1.25 : 1.5 },
+        label: implicitDefault
+          ? "default route"
+          : route.accountId
+            ? route.accountId
+            : "all accounts",
+        labelStyle: { fill: "#38bdf8", fontSize: 10, fontWeight: 500 },
+        labelBgStyle: { fill: "var(--card)", fillOpacity: 0.85 },
+        markerEnd: {
+          type: MarkerType.ArrowClosed,
+          color: "#0ea5e9",
+          width: 14,
+          height: 10,
+        },
+      });
+    });
   });
 
   // ── 5. Workspace nodes (right of agents) ──
@@ -1504,11 +1547,13 @@ function ChannelBindingPicker({
   bindings,
   onAdd,
   onRemove,
+  onChannelsChanged,
   disabled,
 }: {
   bindings: string[];
   onAdd: (binding: string) => void;
   onRemove: (binding: string) => void;
+  onChannelsChanged?: () => void;
   disabled: boolean;
 }) {
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
@@ -1523,7 +1568,7 @@ function ChannelBindingPicker({
 
   const fetchChannels = useCallback(async () => {
     try {
-      const res = await fetch("/api/channels?scope=all");
+      const res = await fetch("/api/channels?scope=all", { cache: "no-store" });
       const data = await res.json();
       setChannels((data.channels || []) as ChannelInfo[]);
     } catch { /* ignore */ }
@@ -1568,11 +1613,12 @@ function ChannelBindingPicker({
         setSetupMode(false);
         // Refresh channels
         await fetchChannels();
+        onChannelsChanged?.();
         setTimeout(() => setSetupSuccess(null), 4000);
       }
     } catch { /* ignore */ }
     setSaving(false);
-  }, [selectedChannel, tokenInput, appTokenInput, fetchChannels]);
+  }, [selectedChannel, tokenInput, appTokenInput, fetchChannels, onChannelsChanged]);
 
   const handleBindChannel = useCallback((ch: ChannelInfo) => {
     const binding = accountId.trim()
@@ -1924,10 +1970,12 @@ function ChannelBindingPicker({
 function AddAgentModal({
   onClose,
   onCreated,
+  onChannelsChanged,
   defaultModel,
 }: {
   onClose: () => void;
   onCreated: () => void;
+  onChannelsChanged?: () => void;
   defaultModel: string;
 }) {
   const [name, setName] = useState("");
@@ -2065,6 +2113,7 @@ function AddAgentModal({
               bindings={bindings}
               onAdd={addBinding}
               onRemove={removeBinding}
+              onChannelsChanged={onChannelsChanged}
               disabled={busy}
             />
           </div>
@@ -2167,6 +2216,7 @@ function EditAgentModal({
   defaultFallbacks: _defaultFallbacks,
   onClose,
   onSaved,
+  onChannelsChanged,
 }: {
   agent: Agent;
   idx: number;
@@ -2175,6 +2225,7 @@ function EditAgentModal({
   defaultFallbacks: string[];
   onClose: () => void;
   onSaved: () => void;
+  onChannelsChanged?: () => void;
 }) {
   /* ── derive initial bindings in channel:accountId format ── */
   const initialBindings = useMemo(
@@ -2202,19 +2253,46 @@ function EditAgentModal({
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch("/api/models?scope=all");
+        // Agent editing should only expose models usable by this instance,
+        // not the full global catalog.
+        const res = await fetch("/api/models?scope=configured", {
+          cache: "no-store",
+        });
         const data = await res.json();
         const all = (data.models || []) as AvailableModel[];
-        const avail = all
+        const allowed = all
           .filter((m) => m.available || m.local)
           .sort((a, b) => (a.name || a.key).localeCompare(b.name || b.key));
-        setModels(avail);
+
+        // Keep currently configured values visible even if provider auth changed.
+        const byKey = new Map<string, AvailableModel>(
+          allowed.map((m) => [m.key, m])
+        );
+        const ensureModel = (key: string) => {
+          if (!key || byKey.has(key)) return;
+          byKey.set(key, {
+            key,
+            name: key.split("/").pop() || key,
+            available: false,
+            local: false,
+            contextWindow: 0,
+          });
+        };
+        ensureModel(agent.model);
+        for (const fallback of agent.fallbackModels || []) ensureModel(fallback);
+        ensureModel(defaultModel);
+
+        setModels(
+          [...byKey.values()].sort((a, b) =>
+            (a.name || a.key).localeCompare(b.name || b.key)
+          )
+        );
       } catch {
         /* ignore */
       }
       setModelsLoading(false);
     })();
-  }, []);
+  }, [agent.fallbackModels, agent.model, defaultModel]);
 
   /* ── Channel binding wizard state ── */
   /* ── Keyboard ── */
@@ -2526,6 +2604,7 @@ function EditAgentModal({
               bindings={bindings}
               onAdd={addBinding}
               onRemove={removeBinding}
+              onChannelsChanged={onChannelsChanged}
               disabled={busy}
             />
           </div>
@@ -2616,24 +2695,48 @@ export function AgentsView() {
 
   const fetchAgents = useCallback(async () => {
     try {
-      const res = await fetch("/api/agents");
+      const res = await fetch("/api/agents", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
       setError(null);
-      if (!selectedId && json.agents.length > 0) {
+      setSelectedId((prev) => {
+        if (prev && json.agents.some((a: Agent) => a.id === prev)) return prev;
+        if (json.agents.length === 0) return null;
         const def = json.agents.find((a: Agent) => a.isDefault);
-        setSelectedId(def?.id || json.agents[0].id);
-      }
+        return def?.id || json.agents[0].id;
+      });
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
     }
-  }, [selectedId]);
+  }, []);
 
   useEffect(() => {
     fetchAgents();
+  }, [fetchAgents]);
+
+  useEffect(() => {
+    const pollId = window.setInterval(() => {
+      void fetchAgents();
+    }, 5000);
+    return () => window.clearInterval(pollId);
+  }, [fetchAgents]);
+
+  useEffect(() => {
+    const handleFocus = () => {
+      void fetchAgents();
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") void fetchAgents();
+    };
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, [fetchAgents]);
 
   const selectedAgent = useMemo(
@@ -2766,8 +2869,10 @@ export function AgentsView() {
         <AddAgentModal
           onClose={() => setShowAddModal(false)}
           onCreated={() => {
-            setLoading(true);
-            fetchAgents();
+            void fetchAgents();
+          }}
+          onChannelsChanged={() => {
+            void fetchAgents();
           }}
           defaultModel={data.defaultModel}
         />
@@ -2783,8 +2888,10 @@ export function AgentsView() {
           defaultFallbacks={data.defaultFallbacks}
           onClose={() => setEditingAgentId(null)}
           onSaved={() => {
-            setLoading(true);
-            fetchAgents();
+            void fetchAgents();
+          }}
+          onChannelsChanged={() => {
+            void fetchAgents();
           }}
         />
       )}

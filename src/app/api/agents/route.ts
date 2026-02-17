@@ -86,6 +86,42 @@ export async function GET() {
     const defaultWorkspace =
       (defaults.workspace as string) || getDefaultWorkspaceSync();
 
+    const discoveredDefaultAgentId =
+      cliAgents.find((a) => a.isDefault)?.id ||
+      (configList.find((c) => String(c.id || "") === "main")?.id as string | undefined) ||
+      (configList.find((c) => typeof c.id === "string")?.id as string | undefined) ||
+      "main";
+
+    // Bindings in openclaw.json are the persisted routing truth.
+    // Merge with CLI-reported bindings to avoid stale UI after recent edits.
+    const configBindingsByAgent = new Map<string, string[]>();
+    const configBindings = (config.bindings || []) as Record<string, unknown>[];
+    for (const binding of configBindings) {
+      const agentId = String(binding.agentId || discoveredDefaultAgentId).trim();
+      const match = (binding.match || {}) as Record<string, unknown>;
+      const channel = String(match.channel || "").trim();
+      const accountId = String(match.accountId || "").trim();
+      if (!channel) continue;
+      const label = accountId ? `${channel} accountId=${accountId}` : channel;
+      const existing = configBindingsByAgent.get(agentId) || [];
+      if (!existing.includes(label)) existing.push(label);
+      configBindingsByAgent.set(agentId, existing);
+    }
+
+    // Channels configured at instance level (whether bound or not).
+    const configuredChannels = Object.entries(
+      (config.channels || {}) as Record<string, unknown>
+    ).map(([channel, rawCfg]) => {
+      const channelCfg =
+        rawCfg && typeof rawCfg === "object"
+          ? (rawCfg as Record<string, unknown>)
+          : {};
+      return {
+        channel,
+        enabled: Boolean(channelCfg.enabled),
+      };
+    });
+
     // Build a lookup from config list
     const configMap = new Map<string, Record<string, unknown>>();
     for (const c of configList) {
@@ -160,7 +196,13 @@ export async function GET() {
       const subagents = (subagentsCfg?.allowAgents as string[]) || [];
 
       // Bindings / channels
-      const bindings = cli?.bindingDetails || [];
+      const cliBindings = (cli?.bindingDetails || []).map((b) => b.trim());
+      const persistedBindings = configBindingsByAgent.get(id) || [];
+      const bindings = Array.from(
+        new Set(
+          [...persistedBindings, ...cliBindings].filter((b) => Boolean(b))
+        )
+      );
       const channels: string[] = [];
       for (const b of bindings) {
         const ch = b.split(" ")[0];
@@ -267,6 +309,7 @@ export async function GET() {
       owner: ownerName,
       defaultModel: defaultPrimary,
       defaultFallbacks,
+      configuredChannels,
     });
   } catch (err) {
     console.error("Agents API error:", err);

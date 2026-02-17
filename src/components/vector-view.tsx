@@ -186,7 +186,21 @@ function AgentIndexCard({ agent, onReindex, reindexing }: { agent: AgentMemory; 
   );
 }
 
-function EmbeddingModelEditor({ currentProvider, currentModel, currentDims, onSave, saving }: { currentProvider: string; currentModel: string; currentDims: number | null; onSave: (p: string, m: string) => void; saving: boolean }) {
+function EmbeddingModelEditor({
+  currentProvider,
+  currentModel,
+  currentDims,
+  currentBackend,
+  onSave,
+  saving,
+}: {
+  currentProvider: string;
+  currentModel: string;
+  currentDims: number | null;
+  currentBackend: string;
+  onSave: (p: string, m: string) => void;
+  saving: boolean;
+}) {
   const [editing, setEditing] = useState(false);
   const [provider, setProvider] = useState(currentProvider);
   const [model, setModel] = useState(currentModel);
@@ -236,13 +250,13 @@ function EmbeddingModelEditor({ currentProvider, currentModel, currentDims, onSa
   if (!editing) return (
     <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90"><Cpu className="h-4 w-4 text-violet-400" />Embedding Model</div>
+        <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90"><Cpu className="h-4 w-4 text-violet-400" />Index Control Plane</div>
         <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 rounded-lg bg-foreground/[0.06] px-3 py-1.5 text-[11px] font-medium text-foreground/70 hover:bg-foreground/[0.1]"><Pencil className="h-3 w-3" />Change</button>
       </div>
       <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2"><p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Provider</p><p className="text-[13px] font-mono text-foreground/90 mt-0.5">{currentProvider}</p></div>
-        <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2"><p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Model</p><p className="text-[13px] font-mono text-foreground/90 mt-0.5 truncate" title={currentModel}>{currentModel}</p></div>
-        <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2"><p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Dimensions</p><p className="text-[13px] font-mono text-foreground/90 mt-0.5">{currentDims || "\u2014"}</p></div>
+        <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2"><p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Model</p><p className="text-[13px] font-mono text-foreground/90 mt-0.5 truncate" title={currentModel}>{currentModel}</p><p className="mt-1 text-[10px] text-muted-foreground/70">{currentDims ? `${currentDims}d embeddings` : "\u2014"}</p></div>
+        <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2"><p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground/60">Backend</p><p className="text-[13px] font-mono text-foreground/90 mt-0.5">{currentBackend || "\u2014"}</p></div>
       </div>
     </div>
   );
@@ -622,10 +636,14 @@ export function VectorView() {
   const totalChunks = agents.reduce((s, a) => s + a.status.chunks, 0);
   const totalFiles = agents.reduce((s, a) => s + a.status.files, 0);
   const totalDb = agents.reduce((s, a) => s + a.dbSizeBytes, 0);
+  const dirtyNamespaces = agents.filter((a) => a.status.dirty).length;
+  const vectorReadyNamespaces = agents.filter((a) => a.status.vector.available).length;
+  const ftsReadyNamespaces = agents.filter((a) => a.status.fts.available).length;
   const primary = agents.find((a) => a.agentId === "main") || agents[0];
   const curProv = primary?.status.provider || "";
   const curModel = primary?.status.model || "";
   const curDims = primary?.status.vector.dims || null;
+  const curBackend = primary?.status.backend || "";
 
   // Determine if setup is needed:
   // - No agents returned, OR
@@ -675,11 +693,18 @@ export function VectorView() {
           <OverviewStat icon={Layers} value={String(totalChunks)} label="Total Chunks" color="text-violet-400" />
           <OverviewStat icon={FileText} value={String(totalFiles)} label="Indexed Files" color="text-sky-400" />
           <OverviewStat icon={HardDrive} value={formatBytes(totalDb)} label="DB Size" color="text-emerald-400" />
-          <OverviewStat icon={Hash} value={curDims ? curDims + "d" : "\u2014"} label="Dimensions" color="text-amber-400" />
-          <OverviewStat icon={Activity} value={String(agents.length)} label="Namespaces" sub={agents.map((a) => a.agentId).join(", ")} color="text-pink-400" />
+          <OverviewStat icon={Activity} value={`${agents.length - dirtyNamespaces}/${agents.length}`} label="Index Health" sub={dirtyNamespaces > 0 ? `${dirtyNamespaces} namespace${dirtyNamespaces > 1 ? "s" : ""} need reindex` : "All namespaces clean"} color={dirtyNamespaces > 0 ? "text-amber-400" : "text-emerald-400"} />
+          <OverviewStat icon={Hash} value={`${vectorReadyNamespaces}/${agents.length}`} label="Vector Ready" sub={`FTS ${ftsReadyNamespaces}/${agents.length}`} color="text-pink-400" />
         </div>
 
-        <EmbeddingModelEditor currentProvider={curProv} currentModel={curModel} currentDims={curDims} onSave={handleUpdateModel} saving={saving} />
+        <EmbeddingModelEditor
+          currentProvider={curProv}
+          currentModel={curModel}
+          currentDims={curDims}
+          currentBackend={curBackend}
+          onSave={handleUpdateModel}
+          saving={saving}
+        />
 
         <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4 space-y-3">
           <div className="flex items-center gap-2 text-[13px] font-semibold text-foreground/90"><Search className="h-4 w-4 text-violet-400" />Query Console</div>

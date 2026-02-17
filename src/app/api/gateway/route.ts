@@ -1,10 +1,21 @@
 import { NextResponse } from "next/server";
 import { runCliJson } from "@/lib/openclaw-cli";
-import { getOpenClawBin, getGatewayPort } from "@/lib/paths";
+import { getOpenClawBin } from "@/lib/paths";
 import { execFile } from "child_process";
 import { promisify } from "util";
 
 const exec = promisify(execFile);
+
+async function runGatewayServiceCommand(
+  subcommand: "restart" | "stop" | "start",
+  timeout = 25000
+): Promise<{ stdout: string; stderr: string }> {
+  const bin = await getOpenClawBin();
+  return exec(bin, ["gateway", subcommand], {
+    timeout,
+    env: { ...process.env, NO_COLOR: "1" },
+  });
+}
 
 /**
  * GET /api/gateway - Returns comprehensive gateway health status.
@@ -53,30 +64,24 @@ export async function POST(req: Request) {
     const action = body.action as string;
 
     if (action === "restart" || action === "stop") {
-      // Find the gateway PID
-      let pid: number | null = null;
-      try {
-        // Look for the openclaw-gateway process
-        const { stdout } = await exec("pgrep", ["-f", "openclaw-gateway"], {
-          timeout: 5000,
-        });
-        const pids = stdout
-          .trim()
-          .split("\n")
-          .map((p) => parseInt(p, 10))
-          .filter((p) => !isNaN(p));
-        if (pids.length > 0) pid = pids[0];
-      } catch {
-        // pgrep returns exit code 1 if no match
-      }
-
-      // Also try lsof on the configured gateway port
-      if (!pid) {
+      // Prefer service-manager commands (launchd/systemd/schtasks).
+      // This avoids port-collision loops caused by manually spawning a second gateway process.
+      if (action === "stop") {
         try {
-          const gwPort = await getGatewayPort();
-          const { stdout } = await exec("lsof", ["-i", `:${gwPort}`, "-t"], {
-            timeout: 5000,
+          const out = await runGatewayServiceCommand("stop");
+          return NextResponse.json({
+            ok: true,
+            message: "Gateway stop requested via service manager",
+            output: `${out.stdout}\n${out.stderr}`.trim(),
+            action: "stop",
           });
+        } catch {
+          // If service control is unavailable, fall back to process kill.
+        }
+
+        let pid: number | null = null;
+        try {
+          const { stdout } = await exec("pgrep", ["-f", "openclaw-gateway"], { timeout: 5000 });
           const pids = stdout
             .trim()
             .split("\n")
@@ -84,42 +89,16 @@ export async function POST(req: Request) {
             .filter((p) => !isNaN(p));
           if (pids.length > 0) pid = pids[0];
         } catch {
-          // no process on port
+          // no running process
         }
-      }
-
-      if (!pid) {
-        if (action === "stop") {
+        if (!pid) {
           return NextResponse.json({
             ok: true,
             message: "Gateway is already stopped",
+            action: "stop",
           });
         }
-        // For restart when not running, try to start it
-        try {
-          // Start in background - don't wait for it
-          const bin = await getOpenClawBin();
-          exec(bin, ["gateway"], {
-            timeout: 3000,
-            env: { ...process.env, NO_COLOR: "1" },
-          }).catch(() => {});
-          return NextResponse.json({
-            ok: true,
-            message: "Gateway start initiated",
-            action: "start",
-          });
-        } catch {
-          return NextResponse.json(
-            { ok: false, error: "Failed to start gateway" },
-            { status: 500 }
-          );
-        }
-      }
-
-      // Send SIGTERM for graceful shutdown
-      process.kill(pid, "SIGTERM");
-
-      if (action === "stop") {
+        process.kill(pid, "SIGTERM");
         return NextResponse.json({
           ok: true,
           message: "Gateway stop signal sent",
@@ -128,22 +107,38 @@ export async function POST(req: Request) {
         });
       }
 
-      // For restart: wait briefly, then start again
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      // Start gateway in background
-      const binPath = await getOpenClawBin();
-      exec(binPath, ["gateway"], {
-        timeout: 3000,
-        env: { ...process.env, NO_COLOR: "1" },
-      }).catch(() => {});
-
-      return NextResponse.json({
-        ok: true,
-        message: "Gateway restart initiated",
-        pid,
-        action: "restart",
-      });
+      // action === "restart"
+      try {
+        const out = await runGatewayServiceCommand("restart", 35000);
+        return NextResponse.json({
+          ok: true,
+          message: "Gateway restart requested via service manager",
+          output: `${out.stdout}\n${out.stderr}`.trim(),
+          action: "restart",
+        });
+      } catch (serviceErr) {
+        // Fallback for unsupervised setups: stop then start via service commands.
+        // Do not call bare `openclaw gateway` to avoid duplicate listeners.
+        try {
+          await runGatewayServiceCommand("stop", 20000).catch(() => null);
+          await new Promise((resolve) => setTimeout(resolve, 800));
+          const out = await runGatewayServiceCommand("start", 25000);
+          return NextResponse.json({
+            ok: true,
+            message: "Gateway start requested (fallback path)",
+            output: `${out.stdout}\n${out.stderr}`.trim(),
+            action: "start",
+          });
+        } catch {
+          return NextResponse.json(
+            {
+              ok: false,
+              error: `Gateway restart failed: ${String(serviceErr)}`,
+            },
+            { status: 500 }
+          );
+        }
+      }
     }
 
     return NextResponse.json(

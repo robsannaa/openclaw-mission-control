@@ -71,6 +71,49 @@ function LinkifiedText({ text, className }: { text: string; className?: string }
   );
 }
 
+function getPostSetupChecklist(channel: string): string[] {
+  switch (channel) {
+    case "discord":
+      return [
+        "Create/configure your app in https://discord.com/developers/applications and enable Message Content Intent.",
+        "Invite the bot to your server with message permissions (or use DMs).",
+        "Start or restart the gateway: `openclaw gateway`.",
+        "Send a DM to the bot (or message it in a server channel where it has access).",
+        "If DM policy is pairing, approve first contact: `openclaw pairing list discord` then `openclaw pairing approve discord <CODE>`.",
+      ];
+    case "telegram":
+      return [
+        "Create/verify token with https://t.me/BotFather (`/newbot`) and ensure it is configured.",
+        "Start or restart the gateway: `openclaw gateway`.",
+        "Open Telegram and send a message to your bot.",
+        "If DM policy is pairing, approve first contact: `openclaw pairing list telegram` then `openclaw pairing approve telegram <CODE>`.",
+        "Optional: add the bot to a group and mention it to validate group routing.",
+      ];
+    case "whatsapp":
+      return [
+        "After QR linking, keep gateway running: `openclaw gateway`.",
+        "Message the linked WhatsApp identity from an allowed number.",
+        "If DM policy is pairing, approve first contact: `openclaw pairing list whatsapp` then `openclaw pairing approve whatsapp <CODE>`.",
+        "For stable ops, use a dedicated WhatsApp number when possible.",
+      ];
+    case "slack":
+      return [
+        "Open https://api.slack.com/apps and confirm Socket Mode is enabled, with valid `xapp-...` and `xoxb-...` tokens.",
+        "Confirm the Slack app is installed to your workspace and required scopes are granted.",
+        "Invite the bot to a channel (or DM it directly).",
+        "Start or restart the gateway: `openclaw gateway`.",
+        "Send a test message and confirm a reply in the same channel.",
+      ];
+    default:
+      return [
+        "Start or restart gateway: `openclaw gateway`.",
+        "Send a test message to this channel integration.",
+        "If pairing is enabled for this channel, approve first contact with `openclaw pairing list <channel>` and `openclaw pairing approve <channel> <CODE>`.",
+        "Check live status with `openclaw channels status`.",
+      ];
+  }
+}
+
 export function ChannelsView() {
   const [channels, setChannels] = useState<ChannelCatalogItem[]>([]);
   const [channelsLoading, setChannelsLoading] = useState(true);
@@ -146,8 +189,11 @@ export function ChannelsView() {
   const openWizard = useCallback(
     (channelId?: string) => {
       const fallback = setupCandidates[0]?.channel || channels[0]?.channel || "";
-      setWizardChannel(channelId || fallback);
-      setWizardStep(1);
+      const targetChannel = channelId || fallback;
+      setWizardChannel(targetChannel);
+      // If user clicked Setup/Reconfigure on a specific channel, jump directly to Configure.
+      // Keep step 1 only for generic "Add Channel".
+      setWizardStep(channelId ? 2 : 1);
       setWizardToken("");
       setWizardAppToken("");
       setWizardAccount("");
@@ -515,6 +561,31 @@ export function ChannelsView() {
                   <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.08] px-3 py-2 text-[11px] text-emerald-200">
                     Setup run completed for <span className="font-semibold">{selectedWizardChannel.label}</span>.
                     {selectedWizardChannel.setupType === "qr" && " If interactive login is required, continue in Terminal."}
+                  </div>
+                  <div className="rounded-lg border border-foreground/[0.08] bg-card/70 px-3 py-2.5">
+                    <p className="text-[11px] font-semibold text-foreground/90">
+                      What to do now
+                    </p>
+                    <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-[11px] text-muted-foreground">
+                      {getPostSetupChecklist(selectedWizardChannel.channel).map((step, idx) => (
+                        <li key={`${selectedWizardChannel.channel}-post-step-${idx}`}>
+                          <span>
+                            <LinkifiedText text={step} />
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                    {selectedWizardChannel.docsUrl && (
+                      <a
+                        href={selectedWizardChannel.docsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-2 inline-flex items-center gap-1 text-[11px] text-violet-300 transition-colors hover:text-violet-200"
+                      >
+                        Open channel docs
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
                   </div>
                   {wizardOutput && (
                     <pre className="max-h-40 overflow-auto rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-[10px] text-muted-foreground whitespace-pre-wrap">

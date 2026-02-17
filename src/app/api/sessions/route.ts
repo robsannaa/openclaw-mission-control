@@ -6,15 +6,30 @@ export const dynamic = "force-dynamic";
 type Session = {
   key: string;
   kind: string;
-  updatedAt: number;
-  ageMs: number;
+  updatedAt?: number | string | null;
+  ageMs?: number | string | null;
   sessionId: string;
-  inputTokens: number;
-  outputTokens: number;
-  totalTokens: number;
-  model: string;
-  contextTokens: number;
+  inputTokens?: number | string | null;
+  outputTokens?: number | string | null;
+  totalTokens?: number | string | null;
+  model?: string | null;
+  contextTokens?: number | string | null;
+  [key: string]: unknown;
 };
+
+function toEpochMs(value: unknown): number | null {
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(num)) return null;
+  if (num <= 0) return null;
+  // Accept seconds-based timestamps and normalize to milliseconds.
+  return num < 1_000_000_000_000 ? Math.trunc(num * 1000) : Math.trunc(num);
+}
+
+function toNonNegativeNumber(value: unknown, fallback = 0): number {
+  const num = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(num) || num < 0) return fallback;
+  return num;
+}
 
 export async function GET() {
   try {
@@ -23,7 +38,34 @@ export async function GET() {
       sessions: Session[];
       defaults: Record<string, unknown>;
     }>("sessions.list");
-    return NextResponse.json(data);
+    const now = Date.now();
+    const rawSessions = Array.isArray(data.sessions) ? data.sessions : [];
+    const sessions = rawSessions
+      .map((session) => {
+        const updatedAt = toEpochMs(session.updatedAt);
+        const rawAgeMs = toNonNegativeNumber(session.ageMs, -1);
+        const computedAgeMs =
+          updatedAt !== null ? Math.max(0, now - updatedAt) : 0;
+        const ageMs = rawAgeMs >= 0 ? rawAgeMs : computedAgeMs;
+
+        return {
+          ...session,
+          updatedAt: updatedAt ?? 0,
+          ageMs,
+          inputTokens: toNonNegativeNumber(session.inputTokens),
+          outputTokens: toNonNegativeNumber(session.outputTokens),
+          totalTokens: toNonNegativeNumber(session.totalTokens),
+          contextTokens: toNonNegativeNumber(session.contextTokens),
+          model: String(session.model || "unknown"),
+        };
+      })
+      .sort((a, b) => (b.updatedAt as number) - (a.updatedAt as number));
+
+    return NextResponse.json({
+      ...data,
+      count: sessions.length,
+      sessions,
+    });
   } catch (err) {
     console.error("Sessions GET error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
