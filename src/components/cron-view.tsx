@@ -310,6 +310,24 @@ function RunCard({ run }: { run: RunEntry }) {
 
 /* ── Known delivery target type ───────────────────── */
 type KnownTarget = { target: string; channel: string; source: string };
+type ChannelInfo = {
+  channel: string;
+  label: string;
+  enabled: boolean;
+  configured: boolean;
+  setupType: "qr" | "token" | "cli" | "auto";
+  statuses: { connected?: boolean; linked?: boolean; error?: string }[];
+};
+
+const CHANNEL_PLACEHOLDER: Record<string, string> = {
+  telegram: "telegram:CHAT_ID",
+  discord: "discord:CHANNEL_ID",
+  whatsapp: "+15555550123",
+  slack: "slack:CHANNEL_ID",
+  signal: "+15555550123",
+  webchat: "webchat:ROOM_ID",
+  web: "web:ROOM_ID",
+};
 
 /* ── Edit form ───────────────────────────────────── */
 
@@ -342,6 +360,7 @@ function EditCronForm({
   const [to, setTo] = useState(job.delivery.to || "");
   const [customTo, setCustomTo] = useState(false); // true = manual entry mode
   const [knownTargets, setKnownTargets] = useState<KnownTarget[]>([]);
+  const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [targetsLoading, setTargetsLoading] = useState(true);
 
   const [confirmDel, setConfirmDel] = useState(false);
@@ -358,15 +377,41 @@ function EditCronForm({
       }
       setTargetsLoading(false);
     })();
+    (async () => {
+      try {
+        const res = await fetch("/api/channels?scope=all", { cache: "no-store" });
+        const data = await res.json();
+        setChannels((data.channels || []) as ChannelInfo[]);
+      } catch {
+        /* ignore */
+      }
+    })();
   }, []);
+
+  const readyChannels = useMemo(() => {
+    return channels.filter((ch) => {
+      if (ch.setupType === "auto") return true;
+      if (!ch.enabled && !ch.configured) return false;
+      if (ch.enabled) {
+        if (ch.statuses.some((s) => s.connected || s.linked)) return true;
+        if (ch.statuses.some((s) => s.error)) return false;
+      }
+      return ch.configured || ch.enabled;
+    });
+  }, [channels]);
+  const readyChannelKeys = useMemo(
+    () => new Set(readyChannels.map((c) => c.channel)),
+    [readyChannels]
+  );
 
   // Filter targets by selected channel
   const filteredTargets = useMemo(() => {
-    if (!channel) return knownTargets;
-    return knownTargets.filter(
-      (t) => t.channel === channel || !t.channel
+    const base = knownTargets.filter(
+      (t) => !t.channel || readyChannelKeys.has(t.channel)
     );
-  }, [knownTargets, channel]);
+    if (!channel) return base;
+    return base.filter((t) => t.channel === channel || !t.channel);
+  }, [knownTargets, channel, readyChannelKeys]);
 
   // If the current `to` value isn't in the known targets, switch to custom mode
   useEffect(() => {
@@ -521,9 +566,16 @@ function EditCronForm({
                 className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none disabled:opacity-40"
               >
                 <option value="">Select channel</option>
-                <option value="telegram">Telegram</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="discord">Discord</option>
+                {readyChannels.map((ch) => (
+                  <option key={ch.channel} value={ch.channel}>
+                    {ch.label || ch.channel}
+                  </option>
+                ))}
+                {channel && !readyChannelKeys.has(channel) && (
+                  <option value={channel}>
+                    {channel} (currently unavailable)
+                  </option>
+                )}
               </select>
             </div>
             <div>
@@ -575,20 +627,12 @@ function EditCronForm({
                 </div>
               ) : (
                 <div className="space-y-1.5">
-                  <input
-                    value={to}
-                    onChange={(e) => setTo(e.target.value)}
-                    placeholder={
-                      channel === "telegram"
-                        ? "telegram:CHAT_ID"
-                        : channel === "discord"
-                          ? "discord:CHANNEL_ID"
-                          : channel === "whatsapp"
-                            ? "+15555550123"
-                            : "telegram:CHAT_ID"
-                    }
-                    className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 font-mono text-[12px] text-foreground/70 outline-none focus:border-violet-500/30"
-                  />
+                    <input
+                      value={to}
+                      onChange={(e) => setTo(e.target.value)}
+                      placeholder={CHANNEL_PLACEHOLDER[channel] || "channel:TARGET_ID"}
+                      className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 font-mono text-[12px] text-foreground/70 outline-none focus:border-violet-500/30"
+                    />
                   {filteredTargets.length > 0 && (
                     <button
                       type="button"
@@ -774,6 +818,7 @@ function CreateCronForm({
   // ── Data loading ──
   const [agents, setAgents] = useState<{ id: string; name?: string }[]>([]);
   const [knownTargets, setKnownTargets] = useState<KnownTarget[]>([]);
+  const [channels, setChannels] = useState<ChannelInfo[]>([]);
   const [targetsLoading, setTargetsLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -800,13 +845,39 @@ function CreateCronForm({
       } catch { /* ignore */ }
       setTargetsLoading(false);
     })();
+    (async () => {
+      try {
+        const res = await fetch("/api/channels?scope=all", { cache: "no-store" });
+        const data = await res.json();
+        setChannels((data.channels || []) as ChannelInfo[]);
+      } catch { /* ignore */ }
+    })();
   }, []);
+
+  const readyChannels = useMemo(() => {
+    return channels.filter((ch) => {
+      if (ch.setupType === "auto") return true;
+      if (!ch.enabled && !ch.configured) return false;
+      if (ch.enabled) {
+        if (ch.statuses.some((s) => s.connected || s.linked)) return true;
+        if (ch.statuses.some((s) => s.error)) return false;
+      }
+      return ch.configured || ch.enabled;
+    });
+  }, [channels]);
+  const readyChannelKeys = useMemo(
+    () => new Set(readyChannels.map((c) => c.channel)),
+    [readyChannels]
+  );
 
   // Filter targets by selected channel
   const filteredTargets = useMemo(() => {
-    if (!channel) return knownTargets;
-    return knownTargets.filter((t) => t.channel === channel || !t.channel);
-  }, [knownTargets, channel]);
+    const base = knownTargets.filter(
+      (t) => !t.channel || readyChannelKeys.has(t.channel)
+    );
+    if (!channel) return base;
+    return base.filter((t) => t.channel === channel || !t.channel);
+  }, [knownTargets, channel, readyChannelKeys]);
 
   // Auto-set deleteAfterRun for "at" schedules
   useEffect(() => {
@@ -1198,12 +1269,17 @@ function CreateCronForm({
                   className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 text-[12px] text-foreground/70 outline-none disabled:opacity-40"
                 >
                   <option value="">Auto-detect</option>
-                  <option value="telegram">Telegram</option>
-                  <option value="whatsapp">WhatsApp</option>
-                  <option value="discord">Discord</option>
-                  <option value="slack">Slack</option>
-                  <option value="signal">Signal</option>
+                  {readyChannels.map((ch) => (
+                    <option key={ch.channel} value={ch.channel}>
+                      {ch.label || ch.channel}
+                    </option>
+                  ))}
                   <option value="last">Last used channel</option>
+                  {channel && channel !== "last" && !readyChannelKeys.has(channel) && (
+                    <option value={channel}>
+                      {channel} (currently unavailable)
+                    </option>
+                  )}
                 </select>
               </div>
               <div>
@@ -1239,7 +1315,11 @@ function CreateCronForm({
                     <input
                       value={to}
                       onChange={(e) => setTo(e.target.value)}
-                      placeholder={channel === "telegram" ? "telegram:CHAT_ID" : channel === "discord" ? "discord:CHANNEL_ID" : channel === "whatsapp" ? "+15555550123" : "telegram:CHAT_ID"}
+                      placeholder={
+                        channel === "last"
+                          ? "Auto from last active channel"
+                          : CHANNEL_PLACEHOLDER[channel] || "channel:TARGET_ID"
+                      }
                       className="w-full rounded-lg border border-foreground/[0.08] bg-muted/80 px-3 py-2 font-mono text-[12px] text-foreground/70 outline-none focus:border-violet-500/30"
                     />
                     {filteredTargets.length > 0 && (
