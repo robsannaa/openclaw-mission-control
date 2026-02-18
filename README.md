@@ -50,11 +50,12 @@ openclaw --version
 
 ### Install the Dashboard / 安装仪表盘
 
-Clone this repo **anywhere** (it auto-discovers your OpenClaw installation):
+Clone this repo inside your OpenClaw home folder (recommended: `~/.openclaw`):
 
-将此仓库克隆到**任意位置**（它会自动发现你的 OpenClaw 安装）：
+建议将此仓库克隆到 OpenClaw 主目录中（推荐：`~/.openclaw`）：
 
 ```bash
+cd ~/.openclaw
 git clone https://github.com/robsannaa/openclaw-mission-control.git
 cd openclaw-mission-control
 ./setup.sh
@@ -245,9 +246,9 @@ This local AI management tool **auto-discovers** your OpenClaw installation at s
 3. **Agents / 智能体** — reads `openclaw.json` and scans agent directories / 读取 `openclaw.json` 并扫描智能体目录
 4. **Workspaces / 工作空间** — discovers all workspace directories from your config / 从配置中发现所有工作空间目录
 
-**You can clone this repo anywhere.** It doesn't need to be inside `~/.openclaw` or any specific location.
+**Recommended clone location: `~/.openclaw`.** This keeps paths and tooling behavior predictable and avoids accidental multi-install confusion.
 
-**你可以把仓库克隆到任何地方。** 不需要放在 `~/.openclaw` 或任何特定位置。
+**推荐克隆路径：`~/.openclaw`。** 这样路径和工具行为更可预测，也能避免多处安装导致的混淆。
 
 ---
 
@@ -337,11 +338,12 @@ If that doesn't work, [install OpenClaw first](https://docs.openclaw.ai/install)
 <details>
 <summary><strong>Can I run this on a remote server? / 可以在远程服务器上运行吗？</strong></summary>
 
-Yes! Clone it on any machine where OpenClaw is installed:
+Yes! On the remote machine, clone it inside that machine's `~/.openclaw`:
 
-可以！在任何安装了 OpenClaw 的机器上克隆：
+可以！在远程机器上，建议克隆到该机器的 `~/.openclaw`：
 
 ```bash
+cd ~/.openclaw
 git clone https://github.com/robsannaa/openclaw-mission-control.git
 cd openclaw-mission-control
 npm install
