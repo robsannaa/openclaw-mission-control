@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-geist-mono);
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -179,20 +179,44 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: var(--font-geist-mono), ui-monospace, "SF Mono", Monaco, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, "Liberation Mono", monospace;
   }
 }
 
 @layer components {
+  /* Liquid glass panels — frosted, translucent */
   .mc-panel {
-    @apply rounded-2xl border border-border/70 bg-card/60 p-4 md:p-5;
+    @apply rounded-2xl border border-white/20 dark:border-white/10 p-4 md:p-5;
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(20px) saturate(1.2);
+    -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  }
+
+  .dark .mc-panel {
+    background: rgba(17, 17, 20, 0.5);
+    border-color: rgba(255, 255, 255, 0.08);
   }
 
   .mc-subpanel {
-    @apply rounded-lg border border-border/70 bg-muted/25 p-2.5;
+    @apply rounded-lg border border-white/15 dark:border-white/10 p-2.5;
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .dark .mc-subpanel {
+    background: rgba(255, 255, 255, 0.04);
   }
 
   .mc-control {
-    @apply rounded-lg border border-border bg-background/80;
+    @apply rounded-lg border border-border;
+    background: rgba(255, 255, 255, 0.5);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .dark .mc-control {
+    background: rgba(255, 255, 255, 0.06);
   }
 
   .mc-action-btn {
@@ -212,23 +236,40 @@
   }
 }
 
-/* Space background — dark mode only */
+/* Apple-style liquid glass background */
 body {
   position: relative;
   min-height: 100vh;
   background-color: var(--background);
-  transition: background-color 0.3s ease;
+  transition: background-color 0.4s ease, background-image 0.4s ease;
 }
 
-.dark body {
-  background-color: #040408;
+/* Light: liquid glass — frosted orbs (lavender, blue, cool gray) */
+html:not(.dark) body {
+  background-color: #eef0f5;
   background-image:
-    radial-gradient(ellipse at 15% 85%, rgba(6, 95, 70, 0.12) 0%, transparent 45%),
-    radial-gradient(ellipse at 80% 20%, rgba(30, 58, 138, 0.10) 0%, transparent 45%),
-    radial-gradient(ellipse at 50% 50%, rgba(20, 30, 48, 0.15) 0%, transparent 60%),
-    radial-gradient(ellipse at 70% 70%, rgba(15, 50, 40, 0.06) 0%, transparent 40%);
+    radial-gradient(ellipse 110% 90% at 15% 15%, rgba(255, 255, 255, 0.92) 0%, transparent 48%),
+    radial-gradient(ellipse 95% 85% at 88% 85%, rgba(238, 242, 255, 0.9) 0%, transparent 45%),
+    radial-gradient(ellipse 85% 75% at 50% 45%, rgba(248, 247, 255, 0.85) 0%, transparent 50%),
+    radial-gradient(ellipse 75% 90% at 72% 18%, rgba(245, 243, 255, 0.75) 0%, transparent 42%),
+    radial-gradient(ellipse 80% 70% at 22% 78%, rgba(235, 245, 255, 0.7) 0%, transparent 45%),
+    radial-gradient(ellipse 60% 80% at 55% 55%, rgba(250, 250, 253, 0.6) 0%, transparent 50%);
+  background-attachment: fixed;
 }
 
+/* Dark: liquid glass — deep glass orbs */
+.dark body {
+  background-color: #050508;
+  background-image:
+    radial-gradient(ellipse 100% 80% at 15% 20%, rgba(88, 80, 236, 0.18) 0%, transparent 50%),
+    radial-gradient(ellipse 90% 70% at 88% 75%, rgba(6, 95, 70, 0.12) 0%, transparent 45%),
+    radial-gradient(ellipse 80% 100% at 50% 50%, rgba(30, 41, 59, 0.4) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 80% at 70% 25%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+    radial-gradient(ellipse 85% 60% at 25% 85%, rgba(15, 50, 40, 0.1) 0%, transparent 45%);
+  background-attachment: fixed;
+}
+
+/* Frosted glass overlay (liquid glass sheen) */
 body::before {
   content: '';
   position: fixed;
@@ -236,7 +277,7 @@ body::before {
   pointer-events: none;
   z-index: 0;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.4s ease;
   background-image:
     radial-gradient(1.2px 1.2px at 10% 15%, rgba(255,255,255,0.45), transparent),
     radial-gradient(0.8px 0.8px at 20% 40%, rgba(255,255,255,0.25), transparent),
@@ -259,6 +300,21 @@ body::before {
     radial-gradient(1.2px 1.2px at 85% 45%, rgba(255,255,255,0.40), transparent),
     radial-gradient(0.6px 0.6px at 95% 85%, rgba(255,255,255,0.15), transparent);
   background-size: 220px 220px;
+}
+
+/* Light mode: very subtle glass sheen */
+html:not(.dark) body::before {
+  opacity: 0.35;
+  background-image:
+    radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,0.9), transparent),
+    radial-gradient(0.8px 0.8px at 25% 42%, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1.2px 1.2px at 38% 10%, rgba(255,255,255,0.8), transparent),
+    radial-gradient(1px 1px at 52% 65%, rgba(255,255,255,0.5), transparent),
+    radial-gradient(0.8px 0.8px at 68% 30%, rgba(255,255,255,0.4), transparent),
+    radial-gradient(1.2px 1.2px at 78% 82%, rgba(255,255,255,0.7), transparent),
+    radial-gradient(1px 1px at 18% 72%, rgba(255,255,255,0.5), transparent),
+    radial-gradient(0.8px 0.8px at 92% 15%, rgba(255,255,255,0.6), transparent),
+    radial-gradient(1px 1px at 42% 38%, rgba(255,255,255,0.45), transparent);
 }
 
 .dark body::before {
