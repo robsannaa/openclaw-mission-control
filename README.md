@@ -202,7 +202,6 @@ Everything runs locally — Mission Control is a **self-hosted AI dashboard**. N
 *Doctor/status 检查、配置与运行态漂移可视化，以及恢复操作*
 
 ### Memory / 记忆
-![Memory](promo-memory.png)
 *Edit long-term memory and daily journal*
 
 *编辑长期记忆和每日日志*
