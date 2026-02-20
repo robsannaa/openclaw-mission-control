@@ -23,7 +23,9 @@ import { PermissionsView } from "@/components/permissions-view";
 import { TailscaleView } from "@/components/tailscale-view";
 import { BrowserRelayView } from "@/components/browser-relay-view";
 import { AccountsKeysView } from "@/components/accounts-keys-view";
+import { CalendarView } from "@/components/calendar-view";
 import { WebSearchView } from "@/components/web-search-view";
+import { OpenClawUpdateBanner } from "@/components/openclaw-update-banner";
 import { setChatActive } from "@/lib/chat-store";
 
 function SectionContent({ section }: { section: string }) {
@@ -71,6 +73,8 @@ function SectionContent({ section }: { section: string }) {
       return <TailscaleView />;
     case "browser":
       return <BrowserRelayView />;
+    case "calendar":
+      return <CalendarView />;
     case "search":
       return <WebSearchView />;
     default:
@@ -101,8 +105,13 @@ function MainContent() {
         <ChatView isVisible={isChatSection} />
       </div>
 
-      {/* All other views mount/unmount normally */}
-      {!isChatSection && <SectionContent section={section} />}
+      {/* All other views: update banner + section content */}
+      {!isChatSection && (
+        <>
+          <OpenClawUpdateBanner />
+          <SectionContent section={section} />
+        </>
+      )}
     </>
   );
 }

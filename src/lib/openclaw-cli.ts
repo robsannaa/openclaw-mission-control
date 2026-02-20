@@ -4,6 +4,47 @@ import { getOpenClawBin } from "./paths";
 
 const exec = promisify(execFile);
 
+/** Result of a CLI run when both stdout and stderr are captured. */
+export type RunCliResult = {
+  stdout: string;
+  stderr: string;
+  code: number | null;
+};
+
+/**
+ * Run CLI and capture both stdout and stderr. Use for cron run and other
+ * commands where we need to show full output on failure.
+ */
+export async function runCliCaptureBoth(
+  args: string[],
+  timeout = 15000
+): Promise<RunCliResult> {
+  const bin = await getOpenClawBin();
+  return new Promise((resolve, reject) => {
+    const child = spawn(bin, args, {
+      env: { ...process.env, NO_COLOR: "1" },
+      timeout,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (d: Buffer) => {
+      stdout += d.toString();
+    });
+    child.stderr?.on("data", (d: Buffer) => {
+      stderr += d.toString();
+    });
+    child.on("close", (code, signal) => {
+      resolve({
+        stdout,
+        stderr,
+        code: code ?? (signal ? -1 : 0),
+      });
+    });
+    child.on("error", reject);
+  });
+}
+
 export async function runCli(
   args: string[],
   timeout = 15000,

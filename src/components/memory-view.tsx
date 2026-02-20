@@ -18,6 +18,7 @@ import {
   HelpCircle,
   GitBranch,
   RefreshCw,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InlineMarkdownEditor } from "./inline-markdown-editor";
@@ -70,6 +71,16 @@ type AgentMemoryFile = {
   model?: string;
 };
 
+type WorkspaceFile = {
+  name: string;
+  path: string;
+  exists: boolean;
+  size: number;
+  mtime?: string;
+  words: number;
+  vectorState: VectorState;
+};
+
 type DetailMeta = {
   title: string;
   words?: number;
@@ -77,7 +88,7 @@ type DetailMeta = {
   fileKey: string;
   fileName?: string;
   mtime?: string;
-  kind: "core" | "journal" | "agent-memory";
+  kind: "core" | "journal" | "agent-memory" | "workspace-file";
   vectorState?: VectorState;
   workspace?: string;
   agentId?: string;
@@ -218,6 +229,8 @@ export function MemoryView() {
   const [daily, setDaily] = useState<DailyEntry[]>([]);
   const [memoryMd, setMemoryMd] = useState<MemoryMd>(null);
   const [agentMemoryFiles, setAgentMemoryFiles] = useState<AgentMemoryFile[]>([]);
+  const [workspaceFiles, setWorkspaceFiles] = useState<WorkspaceFile[]>([]);
+  const [ensuringIndex, setEnsuringIndex] = useState(false);
   const [selected, setSelected] = useState<string | null>("memory");
   const [detailContent, setDetailContent] = useState<string | null>(null);
   const [detailMeta, setDetailMeta] = useState<DetailMeta | null>(null);
@@ -241,6 +254,7 @@ export function MemoryView() {
   const saveContent = useCallback(
     async (content: string) => {
       if (!detailMeta) return;
+      if (detailMeta.kind === "workspace-file") return; // read-only in this view
       setSaveStatus("saving");
       try {
         let body: Record<string, unknown> = { content };
@@ -425,10 +439,14 @@ export function MemoryView() {
         ? (data.agentMemoryFiles as AgentMemoryFile[])
         : [];
       const nextCore = (data.memoryMd || null) as MemoryMd;
+      const nextWorkspaceFiles = Array.isArray(data.workspaceFiles)
+        ? (data.workspaceFiles as WorkspaceFile[])
+        : [];
 
       setDaily(nextDaily);
       setMemoryMd(nextCore);
       setAgentMemoryFiles(nextAgents);
+      setWorkspaceFiles(nextWorkspaceFiles);
 
       if (!initializeDetail) return;
       if (nextCore) {
@@ -611,6 +629,65 @@ export function MemoryView() {
     [fetchMemoryData, indexingFile]
   );
 
+  const loadWorkspaceFile = useCallback((file: WorkspaceFile) => {
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    const key = `workspace:${file.name}`;
+    setSelected(key);
+    setSaveStatus(null);
+    fetch(`/api/memory?file=${encodeURIComponent(file.name)}&workspaceRoot=1`)
+      .then((r) => r.json())
+      .then((data) => {
+        setDetailContent(String(data.content || ""));
+        setDetailMeta({
+          title: file.name,
+          words: data.words ?? file.words,
+          size: data.size ?? file.size,
+          fileKey: key,
+          fileName: file.name,
+          kind: "workspace-file",
+          mtime: data.mtime ?? file.mtime,
+          vectorState: file.vectorState,
+        });
+      })
+      .catch(() => {
+        setDetailContent("Failed to load.");
+        setDetailMeta({
+          title: file.name,
+          words: file.words,
+          size: file.size,
+          fileKey: key,
+          fileName: file.name,
+          kind: "workspace-file",
+          mtime: file.mtime,
+          vectorState: file.vectorState,
+        });
+      });
+  }, []);
+
+  const ensureWorkspaceIndex = useCallback(async () => {
+    if (ensuringIndex) return;
+    setEnsuringIndex(true);
+    try {
+      const res = await fetch("/api/vector", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ensure-extra-paths" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        await fetchMemoryData();
+        setActionMsg({ ok: true, msg: "Workspace files added to index" });
+      } else {
+        setActionMsg({ ok: false, msg: data.error || "Index failed" });
+      }
+    } catch {
+      setActionMsg({ ok: false, msg: "Index failed" });
+    } finally {
+      setEnsuringIndex(false);
+      setTimeout(() => setActionMsg(null), 3000);
+    }
+  }, [ensuringIndex, fetchMemoryData]);
+
   useEffect(() => {
     void fetchMemoryData(true);
   }, [fetchMemoryData]);
@@ -651,6 +728,16 @@ export function MemoryView() {
       );
     });
   }, [agentMemoryFiles, search]);
+
+  const filteredWorkspaceFiles = useMemo(() => {
+    if (!search.trim()) return workspaceFiles;
+    const q = search.toLowerCase();
+    return workspaceFiles.filter((f) => f.name.toLowerCase().includes(q));
+  }, [workspaceFiles, search]);
+
+  const hasUnindexedWorkspaceFiles = workspaceFiles.some(
+    (f) => f.vectorState === "not_indexed" || f.vectorState === "stale"
+  );
 
   const periodGroups = groupByPeriod(filteredDaily);
 
@@ -849,6 +936,74 @@ export function MemoryView() {
                   </span>
                 </div>
               </button>
+            )}
+
+            {/* Workspace reference files */}
+            {filteredWorkspaceFiles.length > 0 && (
+              <div className="mb-4">
+                <div className="mb-2 flex items-center gap-2 px-1">
+                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+                    Workspace Files
+                  </span>
+                  <span className="rounded bg-muted/80 px-1.5 py-0.5 text-xs text-muted-foreground">
+                    {filteredWorkspaceFiles.length}
+                  </span>
+                  {hasUnindexedWorkspaceFiles && (
+                    <button
+                      type="button"
+                      onClick={() => void ensureWorkspaceIndex()}
+                      disabled={ensuringIndex}
+                      className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300 hover:bg-sky-500/20 disabled:opacity-60"
+                    >
+                      <RefreshCw className={cn("h-2.5 w-2.5", ensuringIndex && "animate-spin")} />
+                      {ensuringIndex ? "Indexing…" : "Add to Index"}
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  {filteredWorkspaceFiles.map((file) => {
+                    const key = `workspace:${file.name}`;
+                    const selectedHere = selected === key;
+                    const badge = vectorBadge(file);
+                    const BadgeIcon = badge.Icon;
+                    return (
+                      <button
+                        key={file.name}
+                        type="button"
+                        onClick={() => loadWorkspaceFile(file)}
+                        className={cn(
+                          "w-full rounded-lg border px-3 py-2 text-left transition-colors",
+                          selectedHere
+                            ? "border-indigo-500/35 bg-indigo-500/10 ring-1 ring-indigo-400/20"
+                            : "border-foreground/10 bg-foreground/5 hover:bg-foreground/8"
+                        )}
+                      >
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                          <span className="flex-1 truncate text-xs font-medium text-foreground/90">
+                            {file.name}
+                          </span>
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-xs font-medium",
+                              badge.className
+                            )}
+                          >
+                            <BadgeIcon className="h-2.5 w-2.5" />
+                            {badge.label}
+                          </span>
+                          <span className="text-xs text-muted-foreground/70">
+                            {file.words > 0 ? `${file.words}w` : "empty"}
+                            {file.mtime ? ` • ${formatAgo(file.mtime)}` : ""}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             )}
 
             {/* Agent memory files */}
@@ -1110,7 +1265,11 @@ export function MemoryView() {
             <>
               <div className="shrink-0 border-b border-foreground/10 px-6 py-4">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <Brain className="h-4 w-4 text-violet-400" />
+                  {detailMeta.kind === "workspace-file" ? (
+                    <FileText className="h-4 w-4 text-indigo-400" />
+                  ) : (
+                    <Brain className="h-4 w-4 text-violet-400" />
+                  )}
                   <h2 className="text-xs font-semibold text-foreground">
                     {detailMeta.title}
                   </h2>
@@ -1139,6 +1298,20 @@ export function MemoryView() {
                   )}
                   {saveStatus === "unsaved" && (
                     <span className="text-xs text-amber-500">Unsaved</span>
+                  )}
+
+                  {detailMeta.kind === "workspace-file" &&
+                    (detailMeta.vectorState === "not_indexed" || detailMeta.vectorState === "stale") && (
+                    <button
+                      type="button"
+                      onClick={() => void ensureWorkspaceIndex()}
+                      disabled={ensuringIndex}
+                      className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      title="Add this file to the vector index"
+                    >
+                      <RefreshCw className={cn("h-3 w-3", ensuringIndex && "animate-spin")} />
+                      {ensuringIndex ? "Indexing..." : "Add to Index"}
+                    </button>
                   )}
 
                   {canIndexSelectedJournal && selectedDailyEntry && (
@@ -1183,11 +1356,16 @@ export function MemoryView() {
                   {detailMeta.size != null && ` • ${formatBytes(detailMeta.size)}`}
                   {detailMeta.workspace && ` • ${detailMeta.workspace}`}
                   {detailMeta.mtime && ` • ${formatAgo(detailMeta.mtime)}`}
-                  {" • Click to edit • "}
-                  <kbd className="rounded bg-muted px-1 py-0.5 text-xs font-mono text-muted-foreground">
-                    &#8984;S
-                  </kbd>{" "}
-                  to save
+                  {detailMeta.kind !== "workspace-file" && (
+                    <>
+                      {" • Click to edit • "}
+                      <kbd className="rounded bg-muted px-1 py-0.5 text-xs font-mono text-muted-foreground">
+                        &#8984;S
+                      </kbd>{" "}
+                      to save
+                    </>
+                  )}
+                  {detailMeta.kind === "workspace-file" && " • Read-only workspace file"}
                 </p>
               </div>
 

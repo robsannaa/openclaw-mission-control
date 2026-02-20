@@ -17,6 +17,7 @@ import {
   Brain,
   CheckCircle,
   GripVertical,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/ui/loading-state";
@@ -32,8 +33,19 @@ type Task = {
   column: string;
   priority: string;
   assignee?: string;
+  attachments?: string[];
 };
 type KanbanData = { columns: Column[]; tasks: Task[]; _fileExists?: boolean };
+
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i;
+function isImageAttachment(path: string): boolean {
+  return IMAGE_EXTENSIONS.test(path);
+}
+function attachmentUrl(path: string): string {
+  const trimmed = path.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `/api/workspace/file?path=${encodeURIComponent(trimmed)}`;
+}
 
 const PRIORITY_COLORS: Record<string, string> = {
   high: "bg-red-500",
@@ -59,6 +71,9 @@ export function TasksView() {
   const [draggingTaskId, setDraggingTaskId] = useState<number | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [renamingTaskId, setRenamingTaskId] = useState<number | null>(null);
+  const [detailTaskId, setDetailTaskId] = useState<number | null>(null);
+  const [lightboxImage, setLightboxImage] = useState<string | null>(null);
+  const streamRef = useRef<EventSource | null>(null);
 
   useEffect(() => {
     fetch("/api/tasks")
@@ -68,6 +83,29 @@ export function TasksView() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
+  }, []);
+
+  // Live updates: when kanban is written (dashboard or agent), refetch without polling
+  useEffect(() => {
+    const es = new EventSource("/api/tasks/stream");
+    streamRef.current = es;
+    es.onmessage = (e) => {
+      try {
+        const payload = JSON.parse(e.data);
+        if (payload?.type === "kanban-updated") {
+          fetch("/api/tasks")
+            .then((r) => r.json())
+            .then((d) => setData(d))
+            .catch(() => {});
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    return () => {
+      es.close();
+      streamRef.current = null;
+    };
   }, []);
 
   /* ── persist helpers ───────────────────────────── */
@@ -260,8 +298,8 @@ export function TasksView() {
             <div
               key={col.id}
               className={cn(
-                "flex md:min-w-72 flex-1 flex-col rounded-xl p-1 -m-1 transition-colors",
-                isDragTarget && "bg-violet-500/10 ring-1 ring-inset ring-violet-500/20"
+                "flex md:min-w-80 flex-1 flex-col rounded-xl border border-foreground/5 bg-muted/30 py-3 px-3 transition-all",
+                isDragTarget && "bg-violet-500/10 border-violet-500/20 ring-1 ring-inset ring-violet-500/20"
               )}
               onDragOver={(e) => {
                 e.preventDefault();
@@ -283,15 +321,18 @@ export function TasksView() {
                 setDragOverColumn(null);
               }}
             >
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-3 flex items-center gap-2 px-1">
                 <div
-                  className="h-2.5 w-2.5 rounded-full"
+                  className="h-3 w-3 rounded-full shadow-sm"
                   style={{ backgroundColor: col.color }}
                 />
-                <h3 className="text-sm font-semibold text-foreground/70">
+                <h3 className="text-sm font-semibold text-foreground/80">
                   {col.title}
                 </h3>
-                <span className="text-xs text-muted-foreground/60">
+                <span
+                  className="rounded-full bg-foreground/10 px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                  style={{ minWidth: "1.5rem", textAlign: "center" }}
+                >
                   {colTasks.length}
                 </span>
                 <div className="flex-1" />
@@ -356,6 +397,8 @@ export function TasksView() {
                         onEdit={() => setEditingTask(task.id)}
                         onMove={(dir) => moveTask(task.id, dir)}
                         onDelete={() => deleteTask(task.id)}
+                        onOpenDetail={() => setDetailTaskId(task.id)}
+                        onAttachmentClick={(url) => setLightboxImage(url)}
                         isDragging={draggingTaskId === task.id}
                         onDragStart={() => setDraggingTaskId(task.id)}
                         onDragEnd={() => { setDraggingTaskId(null); setDragOverColumn(null); }}
@@ -374,6 +417,151 @@ export function TasksView() {
           );
         })}
       </div>
+
+      {/* Task detail popup */}
+      {detailTaskId != null && data && (() => {
+        const task = data.tasks.find((t) => t.id === detailTaskId);
+        if (!task) return null;
+        const column = data.columns.find((c) => c.id === task.column);
+        const columnTitle = column?.title ?? task.column;
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+            onClick={() => setDetailTaskId(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Task details"
+          >
+            <div
+              className="relative w-full max-w-md rounded-xl border border-foreground/10 bg-card shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-2 border-b border-foreground/10 px-4 py-3">
+                <h3 className="text-sm font-semibold text-foreground truncate pr-8">
+                  {task.title}
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setDetailTaskId(null)}
+                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                  aria-label="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="px-4 py-3 space-y-3 text-sm">
+                {task.description && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70 mb-1">Description</p>
+                    <p className="text-foreground/90 whitespace-pre-wrap">{task.description}</p>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                  <div>
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Priority</span>
+                    <p className={cn("font-medium capitalize", PRIORITY_TEXT[task.priority] || "text-muted-foreground")}>
+                      {task.priority}
+                    </p>
+                  </div>
+                  {task.assignee && (
+                    <div>
+                      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Assignee</span>
+                      <p className="text-foreground/90">{task.assignee}</p>
+                    </div>
+                  )}
+                  <div>
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Status</span>
+                    <p className="text-foreground/90">{columnTitle}</p>
+                  </div>
+                  <div>
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">ID</span>
+                    <p className="text-muted-foreground font-mono text-xs">{task.id}</p>
+                  </div>
+                </div>
+                {(task as Task & Record<string, unknown>).completedAt != null && (
+                  <div>
+                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Completed</span>
+                    <p className="text-foreground/90">
+                      {new Date((task as Task & Record<string, unknown>).completedAt as string | number).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+                {task.attachments && task.attachments.length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70 mb-2">Attachments</p>
+                    <div className="flex flex-wrap gap-2">
+                      {task.attachments.filter(isImageAttachment).map((path, i) => (
+                        <button
+                          key={`${path}-${i}`}
+                          type="button"
+                          onClick={() => setLightboxImage(attachmentUrl(path))}
+                          className="overflow-hidden rounded-lg border border-foreground/10 bg-muted/50 transition-opacity hover:opacity-90 focus:ring-2 focus:ring-violet-500/50"
+                        >
+                          <img
+                            src={attachmentUrl(path)}
+                            alt=""
+                            className="h-20 w-20 object-cover"
+                          />
+                        </button>
+                      ))}
+                      {task.attachments.filter((p) => !isImageAttachment(p)).length > 0 && (
+                        <span className="text-xs text-muted-foreground/70 self-center">
+                          +{task.attachments.filter((p) => !isImageAttachment(p)).length} file(s)
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="flex justify-end gap-2 border-t border-foreground/10 px-4 py-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingTask(task.id);
+                    setDetailTaskId(null);
+                  }}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDetailTaskId(null)}
+                  className="rounded-lg px-3 py-1.5 text-xs font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Image lightbox */}
+      {lightboxImage && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setLightboxImage(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image preview"
+        >
+          <button
+            type="button"
+            onClick={() => setLightboxImage(null)}
+            className="absolute right-3 top-3 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition-colors"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+          <img
+            src={lightboxImage}
+            alt="Attachment"
+            className="max-h-full max-w-full object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </SectionLayout>
   );
 }
@@ -386,6 +574,8 @@ function TaskCard({
   onEdit,
   onMove,
   onDelete,
+  onOpenDetail,
+  onAttachmentClick,
   isDragging,
   onDragStart,
   onDragEnd,
@@ -398,6 +588,8 @@ function TaskCard({
   onEdit: () => void;
   onMove: (dir: "left" | "right") => void;
   onDelete: () => void;
+  onOpenDetail?: () => void;
+  onAttachmentClick?: (url: string) => void;
   isDragging: boolean;
   onDragStart: () => void;
   onDragEnd: () => void;
@@ -424,7 +616,7 @@ function TaskCard({
   return (
     <div
       className={cn(
-        "group rounded-lg border border-foreground/10 bg-card p-3.5 transition-all hover:border-foreground/15",
+        "group rounded-xl border border-foreground/10 bg-card p-3.5 shadow-sm transition-all hover:border-foreground/15 hover:shadow-md",
         isDragging && "opacity-40 scale-95",
         !isRenaming && "cursor-grab active:cursor-grabbing"
       )}
@@ -435,6 +627,15 @@ function TaskCard({
         onDragStart();
       }}
       onDragEnd={onDragEnd}
+      onClick={() => !isRenaming && onOpenDetail?.()}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (!isRenaming && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onOpenDetail?.();
+        }
+      }}
     >
       <div className="flex items-start gap-2">
         <GripVertical className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground/20 transition-colors group-hover:text-muted-foreground/40" />
@@ -474,6 +675,32 @@ function TaskCard({
               {task.description}
             </p>
           )}
+          {task.attachments && task.attachments.length > 0 && isImageAttachment(task.attachments[0]) && !isRenaming && (
+            <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
+              {task.attachments.filter(isImageAttachment).slice(0, 3).map((path, i) => (
+                <button
+                  key={`${path}-${i}`}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAttachmentClick?.(attachmentUrl(path));
+                  }}
+                  className="h-14 w-14 shrink-0 overflow-hidden rounded-md border border-foreground/10 bg-muted/50 object-cover transition-opacity hover:opacity-90 focus:ring-2 focus:ring-violet-500/40"
+                >
+                  <img
+                    src={attachmentUrl(path)}
+                    alt=""
+                    className="h-full w-full object-cover"
+                  />
+                </button>
+              ))}
+              {task.attachments.filter(isImageAttachment).length > 3 && (
+                <span className="flex h-14 shrink-0 items-center rounded-md bg-muted/50 px-2 text-xs text-muted-foreground">
+                  +{task.attachments.filter(isImageAttachment).length - 3}
+                </span>
+              )}
+            </div>
+          )}
           <div className="mt-2 flex items-center gap-2 text-xs">
             <span
               className={cn(
@@ -494,7 +721,10 @@ function TaskCard({
       </div>
 
       {/* Action bar -- visible on hover */}
-      <div className="mt-2 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <div
+        className="mt-2 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100"
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           type="button"
           disabled={!canLeft}
@@ -645,6 +875,16 @@ function BoardOnboarding({
 }) {
   const [initializing, setInitializing] = useState(false);
   const [initStep, setInitStep] = useState(0); // 0=idle, 1=creating board, 2=teaching agent, 3=done
+  const [copied, setCopied] = useState(false);
+
+  const exampleJson = JSON.stringify({ columns, tasks: [] }, null, 2);
+
+  const copyExample = useCallback(() => {
+    navigator.clipboard.writeText(exampleJson).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [exampleJson]);
 
   const initBoard = useCallback(async () => {
     setInitializing(true);
@@ -800,6 +1040,39 @@ function BoardOnboarding({
                 {" "}in your workspace.{" "}
                 One click, zero config.
               </p>
+            </div>
+
+            {/* Or copy-paste: for users who prefer to create the file themselves */}
+            <div className="mt-10 border-t border-foreground/5 pt-8">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                Or create the file yourself
+              </p>
+              <p className="mb-3 text-xs leading-relaxed text-muted-foreground/80">
+                Save as <code className="rounded bg-foreground/5 px-1 text-xs">kanban.json</code> in your workspace and paste:
+              </p>
+              <div className="relative">
+                <pre className="overflow-x-auto rounded-lg border border-foreground/10 bg-foreground/5 px-4 py-3.5 pr-12 text-left text-[11px] leading-snug text-foreground/90">
+                  {exampleJson}
+                </pre>
+                <button
+                  type="button"
+                  onClick={copyExample}
+                  className="absolute right-2.5 top-2.5 flex items-center gap-1.5 rounded-md border border-foreground/10 bg-background px-2.5 py-1.5 text-xs font-medium text-muted-foreground shadow-sm transition-colors hover:bg-foreground/5 hover:text-foreground"
+                  title="Copy to clipboard"
+                >
+                  {copied ? (
+                    <>
+                      <Check className="h-3.5 w-3.5" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="h-3.5 w-3.5" />
+                      Copy
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

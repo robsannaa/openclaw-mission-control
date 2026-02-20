@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runCli, runCliJson, gatewayCall } from "@/lib/openclaw-cli";
+import { readFile } from "fs/promises";
+import { join } from "path";
+import { runCli, runCliJson, runCliCaptureBoth, gatewayCall } from "@/lib/openclaw-cli";
+import { getOpenClawHome } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +40,31 @@ type CronRunEntry = {
   runAtMs?: number;
   nextRunAtMs?: number;
 };
+
+type GatewayMessage = {
+  role?: string;
+  content?: Array<{ type?: string; text?: string; [k: string]: unknown }>;
+  [k: string]: unknown;
+};
+
+function formatChatHistoryAsText(messages: GatewayMessage[]): string {
+  const lines: string[] = [];
+  for (const msg of messages) {
+    const role = (msg.role || "unknown").toLowerCase();
+    const parts = Array.isArray(msg.content)
+      ? (msg.content as Array<{ type?: string; text?: string }>)
+          .filter((c) => c?.type === "text" && typeof c.text === "string")
+          .map((c) => (c as { text: string }).text)
+      : [];
+    const text = parts.join("\n").trim();
+    if (!text) continue;
+    const label = role === "user" ? "User" : role === "assistant" ? "Assistant" : role;
+    lines.push(`[${label}]`);
+    lines.push(text);
+    lines.push("");
+  }
+  return lines.join("\n").trim();
+}
 
 /**
  * Extract known delivery targets from:
@@ -129,6 +157,38 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Get the actual session output (agent transcript) for the latest run of a job
+    if (action === "runOutput" && jobId) {
+      const limit = searchParams.get("limit") || "5";
+      const stdout = await runCli(
+        ["cron", "runs", "--id", jobId, "--limit", limit],
+        10000
+      );
+      let entries: CronRunEntry[] = [];
+      try {
+        const data = JSON.parse(stdout) as { entries?: CronRunEntry[] };
+        entries = data.entries ?? [];
+      } catch {
+        return NextResponse.json({ output: "" });
+      }
+      const latestWithSession = entries.find((e) => e.sessionKey);
+      if (!latestWithSession?.sessionKey) {
+        return NextResponse.json({ output: "" });
+      }
+      try {
+        const history = await gatewayCall<{ messages?: GatewayMessage[] }>(
+          "chat.history",
+          { sessionKey: latestWithSession.sessionKey, limit: 200 },
+          15000
+        );
+        const messages = history.messages ?? [];
+        const output = formatChatHistoryAsText(messages);
+        return NextResponse.json({ output });
+      } catch {
+        return NextResponse.json({ output: "" });
+      }
+    }
+
     if (action === "targets") {
       // Collect known delivery targets from sessions + existing cron jobs
       const targets = await collectKnownTargets();
@@ -172,8 +232,39 @@ export async function POST(request: NextRequest) {
 
       case "run": {
         if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-        await runCli(["cron", "run", id, "--force"], 30000);
-        return NextResponse.json({ ok: true, action: "triggered", id });
+        const result = await runCliCaptureBoth(["cron", "run", id], 30000);
+        const { stdout, stderr, code } = result;
+        const ok = code === 0;
+        const outputParts: string[] = [];
+        if (!ok) {
+          outputParts.push(`Command failed (exit ${code ?? "unknown"}).`);
+          if (stderr.trim()) outputParts.push("\nStderr:", stderr.trim());
+          if (stdout.trim()) outputParts.push("\nStdout:", stdout.trim());
+          // When CLI gives no output, try to show recent gateway log so the user can see what went wrong
+          if (!stderr.trim() && !stdout.trim()) {
+            try {
+              const logPath = join(getOpenClawHome(), "logs", "gateway.log");
+              const content = await readFile(logPath, "utf-8").catch(() => "");
+              const lines = content.trim().split("\n").filter(Boolean).slice(-25);
+              if (lines.length > 0) {
+                outputParts.push("\n\nRecent gateway log (last 25 lines):");
+                outputParts.push(lines.join("\n"));
+              }
+            } catch { /* ignore */ }
+            outputParts.push("\n\nRun in terminal for full output:");
+            outputParts.push(`  openclaw cron run ${id}`);
+          }
+        }
+        const output = ok
+          ? (stdout?.trim() || stderr?.trim() || "(no output)")
+          : outputParts.join("\n");
+        return NextResponse.json({
+          ok,
+          action: ok ? "triggered" : "failed",
+          id,
+          output,
+          ...(ok ? {} : { error: output }),
+        });
       }
 
       case "delete": {

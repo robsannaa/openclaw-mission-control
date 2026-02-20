@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readdir, stat } from "fs/promises";
+import { join } from "path";
 import { runCliJson, runCli, gatewayCall } from "@/lib/openclaw-cli";
-import { getOpenClawHome } from "@/lib/paths";
-import { stat } from "fs/promises";
+import { getOpenClawHome, getDefaultWorkspace } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
@@ -72,6 +73,20 @@ async function getDbFileSize(dbPath: string): Promise<number> {
     return s.size;
   } catch {
     return 0;
+  }
+}
+
+/** Returns all root-level .md files in the workspace (excluding MEMORY.md) for memorySearch.extraPaths. */
+async function getWorkspaceReferencePaths(): Promise<string[]> {
+  try {
+    const workspace = await getDefaultWorkspace();
+    const entries = await readdir(workspace, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile() && e.name.endsWith(".md") && e.name !== "MEMORY.md" && e.name !== "memory.md")
+      .map((e) => e.name)
+      .sort();
+  } catch {
+    return [];
   }
 }
 
@@ -229,6 +244,10 @@ export async function POST(request: NextRequest) {
         if (setupProvider === "local" && localModelPath?.trim()) {
           memorySearch.local = { modelPath: localModelPath.trim() };
         }
+        const referencePaths = await getWorkspaceReferencePaths();
+        if (referencePaths.length > 0) {
+          memorySearch.extraPaths = referencePaths;
+        }
 
         const setupPatch = JSON.stringify({
           agents: {
@@ -244,7 +263,7 @@ export async function POST(request: NextRequest) {
           15000
         );
 
-        // Trigger initial index
+        // Trigger initial index (includes extraPaths)
         try {
           await runCli(["memory", "index"], 30000);
         } catch {
@@ -302,6 +321,12 @@ export async function POST(request: NextRequest) {
             enabled: cacheEnabled,
           };
         }
+        const existingExtra = (currentMemorySearch.extraPaths as string[] | undefined) ?? [];
+        const referencePaths = await getWorkspaceReferencePaths();
+        const mergedExtra = [...new Set([...existingExtra, ...referencePaths])];
+        if (mergedExtra.length > 0) {
+          memorySearch.extraPaths = mergedExtra;
+        }
 
         const patchRaw = JSON.stringify({
           agents: {
@@ -318,6 +343,50 @@ export async function POST(request: NextRequest) {
         );
 
         return NextResponse.json({ ok: true, action, provider, model });
+      }
+
+      case "ensure-extra-paths": {
+        // Merge all root-level .md workspace files into memorySearch.extraPaths and reindex
+        const configData = await gatewayCall<Record<string, unknown>>(
+          "config.get",
+          undefined,
+          10000
+        );
+        const hash = configData.hash as string;
+        const resolved = (configData.resolved || {}) as Record<string, unknown>;
+        const defaults = (resolved.agents as Record<string, unknown>)?.defaults as Record<string, unknown> | undefined;
+        const currentMemorySearch = (defaults?.memorySearch || {}) as Record<string, unknown>;
+        const existingExtra = (currentMemorySearch.extraPaths as string[] | undefined) ?? [];
+        const referencePaths = await getWorkspaceReferencePaths();
+        const mergedExtra = [...new Set([...existingExtra, ...referencePaths])];
+        if (mergedExtra.length === 0) {
+          return NextResponse.json({ ok: true, action, extraPaths: [], message: "No reference .md files found in workspace root" });
+        }
+        const memorySearch = {
+          ...currentMemorySearch,
+          extraPaths: mergedExtra,
+        };
+        const patchRaw = JSON.stringify({
+          agents: {
+            defaults: {
+              memorySearch,
+            },
+          },
+        });
+        await gatewayCall(
+          "config.patch",
+          { raw: patchRaw, baseHash: hash, restartDelayMs: 2000 },
+          15000
+        );
+        try {
+          await runCli(["memory", "index", "--force"], 60000);
+        } catch (err) {
+          return NextResponse.json(
+            { ok: false, action, error: String(err), extraPaths: mergedExtra },
+            { status: 500 }
+          );
+        }
+        return NextResponse.json({ ok: true, action, extraPaths: mergedExtra });
       }
 
       default:

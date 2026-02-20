@@ -15,6 +15,30 @@ const GRAPH_MD_PATH = join(MEMORY_DIR, "knowledge-graph.md");
 const MEMORY_MD_PATH = join(WORKSPACE, "MEMORY.md");
 const exec = promisify(execFile);
 
+// All root-level .md files are included dynamically — no fixed allowlist.
+
+type CliAgentRow = {
+  id?: string;
+  name?: string;
+  identityName?: string;
+  workspace?: string;
+  isDefault?: boolean;
+};
+
+async function getCliAgents(): Promise<CliAgentRow[]> {
+  try {
+    const rows = await runCliJson<CliAgentRow[]>(["agents", "list"], 12000);
+    return Array.isArray(rows) ? rows : [];
+  } catch {
+    return [];
+  }
+}
+
+function safeAgentName(agent: CliAgentRow): string {
+  const raw = String(agent.identityName || agent.name || agent.id || "agent");
+  return raw.replace(/\s*_\(.*?\)_?\s*/g, " ").replace(/\s+/g, " ").trim();
+}
+
 const SNAPSHOT_START = "<!-- KNOWLEDGE_GRAPH:START -->";
 const SNAPSHOT_END = "<!-- KNOWLEDGE_GRAPH:END -->";
 
@@ -391,7 +415,7 @@ function parseMarkdownFacts(markdown: string, maxFacts = 40): {
   return { topics, facts };
 }
 
-function bootstrapGraph(memoryMd: string, journalFiles: BootstrapFile[]): KnowledgeGraph {
+function bootstrapGraph(memoryMd: string, journalFiles: BootstrapFile[], agents: CliAgentRow[] = []): KnowledgeGraph {
   const inputFiles: BootstrapFile[] = [
     ...(memoryMd.trim()
       ? [{ name: "MEMORY.md", content: memoryMd, source: "filesystem" as const }]
@@ -551,6 +575,39 @@ function bootstrapGraph(memoryMd: string, journalFiles: BootstrapFile[]): Knowle
       );
     });
   }
+
+  // Agent nodes — one per configured agent, connected to root
+  agents.forEach((agent, agentIdx) => {
+    const agentId = String(agent.id || `agent-${agentIdx}`);
+    const agentLabel = safeAgentName(agent);
+    const isDefault = Boolean(agent.isDefault);
+    const agentNode = buildGraphNode(
+      {
+        id: `agent-${slug(agentId)}`,
+        label: agentLabel,
+        kind: "agent",
+        summary: isDefault ? "Default OpenClaw agent." : `OpenClaw agent: ${agentId}`,
+        confidence: 0.95,
+        source: "agents",
+        x: 40,
+        y: 260 + agentIdx * 120,
+        tags: ["agent", ...(isDefault ? ["default"] : [])],
+      },
+      nodes.length,
+      ids
+    );
+    nodes.push(agentNode);
+    pushEdge(
+      {
+        source: root.id,
+        target: agentNode.id,
+        relation: "managed_by",
+        weight: 0.9,
+        evidence: agentId,
+      },
+      `edge-${root.id}-${agentNode.id}`
+    );
+  });
 
   if (nodes.length <= 1) {
     const sampleA = buildGraphNode(
@@ -733,11 +790,12 @@ async function readIndexedMemoryFiles(limit = 12): Promise<BootstrapFile[]> {
     const dbPath = match?.status?.dbPath;
     if (!dbPath) return [];
 
+    // Query all indexed markdown chunks regardless of source so workspace
+    // reference files (VERSA_BRAND_PROFILE.md, AGENTS.md, etc.) are included.
     const sql = [
       "select c.path as path, c.start_line as start_line, c.text as text, f.mtime as mtime",
       "from chunks c",
       "join files f on c.path = f.path and c.source = f.source",
-      "where c.source='memory'",
       "order by f.mtime desc, c.path asc, c.start_line asc;",
     ].join(" ");
 
@@ -919,6 +977,20 @@ async function readSourceDocumentsForGraph(graph: KnowledgeGraph, limit = 20): P
 
   await pushDoc("MEMORY.md", MEMORY_MD_PATH, "workspace");
 
+  // All root-level .md files in the workspace (sorted alphabetically, MEMORY.md excluded)
+  try {
+    const entries = await readdir(WORKSPACE, { withFileTypes: true });
+    const names = entries
+      .filter((e) => e.isFile() && e.name.endsWith(".md") && e.name !== "MEMORY.md" && e.name !== "memory.md")
+      .map((e) => e.name)
+      .sort();
+    for (const name of names) {
+      await pushDoc(name, join(WORKSPACE, name), "workspace");
+    }
+  } catch {
+    // ignore missing workspace dir
+  }
+
   try {
     const entries = await readdir(MEMORY_DIR, { withFileTypes: true });
     const names = entries
@@ -1000,14 +1072,78 @@ export async function GET(request: NextRequest) {
         }
       | undefined;
 
+    const agents = await getCliAgents();
+
+    // Read all workspace root .md files from disk (always, regardless of index state)
+    const workspaceRootFiles: BootstrapFile[] = [];
+    try {
+      const entries = await readdir(WORKSPACE, { withFileTypes: true });
+      const names = entries
+        .filter((e) => e.isFile() && e.name.endsWith(".md") && e.name !== "MEMORY.md" && e.name !== "memory.md")
+        .map((e) => e.name)
+        .sort();
+      for (const name of names) {
+        try {
+          const content = await readFile(join(WORKSPACE, name), "utf-8");
+          workspaceRootFiles.push({ name, content: content.slice(0, 11000), source: "filesystem" });
+        } catch { /* skip unreadable files */ }
+      }
+    } catch { /* workspace unreadable */ }
+
+    // Fire-and-forget: ensure workspace root files are in the vector index
+    void runCli(["memory", "index"], 45000).catch(() => {});
+
     if (raw && !forceBootstrap) {
       graph = normalizeGraph(JSON.parse(raw));
+      // Inject any workspace files / agents that are missing from the saved graph
+      const existingIds = new Set(graph.nodes.map((n) => n.id));
+      const existingEdgeIds = new Set(graph.edges.map((e) => e.id));
+      const rootId = graph.nodes.find((n) => n.id === "memory-core")?.id ?? "memory-core";
+      const inject: { nodes: GraphNode[]; edges: GraphEdge[] } = { nodes: [], edges: [] };
+
+      workspaceRootFiles.forEach((file, idx) => {
+        const nodeId = `file-${slug(file.name)}`;
+        if (existingIds.has(nodeId)) return;
+        existingIds.add(nodeId);
+        inject.nodes.push({
+          id: nodeId, label: file.name, kind: "project",
+          summary: "Workspace reference file.", confidence: 0.9, source: "filesystem",
+          tags: ["workspace-file"], x: 280, y: 320 + idx * 110,
+        });
+        const edgeId = `edge-root-ws-${nodeId}`;
+        if (!existingEdgeIds.has(edgeId)) {
+          inject.edges.push({ id: edgeId, source: rootId, target: nodeId, relation: "contains_file", weight: 0.85, evidence: file.name });
+        }
+      });
+
+      agents.forEach((agent, idx) => {
+        const nodeId = `agent-${slug(String(agent.id || idx))}`;
+        if (existingIds.has(nodeId)) return;
+        existingIds.add(nodeId);
+        inject.nodes.push({
+          id: nodeId, label: safeAgentName(agent), kind: "agent",
+          summary: "OpenClaw agent.", confidence: 0.95, source: "agents",
+          tags: ["agent"], x: 40, y: 280 + idx * 120,
+        });
+        const edgeId = `edge-root-agent-${nodeId}`;
+        if (!existingEdgeIds.has(edgeId)) {
+          inject.edges.push({ id: edgeId, source: rootId, target: nodeId, relation: "managed_by", weight: 0.9, evidence: String(agent.id || "") });
+        }
+      });
+
+      if (inject.nodes.length > 0) {
+        graph = normalizeGraph({ ...graph, nodes: [...graph.nodes, ...inject.nodes], edges: [...graph.edges, ...inject.edges] });
+      }
     } else {
       const memoryMd = (await readOptional(MEMORY_MD_PATH)) || "";
       const indexed = await readIndexedMemoryFiles(12);
       const fallbackFiles = indexed.length ? [] : await readRecentJournalFiles(10);
-      const seedFiles = indexed.length ? indexed : fallbackFiles;
-      graph = bootstrapGraph(memoryMd, seedFiles);
+      const indexedOrFallback = indexed.length ? indexed : fallbackFiles;
+      // Merge: indexed/fallback files + workspace root files (deduplicated by name)
+      const indexedNames = new Set(indexedOrFallback.map((f) => f.name));
+      const extraWorkspace = workspaceRootFiles.filter((f) => !indexedNames.has(f.name));
+      const seedFiles = [...indexedOrFallback, ...extraWorkspace];
+      graph = bootstrapGraph(memoryMd, seedFiles, agents);
       bootstrapInfo = {
         source: indexed.length ? "indexed" : "filesystem",
         files: seedFiles.map((f) => f.name),

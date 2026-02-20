@@ -17,6 +17,7 @@ import {
   MessageSquare,
   Radio,
   Brain,
+  CalendarDays,
   FolderOpen,
   Settings,
   Wrench,
@@ -67,6 +68,7 @@ const navItems: {
   { section: "tasks", label: "Tasks", icon: ListChecks },
   { section: "sessions", label: "Sessions", icon: MessageSquare },
   { section: "cron", label: "Cron Jobs", icon: Clock },
+  { section: "calendar", label: "Calendar", icon: CalendarDays, comingSoon: true },
   { section: "memory", label: "Memory", icon: Brain },
   { section: "docs", label: "Docs", icon: FolderOpen },
   { section: "vectors", label: "Vector DB", icon: Database, dividerAfter: true },
@@ -139,12 +141,12 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
           <div key={`${item.section}:${item.label}`}>
             {isDisabled ? (
               <span className={linkClass} aria-disabled>
-                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />
                 {!collapsed && (
                   <>
-                    <span className="flex-1">{item.label}</span>
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
-                      Coming soon
+                    <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                    <span className="shrink-0 whitespace-nowrap rounded-full border border-violet-500/20 bg-violet-500/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-violet-400/90">
+                      Soon
                     </span>
                   </>
                 )}
@@ -469,7 +471,7 @@ export function Sidebar() {
       <aside
         className={cn(
           "flex h-full shrink-0 flex-col border-r border-border bg-sidebar transition-[width,transform] duration-200 ease-in-out",
-          collapsed ? "w-14 md:w-14" : "w-48 md:w-48",
+          collapsed ? "w-14 md:w-14" : "w-56 md:w-56",
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-xl",
           mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
         )}

@@ -707,6 +707,7 @@ export function VectorView() {
   const [agents, setAgents] = useState<AgentMemory[]>([]);
   const [loading, setLoading] = useState(true);
   const [reindexing, setReindexing] = useState(false);
+  const [ensuringExtraPaths, setEnsuringExtraPaths] = useState(false);
   const [saving, setSaving] = useState(false);
   const [settingUp, setSettingUp] = useState(false);
   const [toast, setToast] = useState<Toast | null>(null);
@@ -763,6 +764,19 @@ export function VectorView() {
       if (d.ok) { setToast({ message: agentId + (force ? " force" : "") + " reindexed", type: "success" }); await fetchStatus(); }
       else setToast({ message: d.error || "Reindex failed", type: "error" });
     } catch (e) { setToast({ message: String(e), type: "error" }); } finally { setReindexing(false); }
+  }, [fetchStatus]);
+
+  const handleEnsureExtraPaths = useCallback(async () => {
+    setEnsuringExtraPaths(true);
+    try {
+      const res = await fetch("/api/vector", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ensure-extra-paths" }) });
+      const d = await res.json();
+      if (d.ok) {
+        const paths = (d.extraPaths as string[]) || [];
+        setToast({ message: paths.length > 0 ? `Added ${paths.length} reference file(s) to index and reindexed` : d.message || "Done", type: "success" });
+        await fetchStatus();
+      } else setToast({ message: d.error || "Failed", type: "error" });
+    } catch (e) { setToast({ message: String(e), type: "error" }); } finally { setEnsuringExtraPaths(false); }
   }, [fetchStatus]);
 
   const handleUpdateModel = useCallback(async (prov: string, mod: string, options?: EmbeddingOptions) => {
@@ -924,10 +938,23 @@ export function VectorView() {
 
         <div><h2 className="mb-3 flex items-center gap-2 text-xs font-semibold text-foreground/90"><Database className="h-4 w-4 text-violet-400" />Namespaces<span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">{agents.length}</span></h2><div className="space-y-2">{agents.map((a) => <AgentIndexCard key={a.agentId} agent={a} onReindex={handleReindex} reindexing={reindexing} />)}</div></div>
 
+        <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2 text-sm font-semibold text-foreground/90"><FileText className="h-4 w-4 text-violet-400" />Workspace reference files</div>
+              <p className="text-xs text-muted-foreground mt-0.5">Include all root-level <code className="rounded bg-muted px-1 text-xs">.md</code> files in semantic search so the index covers your full workspace knowledge, not just <code className="rounded bg-muted px-1 text-xs">memory/</code>.</p>
+            </div>
+            <button type="button" onClick={handleEnsureExtraPaths} disabled={ensuringExtraPaths} className="shrink-0 flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50">
+              {ensuringExtraPaths ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+              {ensuringExtraPaths ? "Adding & reindexing…" : "Include reference files in search"}
+            </button>
+          </div>
+        </div>
+
         <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground/90"><Settings2 className="h-4 w-4 text-muted-foreground" />How It Works</div>
           <div className="text-xs text-muted-foreground space-y-1">
-            <p>OpenClaw indexes workspace <code className="rounded bg-foreground/10 px-1 text-xs text-muted-foreground">memory/</code> files into SQLite with vector embeddings (sqlite-vec).</p>
+            <p>OpenClaw indexes workspace <code className="rounded bg-foreground/10 px-1 text-xs text-muted-foreground">memory/</code> files into SQLite with vector embeddings (sqlite-vec). Use &quot;Include reference files in search&quot; above to also index root-level <code className="rounded bg-foreground/10 px-1 text-xs text-muted-foreground">.md</code> files.</p>
             <p>Each file is chunked and embedded using the configured model (default: text-embedding-3-small, 1536d). Search uses cosine similarity. FTS5 is available as fallback.</p>
           </div>
           <div className="rounded-lg bg-muted p-3 font-mono text-xs text-muted-foreground space-y-0.5">

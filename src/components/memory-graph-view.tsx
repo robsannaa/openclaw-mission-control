@@ -493,7 +493,30 @@ export function MemoryGraphView() {
   const [showTopicTable, setShowTopicTable] = useState(true);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState(260);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const isResizing = useRef(false);
+  const resizeStartX = useRef(0);
+  const resizeStartWidth = useRef(0);
+
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    isResizing.current = true;
+    resizeStartX.current = e.clientX;
+    resizeStartWidth.current = sidebarWidth;
+    const handleMove = (ev: MouseEvent) => {
+      if (!isResizing.current) return;
+      const next = Math.max(180, Math.min(480, resizeStartWidth.current + ev.clientX - resizeStartX.current));
+      setSidebarWidth(next);
+    };
+    const handleUp = () => {
+      isResizing.current = false;
+      document.removeEventListener("mousemove", handleMove);
+      document.removeEventListener("mouseup", handleUp);
+    };
+    document.addEventListener("mousemove", handleMove);
+    document.addEventListener("mouseup", handleUp);
+  }, [sidebarWidth]);
   const [query, setQuery] = useState("");
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
@@ -1594,320 +1617,114 @@ export function MemoryGraphView() {
 
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
-      <aside
-        className={cn(
-          "flex shrink-0 flex-row border-r border-foreground/10 bg-card/60 transition-[width] duration-200 ease-out",
-          sidebarCollapsed ? "w-10" : "w-80"
-        )}
-      >
-        {/* Main sidebar content — hidden when collapsed */}
-        <div
-          className={cn(
-            "flex min-w-0 flex-1 flex-col overflow-hidden border-r border-foreground/10",
-            sidebarCollapsed ? "w-0 overflow-hidden opacity-0" : "opacity-100"
-          )}
-          aria-hidden={sidebarCollapsed}
+      {/* Collapsed tab — shown only when sidebar is hidden */}
+      {sidebarCollapsed && (
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed(false)}
+          className="flex h-full w-6 shrink-0 flex-col items-center justify-center gap-1 border-r border-foreground/10 bg-card/60 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+          title="Expand sidebar"
         >
-          <div className="space-y-2 border-b border-foreground/10 p-3">
-            <div className="grid grid-cols-3 gap-1.5 text-xs">
-              <button
-                type="button"
-                onClick={() => void loadGraph()}
-                className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/10 bg-muted/40 px-2 py-1.5 text-foreground/90 hover:bg-muted"
-              >
-                <RefreshCw className="h-3 w-3" /> Refresh
-              </button>
-              <button
-                type="button"
-                onClick={() => void rebuildFromMemory()}
-                disabled={rebuilding || saving || publishing}
-                className="inline-flex items-center justify-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-1.5 text-sky-700 hover:bg-sky-500/20 dark:text-sky-200 disabled:opacity-50"
-              >
-                {rebuilding ? <Loader2 className="h-3 w-3 animate-spin" /> : <GitBranch className="h-3 w-3" />} Rebuild
-              </button>
-              <button
-                type="button"
-                onClick={saveGraph}
-                disabled={!dirty || saving}
-                className="inline-flex items-center justify-center gap-1 rounded-md border border-violet-500/35 bg-violet-500/15 px-2 py-1.5 text-violet-700 hover:bg-violet-500/25 dark:text-violet-200 disabled:opacity-50"
-              >
-                {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
-              </button>
-            </div>
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      )}
+
+      <aside
+        style={{ width: sidebarCollapsed ? 0 : sidebarWidth }}
+        className="flex shrink-0 flex-col overflow-hidden border-r border-foreground/10 bg-card/60"
+        aria-hidden={sidebarCollapsed}
+      >
+        {/* Inner wrapper keeps content at full sidebarWidth even while aside animates */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-y-auto" style={{ width: sidebarWidth }}>
+          {/* Action bar */}
+          <div className="flex items-center gap-1 border-b border-foreground/10 px-2 py-1.5">
+            <button
+              type="button"
+              onClick={() => void loadGraph()}
+              title="Refresh"
+              className="inline-flex items-center gap-1 rounded border border-foreground/10 bg-muted/40 px-1.5 py-1 text-xs text-foreground/80 hover:bg-muted"
+            >
+              <RefreshCw className="h-3 w-3" /> Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => void rebuildFromMemory()}
+              disabled={rebuilding || saving || publishing}
+              title="Rebuild from memory"
+              className="inline-flex items-center gap-1 rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-1 text-xs text-sky-700 hover:bg-sky-500/20 dark:text-sky-200 disabled:opacity-50"
+            >
+              {rebuilding ? <Loader2 className="h-3 w-3 animate-spin" /> : <GitBranch className="h-3 w-3" />} Rebuild
+            </button>
+            <button
+              type="button"
+              onClick={saveGraph}
+              disabled={!dirty || saving}
+              title="Save graph"
+              className="inline-flex items-center gap-1 rounded border border-violet-500/35 bg-violet-500/15 px-1.5 py-1 text-xs text-violet-700 hover:bg-violet-500/25 dark:text-violet-200 disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
+            </button>
             <button
               type="button"
               onClick={publishSnapshot}
               disabled={publishing}
-              className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2 py-1.5 text-xs text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-200 disabled:opacity-50"
+              title="Publish snapshot to memory"
+              className="inline-flex items-center gap-1 rounded border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-1 text-xs text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-200 disabled:opacity-50"
             >
-              {publishing ? <Loader2 className="h-3 w-3 animate-spin" /> : <UploadCloud className="h-3 w-3" />} Publish Snapshot
+              {publishing ? <Loader2 className="h-3 w-3 animate-spin" /> : <UploadCloud className="h-3 w-3" />} Publish
             </button>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>Gateway source-of-truth sync</span>
-              <span>{telemetry.generatedAt ? `telemetry ${formatAgo(new Date(telemetry.generatedAt).getTime())}` : "telemetry unknown"}</span>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(true)}
+              title="Collapse sidebar"
+              className="ml-auto inline-flex items-center justify-center rounded border border-foreground/10 bg-transparent p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <ChevronLeft className="h-3 w-3" />
+            </button>
+          </div>
+
+          {/* Search + layer controls */}
+          <div className="space-y-1.5 p-2">
+            <div className="flex items-center gap-1.5 rounded border border-foreground/10 bg-card px-2 py-1">
+              <Search className="h-3 w-3 shrink-0 text-muted-foreground/70" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="What matters now?"
+                className="w-full bg-transparent text-xs text-foreground/90 outline-none placeholder:text-muted-foreground/60"
+              />
             </div>
-          </div>
-
-          {sidebarCollapsed ? null : (
-          <>
-        <div className="space-y-2 border-b border-foreground/10 p-3">
-          <div className="flex items-center gap-2 rounded-md border border-foreground/10 bg-card px-2 py-1.5">
-            <Search className="h-3.5 w-3.5 text-muted-foreground/70" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="What matters now?"
-              className="w-full bg-transparent text-xs text-foreground/90 outline-none placeholder:text-muted-foreground/60"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-1.5 text-xs">
-            <select
-              value={layer}
-              onChange={(e) => setLayer(e.target.value as LayerMode)}
-              className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/90"
-            >
-              {LAYER_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <select
-              value={lens}
-              onChange={(e) => setLens(e.target.value as LensMode)}
-              className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/90"
-            >
-              {LENS_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1 text-xs">
-            <button
-              type="button"
-              onClick={resetFilters}
-              className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
-            >
-              Reset Recommended
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowAdvancedFilters((prev) => !prev)}
-              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
-            >
-              <SlidersHorizontal className="h-3 w-3" />
-              {showAdvancedFilters ? "Hide Advanced" : "Show Advanced"}
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-1 text-xs">
-            <button
-              type="button"
-              onClick={() => setShowThreeHops((prev) => !prev)}
-              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
-            >
-              {showThreeHops ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-              3 hops {showThreeHops ? "on" : "off"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowTopicTable((prev) => !prev)}
-              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
-            >
-              <Table2 className="h-3 w-3" /> {showTopicTable ? "Hide Topic Home" : "Show Topic Home"}
-            </button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            Default mode shows a populated graph first. Use Advanced only when you need tighter control.
-          </p>
-        </div>
-
-        {showAdvancedFilters ? (
-          <>
-            <div className="space-y-2 border-b border-foreground/10 p-3">
-              <div className="grid grid-cols-2 gap-1.5 text-xs">
-                <label className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-muted-foreground">
-                  Confidence ≥ {Math.round(confidenceThreshold * 100)}%
-                  <input
-                    type="range"
-                    min={0.1}
-                    max={0.95}
-                    step={0.05}
-                    value={confidenceThreshold}
-                    onChange={(e) => setConfidenceThreshold(Number(e.target.value))}
-                    className="mt-1 w-full accent-violet-400"
-                  />
-                </label>
-
-                <label className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-muted-foreground">
-                  Used in last N chats
-                  <input
-                    type="number"
-                    min={0}
-                    max={80}
-                    value={usedInLastNChats}
-                    onChange={(e) => setUsedInLastNChats(Math.max(0, Number(e.target.value || 0)))}
-                    className="mt-1 w-full rounded border border-foreground/10 bg-background px-1.5 py-0.5 text-xs text-foreground"
-                  />
-                </label>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1 text-xs">
-                <select
-                  value={timeRange}
-                  onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-                  className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/90"
-                >
-                  {TIME_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <span className="inline-flex items-center justify-center rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-muted-foreground">
-                  time window
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-1 text-xs">
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-muted-foreground">
-                  <input type="checkbox" checked={conflictsOnly} onChange={(e) => setConflictsOnly(e.target.checked)} className="h-3 w-3" />
-                  conflicts only
-                </label>
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-muted-foreground">
-                  <input type="checkbox" checked={lowProvenanceOnly} onChange={(e) => setLowProvenanceOnly(e.target.checked)} className="h-3 w-3" />
-                  low provenance only
-                </label>
-              </div>
-            </div>
-
-            <div className="space-y-2 border-b border-foreground/10 p-3">
-              <p className="flex items-center gap-1 text-xs font-medium text-foreground/80">
-                <Filter className="h-3.5 w-3.5" /> Relation filters
-              </p>
-              <div className="max-h-24 space-y-1 overflow-y-auto pr-1">
-                {relationTypes.map((relation) => (
-                  <label key={relation} className="inline-flex w-full items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-xs text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(enabledRelations[relation])}
-                      onChange={(e) => setEnabledRelations((prev) => ({ ...prev, [relation]: e.target.checked }))}
-                      className="h-3 w-3"
-                    />
-                    <span className="truncate">{relationLabel(relation)}</span>
-                  </label>
+            <div className="flex items-center gap-1">
+              <select
+                value={layer}
+                onChange={(e) => setLayer(e.target.value as LayerMode)}
+                className="flex-1 rounded border border-foreground/10 bg-card px-1.5 py-1 text-xs text-foreground/90"
+              >
+                {LAYER_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
-              </div>
+              </select>
+              <button
+                type="button"
+                onClick={resetFilters}
+                className="rounded border border-foreground/10 bg-card px-2 py-1 text-xs text-foreground/80 hover:bg-muted"
+              >
+                Reset
+              </button>
             </div>
-
-            <div className="space-y-2 border-b border-foreground/10 p-3">
-              <p className="flex items-center gap-1 text-xs font-medium text-foreground/80">
-                <Layers className="h-3.5 w-3.5" /> Diagnostics overlays
-              </p>
-              <div className="grid grid-cols-2 gap-1 text-xs">
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayConflicts} onChange={(e) => setOverlayConflicts(e.target.checked)} className="h-3 w-3" />conflicts</label>
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayStaleness} onChange={(e) => setOverlayStaleness(e.target.checked)} className="h-3 w-3" />staleness</label>
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayLowProvenance} onChange={(e) => setOverlayLowProvenance(e.target.checked)} className="h-3 w-3" />low provenance</label>
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayDupes} onChange={(e) => setOverlayDupes(e.target.checked)} className="h-3 w-3" />duplication</label>
-                <label className="col-span-2 inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayMergeSuggestions} onChange={(e) => setOverlayMergeSuggestions(e.target.checked)} className="h-3 w-3" />merge suggestions</label>
-              </div>
-
-              <div className="rounded-md border border-foreground/10 bg-card/60 p-2 text-xs text-muted-foreground">
-                <p>conflicts: <span className="text-rose-700 dark:text-rose-300">{diagnostics.conflicts.length}</span></p>
-                <p>duplication groups: <span className="text-amber-700 dark:text-amber-200">{diagnostics.duplicates.length}</span></p>
-                <p>merge suggestions: <span className="text-sky-700 dark:text-sky-200">{diagnostics.mergeSuggestions.length}</span></p>
-              </div>
-            </div>
-          </>
-        ) : null}
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold text-foreground/90">Pinned ({pinnedIds.length}/5)</p>
-            <button
-              type="button"
-              onClick={() => setPinnedIds([])}
-              className="rounded border border-foreground/10 px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted"
-            >
-              clear
-            </button>
           </div>
-          {pinnedIds.length === 0 ? (
-            <p className="text-xs text-muted-foreground/70">Pin up to 5 nodes to isolate the smallest connecting subgraph.</p>
-          ) : (
-            <div className="space-y-1">
-              {pinnedIds.map((id) => {
-                const node = collapsed.nodeById.get(id);
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={() => setSelectedNodeId(id)}
-                    className="w-full rounded border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-left text-xs text-violet-700 hover:bg-violet-500/20 dark:text-violet-100"
-                  >
-                    {node?.label || id}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="mt-4 flex items-center justify-between">
-            <p className="text-xs font-semibold text-foreground/90">Topic Home</p>
-            <span className="text-xs text-muted-foreground">{showTopicTable ? "visible" : "hidden"}</span>
-          </div>
-
-          {showTopicTable ? (
-            <div className="mt-2 overflow-hidden rounded-md border border-foreground/10">
-              <div className="grid grid-cols-5 gap-1 border-b border-foreground/10 bg-muted/30 px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground">
-                <span>topic</span>
-                <span>facts</span>
-                <span>updated</span>
-                <span>usage</span>
-                <span>conflicts</span>
-              </div>
-              <div className="max-h-64 overflow-y-auto">
-                {topicRows.slice(0, 22).map((row) => (
-                  <button
-                    key={row.topicId}
-                    type="button"
-                    onClick={() => {
-                      setSelectedTopicId(row.topicId);
-                      setSelectedNodeId(row.topicId);
-                      setLayer("topic");
-                    }}
-                    className="grid w-full grid-cols-5 gap-1 border-b border-foreground/5 px-2 py-1.5 text-left text-xs text-foreground/90 hover:bg-muted/50"
-                  >
-                    <span className="truncate">{row.topic}</span>
-                    <span>{row.factsCount}</span>
-                    <span>{formatAgo(row.lastUpdatedMs)}</span>
-                    <span>{row.usageCount}</span>
-                    <span className={cn(row.conflictsCount > 0 ? "text-rose-700 dark:text-rose-300" : "text-muted-foreground")}>{row.conflictsCount}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
-          </>
-          )}
-        </div>
-
-        {/* Collapse/expand strip — always visible on the right edge of the sidebar */}
-        <button
-          type="button"
-          onClick={() => setSidebarCollapsed((prev) => !prev)}
-          className="flex h-full w-10 shrink-0 flex-col items-center justify-center gap-0 border-0 bg-card/80 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-inset focus:ring-violet-500/40"
-          title={sidebarCollapsed ? "Expand filters (sidebar)" : "Collapse filters (sidebar)"}
-          aria-label={sidebarCollapsed ? "Expand filters" : "Collapse filters"}
-        >
-          {sidebarCollapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronLeft className="h-4 w-4" />
-          )}
-          <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider opacity-70">
-            {sidebarCollapsed ? "Filters" : ""}
-          </span>
-        </button>
       </aside>
+
+      {/* Resize handle — lives outside <aside> so overflow:hidden never clips it */}
+      {!sidebarCollapsed && (
+        <div
+          onMouseDown={handleResizeStart}
+          className="absolute top-0 z-20 h-full w-2 cursor-col-resize transition-colors hover:bg-violet-500/30 active:bg-violet-500/50"
+          style={{ left: sidebarWidth - 4 }}
+          title="Drag to resize"
+        />
+      )}
 
       <main
         className={cn(

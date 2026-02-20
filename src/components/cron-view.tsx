@@ -27,6 +27,8 @@ import {
   AlertTriangle,
   Info,
   Plus,
+  Terminal,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { requestRestart } from "@/lib/restart-store";
@@ -1542,6 +1544,13 @@ export function CronView() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [runOutput, setRunOutput] = useState<
+    Record<string, { status: "running" | "done" | "error"; output: string }>
+  >({});
+  const [runOutputCollapsed, setRunOutputCollapsed] = useState<
+    Record<string, boolean>
+  >({});
+  const runOutputRef = useRef<HTMLPreElement | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didAutoExpand = useRef(false);
   const didAutoFocusJob = useRef<string | null>(null);
@@ -1632,6 +1641,14 @@ export function CronView() {
   const doAction = useCallback(
     async (action: string, id: string, extra?: Record<string, unknown>) => {
       setActionLoading(`${action}-${id}`);
+      if (action === "run") {
+        setExpanded(id);
+        setRunOutput((prev) => ({
+          ...prev,
+          [id]: { status: "running", output: "" },
+        }));
+        setRunOutputCollapsed((prev) => ({ ...prev, [id]: false }));
+      }
       try {
         const res = await fetch("/api/cron", {
           method: "POST",
@@ -1639,6 +1656,55 @@ export function CronView() {
           body: JSON.stringify({ action, id, ...extra }),
         });
         const data = await res.json();
+        if (action === "run") {
+          const cliOutput = data.output ?? data.error ?? "";
+          const initialOutput =
+            typeof cliOutput === "string" ? cliOutput : String(cliOutput);
+          setRunOutput((prev) => ({
+            ...prev,
+            [id]: {
+              status: data.ok ? "done" : "error",
+              output: initialOutput,
+            },
+          }));
+          // Poll for real session output (agent transcript) — run may finish shortly after CLI returns
+          if (data.ok) {
+            const pollDelays = [3000, 6000, 10000];
+            pollDelays.forEach((delay) => {
+              setTimeout(async () => {
+                try {
+                  const r = await fetch(
+                    `/api/cron?action=runOutput&id=${encodeURIComponent(id)}`
+                  );
+                  const runData = await r.json();
+                  const sessionOutput =
+                    typeof runData.output === "string"
+                      ? runData.output.trim()
+                      : "";
+                  if (!sessionOutput) return;
+                  setRunOutput((prev) => {
+                    const cur = prev[id];
+                    if (!cur) return prev;
+                    const existing = cur.output.trim();
+                    const sep =
+                      existing && !existing.includes("--- Session output ---")
+                        ? "\n\n--- Session output ---\n\n"
+                        : "";
+                    return {
+                      ...prev,
+                      [id]: {
+                        ...cur,
+                        output: existing + sep + sessionOutput,
+                      },
+                    };
+                  });
+                } catch {
+                  /* ignore */
+                }
+              }, delay);
+            });
+          }
+        }
         if (data.ok) {
           flash(`${action} successful`);
           fetchJobs();
@@ -1651,12 +1717,36 @@ export function CronView() {
           flash(data.error || "Failed", "error");
         }
       } catch (err) {
-        flash(String(err), "error");
+        const msg = String(err);
+        if (action === "run") {
+          setRunOutput((prev) => ({
+            ...prev,
+            [id]: { status: "error", output: msg },
+          }));
+        }
+        flash(msg, "error");
       }
       setActionLoading(null);
     },
     [fetchJobs, fetchRuns, flash]
   );
+
+  const clearRunOutput = useCallback((jobId: string) => {
+    setRunOutput((prev) => {
+      const next = { ...prev };
+      delete next[jobId];
+      return next;
+    });
+    setRunOutputCollapsed((prev) => ({ ...prev, [jobId]: false }));
+  }, []);
+
+  // Auto-scroll run output to bottom when output updates
+  useEffect(() => {
+    if (expanded && runOutput[expanded] && runOutputRef.current) {
+      const el = runOutputRef.current;
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [expanded, runOutput]);
 
   if (loading) {
     return <LoadingState label="Loading cron jobs..." />;
@@ -1930,6 +2020,67 @@ export function CronView() {
               {/* Expanded detail view */}
               {isExpanded && !isEditing && (
                 <div className="border-t border-foreground/5 px-4 py-4 space-y-4">
+                  {/* ── Run output (terminal-like accordion) ──── */}
+                  {runOutput[job.id] && (
+                    <div className="rounded-lg border border-foreground/10 bg-zinc-900/90 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setRunOutputCollapsed((prev) => ({
+                            ...prev,
+                            [job.id]: !prev[job.id],
+                          }))
+                        }
+                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-zinc-300 hover:bg-zinc-800/80 transition-colors"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Terminal className="h-3.5 w-3.5 text-emerald-500/80" />
+                          Run output
+                          {runOutput[job.id].status === "running" && (
+                            <span className="flex items-center gap-1 text-emerald-400/80">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Running…
+                            </span>
+                          )}
+                          {runOutput[job.id].status === "done" && (
+                            <span className="text-emerald-400/80">Done</span>
+                          )}
+                          {runOutput[job.id].status === "error" && (
+                            <span className="text-red-400/90">Error</span>
+                          )}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              clearRunOutput(job.id);
+                            }}
+                            className="rounded p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 transition-colors"
+                            title="Clear output"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                          {runOutputCollapsed[job.id] ? (
+                            <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />
+                          ) : (
+                            <ChevronUp className="h-3.5 w-3.5 text-zinc-500" />
+                          )}
+                        </span>
+                      </button>
+                      {!runOutputCollapsed[job.id] && (
+                        <pre
+                          ref={job.id === expanded ? runOutputRef : undefined}
+                          className="max-h-64 overflow-auto border-t border-zinc-700/50 px-3 py-2.5 text-xs font-mono leading-relaxed text-zinc-200 whitespace-pre-wrap break-words"
+                        >
+                          {runOutput[job.id].status === "running" && !runOutput[job.id].output
+                            ? "Waiting for output…"
+                            : runOutput[job.id].output || "(no output)"}
+                        </pre>
+                      )}
+                    </div>
+                  )}
+
                   {/* ── Job Configuration ──── */}
                   <div>
                     <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">

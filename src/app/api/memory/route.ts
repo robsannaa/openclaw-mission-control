@@ -17,6 +17,8 @@ import { runCli, runCliJson } from "@/lib/openclaw-cli";
 const WORKSPACE = getDefaultWorkspaceSync();
 const exec = promisify(execFile);
 
+// All root-level .md files are included dynamically — no fixed allowlist.
+
 type VectorState = "indexed" | "stale" | "not_indexed" | "unknown";
 
 type MemoryStatusRow = {
@@ -145,7 +147,7 @@ async function getIndexedMemoryFilesByWorkspace(
       try {
         const { stdout } = await exec(
           "sqlite3",
-          [dbPath, "select path, mtime, size from files where source='memory';"],
+          [dbPath, "select path, mtime, size from files;"],
           { timeout: 12000 }
         );
 
@@ -423,15 +425,22 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const file = searchParams.get("file");
   const agentMemory = searchParams.get("agentMemory");
+  const workspaceRoot = searchParams.get("workspaceRoot") === "1";
 
   try {
     if (file) {
       const safePath = file.replace(/\.\./g, "").replace(/^\/+/, "");
-      const fullPath = join(WORKSPACE, "memory", safePath);
+      if (!safePath.endsWith(".md")) {
+        return NextResponse.json({ error: "invalid file" }, { status: 400 });
+      }
+      const fullPath = workspaceRoot
+        ? join(WORKSPACE, safePath)
+        : join(WORKSPACE, "memory", safePath);
       const content = await readFile(fullPath, "utf-8");
+      const s = await stat(fullPath);
       const words = content.split(/\s+/).filter(Boolean).length;
       const size = Buffer.byteLength(content, "utf-8");
-      return NextResponse.json({ content, words, size, file: safePath });
+      return NextResponse.json({ content, words, size, file: safePath, mtime: s.mtime.toISOString() });
     }
 
     if (agentMemory) {
@@ -575,6 +584,48 @@ export async function GET(request: NextRequest) {
       return a.agentName.localeCompare(b.agentName);
     });
 
+    // Workspace root reference files (VERSA_BRAND_PROFILE.md, AGENTS.md, etc.)
+    const workspaceFiles: {
+      name: string;
+      path: string;
+      exists: boolean;
+      size: number;
+      mtime?: string;
+      words: number;
+      vectorState: VectorState;
+    }[] = [];
+    try {
+      const rootEntries = await readdir(WORKSPACE, { withFileTypes: true });
+      const rootMdFiles = rootEntries
+        .filter((e) => e.isFile() && e.name.endsWith(".md") && e.name !== "MEMORY.md" && e.name !== "memory.md")
+        .map((e) => e.name)
+        .sort();
+      for (const name of rootMdFiles) {
+        const fullPath = join(WORKSPACE, name);
+        try {
+          const content = await readFile(fullPath, "utf-8");
+          const s = await stat(fullPath);
+          workspaceFiles.push({
+            name,
+            path: fullPath,
+            exists: true,
+            size: s.size,
+            mtime: s.mtime.toISOString(),
+            words: content.split(/\s+/).filter(Boolean).length,
+            vectorState: resolveVectorState(indexedByWorkspace.get(WORKSPACE) || null, {
+              name,
+              mtime: s.mtime.toISOString(),
+              size: s.size,
+            }),
+          });
+        } catch {
+          workspaceFiles.push({ name, path: fullPath, exists: false, size: 0, words: 0, vectorState: "not_indexed" });
+        }
+      }
+    } catch {
+      // workspace dir unreadable
+    }
+
     return NextResponse.json({
       daily: dailyWithVector,
       memoryMd: coreMemory.exists
@@ -590,6 +641,7 @@ export async function GET(request: NextRequest) {
           }
         : null,
       agentMemoryFiles,
+      workspaceFiles,
       docsContext: {
         memoryFile: "MEMORY.md or memory.md",
         journalDir: "memory/*.md",

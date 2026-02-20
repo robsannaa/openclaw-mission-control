@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
 import { getDefaultWorkspace } from "@/lib/paths";
+import { notifyKanbanUpdated } from "@/lib/kanban-live";
 
 async function getKanbanPath(): Promise<string> {
   const ws = await getDefaultWorkspace();
@@ -48,6 +49,7 @@ export async function PUT(request: NextRequest) {
     // Strip internal fields before saving
     const { _fileExists: __fileExists, ...saveData } = body;
     await writeFile(kanbanPath, JSON.stringify(saveData, null, 2), "utf-8");
+    notifyKanbanUpdated();
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error("Tasks PUT error:", err);
@@ -110,6 +112,7 @@ export async function POST(request: NextRequest) {
       JSON.stringify(starterBoard, null, 2),
       "utf-8"
     );
+    notifyKanbanUpdated();
 
     // ── 2. Create TASKS.md — agent instructions ──
     // This file lives in the workspace so the agent reads it as context.

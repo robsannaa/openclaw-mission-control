@@ -152,6 +152,54 @@ export function getOpenClawBinSync(): string {
   return _bin || process.env.OPENCLAW_BIN || "openclaw";
 }
 
+// ── gog binary path (same pattern as openclaw: env → which → candidates) ──
+
+let _gogBin: string | null = null;
+let _gogBinDone = false;
+
+const GOG_BIN_CANDIDATES = [
+  "/opt/homebrew/bin/gog",
+  "/usr/local/bin/gog",
+  "/usr/bin/gog",
+  "/snap/bin/gog",
+  join(homedir(), ".local/bin/gog"),
+  join(homedir(), "bin/gog"),
+];
+
+export async function getGogBin(): Promise<string> {
+  if (_gogBinDone && _gogBin) return _gogBin;
+
+  if (process.env.GOG_PATH) {
+    _gogBin = process.env.GOG_PATH;
+    _gogBinDone = true;
+    return _gogBin;
+  }
+
+  try {
+    const { stdout } = await exec("which", ["gog"], { timeout: 3000 });
+    const resolved = stdout.trim();
+    if (resolved) {
+      _gogBin = resolved;
+      _gogBinDone = true;
+      return _gogBin;
+    }
+  } catch {
+    // continue
+  }
+
+  for (const c of GOG_BIN_CANDIDATES) {
+    if (await fileExists(c)) {
+      _gogBin = c;
+      _gogBinDone = true;
+      return _gogBin;
+    }
+  }
+
+  _gogBin = "gog";
+  _gogBinDone = true;
+  return _gogBin;
+}
+
 // ── Gateway URL ─────────────────────────────────
 
 let _gatewayUrl: string | null = null;
