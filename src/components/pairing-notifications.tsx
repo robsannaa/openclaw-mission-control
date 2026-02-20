@@ -103,7 +103,7 @@ function DmRequestCard({
     CHANNEL_COLORS[req.channel] || "bg-zinc-500/20 text-muted-foreground border-zinc-500/30";
 
   return (
-    <div className="rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] p-3 transition-all hover:border-foreground/[0.1]">
+    <div className="rounded-lg border border-foreground/10 bg-foreground/5 p-3 transition-all hover:border-foreground/10">
       <div className="flex items-start gap-2.5">
         <div
           className={cn(
@@ -115,35 +115,35 @@ function DmRequestCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-mc-caption font-semibold capitalize text-foreground/90">
+            <span className="text-xs font-semibold capitalize text-foreground/90">
               {req.channel}
             </span>
             <MessageCircle className="h-3 w-3 text-muted-foreground/60" />
-            <span className="text-mc-caption text-muted-foreground/60">DM pairing</span>
+            <span className="text-xs text-muted-foreground/60">DM pairing</span>
           </div>
           <div className="mt-0.5 flex items-center gap-2">
-            <code className="rounded bg-violet-500/10 px-1.5 py-0.5 text-mc-body-sm font-bold tracking-wider text-violet-300">
+            <code className="rounded bg-violet-500/10 px-1.5 py-0.5 text-xs font-bold tracking-wider text-violet-300">
               {req.code}
             </code>
             {req.senderName && (
-              <span className="text-mc-body-sm text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 from {req.senderName}
               </span>
             )}
             {!req.senderName && req.senderId && (
-              <span className="text-mc-body-sm text-muted-foreground">
+              <span className="text-xs text-muted-foreground">
                 ID: {req.senderId}
               </span>
             )}
           </div>
           {req.message && (
-            <p className="mt-1 line-clamp-1 text-mc-caption text-muted-foreground/60 italic">
+            <p className="mt-1 line-clamp-1 text-xs text-muted-foreground/60 italic">
               &ldquo;{req.message}&rdquo;
             </p>
           )}
           <div className="mt-1.5 flex items-center gap-2">
             {req.createdAt && (
-              <span className="flex items-center gap-1 text-mc-micro text-muted-foreground/60">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground/60">
                 <Clock className="h-2.5 w-2.5" />
                 {formatTimeAgo(req.createdAt)}
               </span>
@@ -155,7 +155,7 @@ function DmRequestCard({
         <button
           onClick={onApprove}
           disabled={busy}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-1.5 text-mc-body-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
         >
           {busy ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -183,35 +183,35 @@ function DeviceRequestCard({
   busy: boolean;
 }) {
   return (
-    <div className="rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] p-3 transition-all hover:border-foreground/[0.1]">
+    <div className="rounded-lg border border-foreground/10 bg-foreground/5 p-3 transition-all hover:border-foreground/10">
       <div className="flex items-start gap-2.5">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-amber-500/30 bg-amber-500/20 text-amber-400">
           <PlatformIcon platform={req.platform} className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-mc-caption font-semibold text-foreground/90">
+            <span className="text-xs font-semibold text-foreground/90">
               {req.displayName || req.clientId || "Unknown Device"}
             </span>
             <Smartphone className="h-3 w-3 text-muted-foreground/60" />
-            <span className="text-mc-caption text-muted-foreground/60">Device pairing</span>
+            <span className="text-xs text-muted-foreground/60">Device pairing</span>
           </div>
           {req.platform && (
-            <p className="mt-0.5 text-mc-body-sm text-muted-foreground">{req.platform}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{req.platform}</p>
           )}
           <div className="mt-1 flex flex-wrap items-center gap-1.5">
             {req.role && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-mc-micro text-muted-foreground">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                 {req.role}
               </span>
             )}
             {req.clientMode && (
-              <span className="rounded bg-muted px-1.5 py-0.5 text-mc-micro text-muted-foreground">
+              <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
                 {req.clientMode}
               </span>
             )}
             {req.createdAtMs && (
-              <span className="flex items-center gap-1 text-mc-micro text-muted-foreground/60">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground/60">
                 <Clock className="h-2.5 w-2.5" />
                 {formatTimeAgo(undefined, req.createdAtMs)}
               </span>
@@ -223,7 +223,7 @@ function DeviceRequestCard({
         <button
           onClick={onApprove}
           disabled={busy}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-1.5 text-mc-body-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
         >
           {busy ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -235,7 +235,7 @@ function DeviceRequestCard({
         <button
           onClick={onReject}
           disabled={busy}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/[0.06] py-1.5 text-mc-body-sm font-medium text-red-400 transition-colors hover:bg-red-500/[0.12] disabled:opacity-50"
+          className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-50"
         >
           {busy ? (
             <Loader2 className="h-3 w-3 animate-spin" />
@@ -406,7 +406,7 @@ export function PairingNotifications() {
           "relative flex h-8 w-8 items-center justify-center rounded-lg border transition-colors",
           count > 0
             ? "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-            : "border-foreground/[0.08] bg-card text-muted-foreground hover:bg-muted/80"
+            : "border-foreground/10 bg-card text-muted-foreground hover:bg-muted/80"
         )}
         aria-label={`Pairing requests: ${count}`}
       >
@@ -423,7 +423,7 @@ export function PairingNotifications() {
 
         {/* Badge */}
         {count > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-mc-micro font-bold text-white shadow-lg shadow-red-500/30">
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white shadow-lg shadow-red-500/30">
             {count}
           </span>
         )}
@@ -436,16 +436,16 @@ export function PairingNotifications() {
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-[calc(100vw-24px)] max-w-[380px] overflow-hidden rounded-xl border border-foreground/[0.08] bg-card/95 shadow-2xl backdrop-blur-sm sm:w-[380px]">
+        <div className="absolute right-0 top-full z-50 mt-2 w-full max-w-sm overflow-hidden rounded-xl border border-foreground/10 bg-card/95 shadow-2xl backdrop-blur-sm sm:w-96">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-foreground/[0.06] px-4 py-2.5">
+          <div className="flex items-center justify-between border-b border-foreground/10 px-4 py-2.5">
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-violet-400" />
-              <span className="text-mc-body font-semibold text-foreground/90">
+              <span className="text-sm font-semibold text-foreground/90">
                 Pairing Requests
               </span>
               {count > 0 && (
-                <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-mc-caption font-bold text-red-400">
+                <span className="rounded-full bg-red-500/20 px-1.5 py-0.5 text-xs font-bold text-red-400">
                   {count}
                 </span>
               )}
@@ -460,14 +460,14 @@ export function PairingNotifications() {
           </div>
 
           {/* Content */}
-          <div className="max-h-[420px] overflow-y-auto">
+          <div className="max-h-96 overflow-y-auto">
             {count === 0 ? (
               <div className="px-4 py-8 text-center">
                 <ShieldCheck className="mx-auto mb-2 h-8 w-8 text-emerald-500/40" />
-                <p className="text-mc-body font-medium text-muted-foreground">
+                <p className="text-sm font-medium text-muted-foreground">
                   All clear
                 </p>
-                <p className="mt-1 text-mc-body-sm text-muted-foreground/60">
+                <p className="mt-1 text-xs text-muted-foreground/60">
                   No pending pairing requests. When someone tries to DM your
                   bot or a new device connects, it will show up here.
                 </p>
@@ -499,8 +499,8 @@ export function PairingNotifications() {
           </div>
 
           {/* Footer */}
-          <div className="border-t border-foreground/[0.06] px-4 py-2">
-            <p className="text-mc-caption text-muted-foreground/60">
+          <div className="border-t border-foreground/10 px-4 py-2">
+            <p className="text-xs text-muted-foreground/60">
               Polling every 15s &middot; DM codes expire after 1 hour
             </p>
           </div>
@@ -509,7 +509,7 @@ export function PairingNotifications() {
           {toast && (
             <div
               className={cn(
-                "absolute bottom-10 left-1/2 z-10 -translate-x-1/2 rounded-lg border px-3 py-1.5 text-mc-body-sm font-medium shadow-lg",
+                "absolute bottom-10 left-1/2 z-10 -translate-x-1/2 rounded-lg border px-3 py-1.5 text-xs font-medium shadow-lg",
                 toast.type === "success"
                   ? "border-emerald-500/30 bg-emerald-950/90 text-emerald-300"
                   : "border-red-500/30 bg-red-950/90 text-red-300"

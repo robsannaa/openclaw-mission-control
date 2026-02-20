@@ -768,8 +768,8 @@ export function MemoryGraphView() {
       const hasProvenance = sourceSet.size > 0;
       const provenanceQuality = clamp01(
         (hasProvenance ? 0.35 : 0) +
-          Math.min(0.45, sourceSet.size * 0.18) +
-          Math.min(0.2, edges.length * 0.05)
+        Math.min(0.45, sourceSet.size * 0.18) +
+        Math.min(0.2, edges.length * 0.05)
       );
 
       let taskRelevance = 0.4;
@@ -821,11 +821,11 @@ export function MemoryGraphView() {
 
       const usefulness = clamp01(
         0.28 * retrievalFrequency +
-          0.2 * partial.recencyScore +
-          0.18 * (1 - partial.conflictRate) +
-          0.16 * partial.provenanceQuality +
-          0.1 * partial.taskRelevance +
-          0.08 * partial.breadth
+        0.2 * partial.recencyScore +
+        0.18 * (1 - partial.conflictRate) +
+        0.16 * partial.provenanceQuality +
+        0.1 * partial.taskRelevance +
+        0.08 * partial.breadth
       );
 
       out.set(node.id, {
@@ -1136,17 +1136,17 @@ export function MemoryGraphView() {
       const ringTone = insight?.conflicts
         ? "ring-rose-400/60"
         : insight?.lowProvenance
-        ? "ring-amber-300/60"
-        : "ring-cyan-300/40";
+          ? "ring-amber-300/60"
+          : "ring-cyan-300/40";
 
       const baseX = Number.isFinite(node.x) ? node.x : 200 + (idx % 5) * 220;
       const baseY = Number.isFinite(node.y) ? node.y : 100 + Math.floor(idx / 5) * 140;
       const position =
         layer === "overview"
           ? {
-              x: 220 + Math.cos((idx / count) * Math.PI * 2) * 360,
-              y: 220 + Math.sin((idx / count) * Math.PI * 2) * 240,
-            }
+            x: 220 + Math.cos((idx / count) * Math.PI * 2) * 360,
+            y: 220 + Math.sin((idx / count) * Math.PI * 2) * 240,
+          }
           : { x: baseX, y: baseY };
 
       return {
@@ -1155,16 +1155,16 @@ export function MemoryGraphView() {
         draggable: false,
         data: {
           label: (
-            <div className={cn("rounded-xl border border-border/80 bg-background/85 px-3 py-2 text-left text-mc-body-sm shadow-sm backdrop-blur-sm", selected && `ring-2 ${ringTone}`)}>
-              <p className="truncate text-mc-caption font-semibold text-foreground">{node.label}</p>
-              <p className="mt-0.5 truncate text-mc-caption text-muted-foreground">
+            <div className={cn("rounded-xl border border-border/80 bg-background/80 px-3 py-2 text-left text-xs shadow-sm backdrop-blur-sm", selected && `ring-2 ${ringTone}`)}>
+              <p className="truncate text-xs font-semibold text-foreground">{node.label}</p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">
                 {node.kind} · {Math.round((insight?.usefulness || 0) * 100)} usefulness
               </p>
               <div className="mt-1.5 flex flex-wrap gap-1">
-                <span className="rounded bg-muted px-1.5 py-0.5 text-mc-micro text-muted-foreground">conf {Math.round(node.confidence * 100)}%</span>
-                {insight?.conflicts ? <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-mc-micro text-rose-700 dark:text-rose-200">conflicts {insight.conflicts}</span> : null}
-                {insight?.lowProvenance ? <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-mc-micro text-amber-700 dark:text-amber-200">low provenance</span> : null}
-                {pinned ? <span className="rounded bg-violet-500/25 px-1.5 py-0.5 text-mc-micro text-violet-700 dark:text-violet-100">pinned</span> : null}
+                <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">conf {Math.round(node.confidence * 100)}%</span>
+                {insight?.conflicts ? <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-xs text-rose-700 dark:text-rose-200">conflicts {insight.conflicts}</span> : null}
+                {insight?.lowProvenance ? <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-700 dark:text-amber-200">low provenance</span> : null}
+                {pinned ? <span className="rounded bg-violet-500/25 px-1.5 py-0.5 text-xs text-violet-700 dark:text-violet-100">pinned</span> : null}
               </div>
             </div>
           ),
@@ -1172,9 +1172,8 @@ export function MemoryGraphView() {
         style: {
           borderRadius: 14,
           border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(15,23,42,0.14)",
-          background: `linear-gradient(140deg, ${nodeKindColor(node.kind, isDark)} 0%, ${
-            isDark ? "rgba(12,12,16,0.72)" : "rgba(255,255,255,0.94)"
-          } 100%)`,
+          background: `linear-gradient(140deg, ${nodeKindColor(node.kind, isDark)} 0%, ${isDark ? "rgba(12,12,16,0.72)" : "rgba(255,255,255,0.94)"
+            } 100%)`,
           color: isDark ? "#f4f4f5" : "#111827",
           opacity,
           minWidth: 190,
@@ -1398,18 +1397,18 @@ export function MemoryGraphView() {
   }, [collapsed.nodeById, inspectorCollapsed, layer]);
 
   if (loading || !graph) {
-    return <LoadingState label="Building memory decision graph..." className="min-h-0" />;
+    return <LoadingState label="Building memory graph..." className="min-h-0" />;
   }
 
   return (
     <div className="relative flex min-h-0 flex-1 overflow-hidden">
-      <aside className="flex w-[360px] shrink-0 flex-col border-r border-foreground/[0.08] bg-card/60">
-        <div className="space-y-2 border-b border-foreground/[0.06] p-3">
-          <div className="grid grid-cols-3 gap-1.5 text-mc-body-sm">
+      <aside className="flex w-80 shrink-0 flex-col border-r border-foreground/10 bg-card/60">
+        <div className="space-y-2 border-b border-foreground/10 p-3">
+          <div className="grid grid-cols-3 gap-1.5 text-xs">
             <button
               type="button"
               onClick={() => void loadGraph()}
-              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/[0.1] bg-muted/40 px-2 py-1.5 text-foreground/85 hover:bg-muted"
+              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/10 bg-muted/40 px-2 py-1.5 text-foreground/90 hover:bg-muted"
             >
               <RefreshCw className="h-3 w-3" /> Refresh
             </button>
@@ -1434,32 +1433,32 @@ export function MemoryGraphView() {
             type="button"
             onClick={publishSnapshot}
             disabled={publishing}
-            className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2 py-1.5 text-mc-body-sm text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-200 disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-1 rounded-md border border-emerald-500/35 bg-emerald-500/10 px-2 py-1.5 text-xs text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-200 disabled:opacity-50"
           >
             {publishing ? <Loader2 className="h-3 w-3 animate-spin" /> : <UploadCloud className="h-3 w-3" />} Publish Snapshot
           </button>
-          <div className="flex items-center justify-between text-mc-caption text-muted-foreground">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>Gateway source-of-truth sync</span>
             <span>{telemetry.generatedAt ? `telemetry ${formatAgo(new Date(telemetry.generatedAt).getTime())}` : "telemetry unknown"}</span>
           </div>
         </div>
 
-        <div className="space-y-2 border-b border-foreground/[0.06] p-3">
-          <div className="flex items-center gap-2 rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5">
-            <Search className="h-3.5 w-3.5 text-muted-foreground/65" />
+        <div className="space-y-2 border-b border-foreground/10 p-3">
+          <div className="flex items-center gap-2 rounded-md border border-foreground/10 bg-card px-2 py-1.5">
+            <Search className="h-3.5 w-3.5 text-muted-foreground/70" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="What matters now?"
-              className="w-full bg-transparent text-mc-caption text-foreground/90 outline-none placeholder:text-muted-foreground/60"
+              className="w-full bg-transparent text-xs text-foreground/90 outline-none placeholder:text-muted-foreground/60"
             />
           </div>
 
-          <div className="grid grid-cols-1 gap-1.5 text-mc-body-sm">
+          <div className="grid grid-cols-1 gap-1.5 text-xs">
             <select
               value={layer}
               onChange={(e) => setLayer(e.target.value as LayerMode)}
-              className="rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-foreground/85"
+              className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/90"
             >
               {LAYER_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1468,7 +1467,7 @@ export function MemoryGraphView() {
             <select
               value={lens}
               onChange={(e) => setLens(e.target.value as LensMode)}
-              className="rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-foreground/85"
+              className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/90"
             >
               {LENS_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -1476,28 +1475,28 @@ export function MemoryGraphView() {
             </select>
           </div>
 
-          <div className="grid grid-cols-2 gap-1 text-mc-caption">
+          <div className="grid grid-cols-2 gap-1 text-xs">
             <button
               type="button"
               onClick={resetFilters}
-              className="rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
+              className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
             >
               Reset Recommended
             </button>
             <button
               type="button"
               onClick={() => setShowAdvancedFilters((prev) => !prev)}
-              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
+              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
             >
               <SlidersHorizontal className="h-3 w-3" />
               {showAdvancedFilters ? "Hide Advanced" : "Show Advanced"}
             </button>
           </div>
-          <div className="grid grid-cols-2 gap-1 text-mc-caption">
+          <div className="grid grid-cols-2 gap-1 text-xs">
             <button
               type="button"
               onClick={() => setShowThreeHops((prev) => !prev)}
-              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
+              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
             >
               {showThreeHops ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
               3 hops {showThreeHops ? "on" : "off"}
@@ -1505,21 +1504,21 @@ export function MemoryGraphView() {
             <button
               type="button"
               onClick={() => setShowTopicTable((prev) => !prev)}
-              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
+              className="inline-flex items-center justify-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/80 hover:bg-muted"
             >
               <Table2 className="h-3 w-3" /> {showTopicTable ? "Hide Topic Home" : "Show Topic Home"}
             </button>
           </div>
-          <p className="text-mc-caption text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Default mode shows a populated graph first. Use Advanced only when you need tighter control.
           </p>
         </div>
 
         {showAdvancedFilters ? (
           <>
-            <div className="space-y-2 border-b border-foreground/[0.06] p-3">
-              <div className="grid grid-cols-2 gap-1.5 text-mc-caption">
-                <label className="rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-muted-foreground">
+            <div className="space-y-2 border-b border-foreground/10 p-3">
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <label className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-muted-foreground">
                   Confidence ≥ {Math.round(confidenceThreshold * 100)}%
                   <input
                     type="range"
@@ -1532,7 +1531,7 @@ export function MemoryGraphView() {
                   />
                 </label>
 
-                <label className="rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-muted-foreground">
+                <label className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-muted-foreground">
                   Used in last N chats
                   <input
                     type="number"
@@ -1540,45 +1539,45 @@ export function MemoryGraphView() {
                     max={80}
                     value={usedInLastNChats}
                     onChange={(e) => setUsedInLastNChats(Math.max(0, Number(e.target.value || 0)))}
-                    className="mt-1 w-full rounded border border-foreground/[0.08] bg-background px-1.5 py-0.5 text-mc-body-sm text-foreground"
+                    className="mt-1 w-full rounded border border-foreground/10 bg-background px-1.5 py-0.5 text-xs text-foreground"
                   />
                 </label>
               </div>
 
-              <div className="grid grid-cols-2 gap-1 text-mc-caption">
+              <div className="grid grid-cols-2 gap-1 text-xs">
                 <select
                   value={timeRange}
                   onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-                  className="rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-foreground/85"
+                  className="rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-foreground/90"
                 >
                   {TIME_OPTIONS.map((opt) => (
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
-                <span className="inline-flex items-center justify-center rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-muted-foreground">
+                <span className="inline-flex items-center justify-center rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-muted-foreground">
                   time window
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-1 text-mc-caption">
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-muted-foreground">
+              <div className="grid grid-cols-2 gap-1 text-xs">
+                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-muted-foreground">
                   <input type="checkbox" checked={conflictsOnly} onChange={(e) => setConflictsOnly(e.target.checked)} className="h-3 w-3" />
                   conflicts only
                 </label>
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1.5 text-muted-foreground">
+                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1.5 text-muted-foreground">
                   <input type="checkbox" checked={lowProvenanceOnly} onChange={(e) => setLowProvenanceOnly(e.target.checked)} className="h-3 w-3" />
                   low provenance only
                 </label>
               </div>
             </div>
 
-            <div className="space-y-2 border-b border-foreground/[0.06] p-3">
-              <p className="flex items-center gap-1 text-mc-body-sm font-medium text-foreground/80">
+            <div className="space-y-2 border-b border-foreground/10 p-3">
+              <p className="flex items-center gap-1 text-xs font-medium text-foreground/80">
                 <Filter className="h-3.5 w-3.5" /> Relation filters
               </p>
               <div className="max-h-24 space-y-1 overflow-y-auto pr-1">
                 {relationTypes.map((relation) => (
-                  <label key={relation} className="inline-flex w-full items-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1 text-mc-caption text-muted-foreground">
+                  <label key={relation} className="inline-flex w-full items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-xs text-muted-foreground">
                     <input
                       type="checkbox"
                       checked={Boolean(enabledRelations[relation])}
@@ -1591,19 +1590,19 @@ export function MemoryGraphView() {
               </div>
             </div>
 
-            <div className="space-y-2 border-b border-foreground/[0.06] p-3">
-              <p className="flex items-center gap-1 text-mc-body-sm font-medium text-foreground/80">
+            <div className="space-y-2 border-b border-foreground/10 p-3">
+              <p className="flex items-center gap-1 text-xs font-medium text-foreground/80">
                 <Layers className="h-3.5 w-3.5" /> Diagnostics overlays
               </p>
-              <div className="grid grid-cols-2 gap-1 text-mc-caption">
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayConflicts} onChange={(e) => setOverlayConflicts(e.target.checked)} className="h-3 w-3" />conflicts</label>
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayStaleness} onChange={(e) => setOverlayStaleness(e.target.checked)} className="h-3 w-3" />staleness</label>
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayLowProvenance} onChange={(e) => setOverlayLowProvenance(e.target.checked)} className="h-3 w-3" />low provenance</label>
-                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayDupes} onChange={(e) => setOverlayDupes(e.target.checked)} className="h-3 w-3" />duplication</label>
-                <label className="col-span-2 inline-flex items-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayMergeSuggestions} onChange={(e) => setOverlayMergeSuggestions(e.target.checked)} className="h-3 w-3" />merge suggestions</label>
+              <div className="grid grid-cols-2 gap-1 text-xs">
+                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayConflicts} onChange={(e) => setOverlayConflicts(e.target.checked)} className="h-3 w-3" />conflicts</label>
+                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayStaleness} onChange={(e) => setOverlayStaleness(e.target.checked)} className="h-3 w-3" />staleness</label>
+                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayLowProvenance} onChange={(e) => setOverlayLowProvenance(e.target.checked)} className="h-3 w-3" />low provenance</label>
+                <label className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayDupes} onChange={(e) => setOverlayDupes(e.target.checked)} className="h-3 w-3" />duplication</label>
+                <label className="col-span-2 inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-muted-foreground"><input type="checkbox" checked={overlayMergeSuggestions} onChange={(e) => setOverlayMergeSuggestions(e.target.checked)} className="h-3 w-3" />merge suggestions</label>
               </div>
 
-              <div className="rounded-md border border-foreground/[0.08] bg-card/60 p-2 text-mc-caption text-muted-foreground">
+              <div className="rounded-md border border-foreground/10 bg-card/60 p-2 text-xs text-muted-foreground">
                 <p>conflicts: <span className="text-rose-700 dark:text-rose-300">{diagnostics.conflicts.length}</span></p>
                 <p>duplication groups: <span className="text-amber-700 dark:text-amber-200">{diagnostics.duplicates.length}</span></p>
                 <p>merge suggestions: <span className="text-sky-700 dark:text-sky-200">{diagnostics.mergeSuggestions.length}</span></p>
@@ -1614,17 +1613,17 @@ export function MemoryGraphView() {
 
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           <div className="mb-2 flex items-center justify-between">
-            <p className="text-mc-body-sm font-semibold text-foreground/85">Pinned ({pinnedIds.length}/5)</p>
+            <p className="text-xs font-semibold text-foreground/90">Pinned ({pinnedIds.length}/5)</p>
             <button
               type="button"
               onClick={() => setPinnedIds([])}
-              className="rounded border border-foreground/[0.08] px-1.5 py-0.5 text-mc-caption text-muted-foreground hover:bg-muted"
+              className="rounded border border-foreground/10 px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted"
             >
               clear
             </button>
           </div>
           {pinnedIds.length === 0 ? (
-            <p className="text-mc-caption text-muted-foreground/70">Pin up to 5 nodes to isolate the smallest connecting subgraph.</p>
+            <p className="text-xs text-muted-foreground/70">Pin up to 5 nodes to isolate the smallest connecting subgraph.</p>
           ) : (
             <div className="space-y-1">
               {pinnedIds.map((id) => {
@@ -1634,7 +1633,7 @@ export function MemoryGraphView() {
                     key={id}
                     type="button"
                     onClick={() => setSelectedNodeId(id)}
-                    className="w-full rounded border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-left text-mc-caption text-violet-700 hover:bg-violet-500/20 dark:text-violet-100"
+                    className="w-full rounded border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-left text-xs text-violet-700 hover:bg-violet-500/20 dark:text-violet-100"
                   >
                     {node?.label || id}
                   </button>
@@ -1644,13 +1643,13 @@ export function MemoryGraphView() {
           )}
 
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-mc-body-sm font-semibold text-foreground/85">Topic Home</p>
-            <span className="text-mc-caption text-muted-foreground">{showTopicTable ? "visible" : "hidden"}</span>
+            <p className="text-xs font-semibold text-foreground/90">Topic Home</p>
+            <span className="text-xs text-muted-foreground">{showTopicTable ? "visible" : "hidden"}</span>
           </div>
 
           {showTopicTable ? (
-            <div className="mt-2 overflow-hidden rounded-md border border-foreground/[0.08]">
-              <div className="grid grid-cols-[1.2fr,0.6fr,0.8fr,0.6fr,0.8fr] gap-1 border-b border-foreground/[0.06] bg-muted/30 px-2 py-1 text-mc-micro uppercase tracking-wide text-muted-foreground">
+            <div className="mt-2 overflow-hidden rounded-md border border-foreground/10">
+              <div className="grid grid-cols-5 gap-1 border-b border-foreground/10 bg-muted/30 px-2 py-1 text-xs uppercase tracking-wide text-muted-foreground">
                 <span>topic</span>
                 <span>facts</span>
                 <span>updated</span>
@@ -1667,7 +1666,7 @@ export function MemoryGraphView() {
                       setSelectedNodeId(row.topicId);
                       setLayer("topic");
                     }}
-                    className="grid w-full grid-cols-[1.2fr,0.6fr,0.8fr,0.6fr,0.8fr] gap-1 border-b border-foreground/[0.04] px-2 py-1.5 text-left text-mc-caption text-foreground/85 hover:bg-muted/50"
+                    className="grid w-full grid-cols-5 gap-1 border-b border-foreground/5 px-2 py-1.5 text-left text-xs text-foreground/90 hover:bg-muted/50"
                   >
                     <span className="truncate">{row.topic}</span>
                     <span>{row.factsCount}</span>
@@ -1707,7 +1706,7 @@ export function MemoryGraphView() {
           <Controls />
         </ReactFlow>
 
-        <div className="pointer-events-none absolute left-3 top-3 z-20 inline-flex items-center gap-2 rounded-md border border-foreground/[0.12] bg-card/85 px-2.5 py-1 text-mc-body-sm text-foreground/85 shadow-sm backdrop-blur">
+        <div className="pointer-events-none absolute left-3 top-3 z-20 inline-flex items-center gap-2 rounded-md border border-foreground/15 bg-card/80 px-2.5 py-1 text-xs text-foreground/90 shadow-sm backdrop-blur">
           <Sparkles className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
           <span>
             Top {MAX_VISIBLE_NODES} nodes / {MAX_VISIBLE_EDGES} edges by expected usefulness.
@@ -1717,16 +1716,16 @@ export function MemoryGraphView() {
 
       <aside
         className={cn(
-          "flex shrink-0 flex-col border-l border-foreground/[0.08] bg-card/60 transition-all duration-200",
-          inspectorCollapsed ? "w-11" : "w-[360px]"
+          "flex shrink-0 flex-col border-l border-foreground/10 bg-card/60 transition-all duration-200",
+          inspectorCollapsed ? "w-11" : "w-80"
         )}
       >
-        <div className="space-y-2 border-b border-foreground/[0.06] p-3">
+        <div className="space-y-2 border-b border-foreground/10 p-3">
           <div className={cn("flex items-start", inspectorCollapsed ? "justify-center" : "justify-between")}>
             {!inspectorCollapsed ? (
               <div>
-                <p className="text-mc-caption font-semibold text-foreground/90">Decision Inspector</p>
-                <p className="text-mc-body-sm text-muted-foreground">
+                <p className="text-xs font-semibold text-foreground/90">Decision Inspector</p>
+                <p className="text-xs text-muted-foreground">
                   Layer {layer === "overview" ? "A" : layer === "topic" ? "B" : "C"} · {lens} lens ·
                   visible nodes {flowNodes.length}
                 </p>
@@ -1735,7 +1734,7 @@ export function MemoryGraphView() {
             <button
               type="button"
               onClick={() => setInspectorCollapsed((prev) => !prev)}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-foreground/[0.08] bg-card text-muted-foreground transition-colors hover:text-foreground/80"
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-foreground/10 bg-card text-muted-foreground transition-colors hover:text-foreground/80"
               title={inspectorCollapsed ? "Expand inspector" : "Collapse inspector"}
               aria-label={inspectorCollapsed ? "Expand inspector" : "Collapse inspector"}
             >
@@ -1750,207 +1749,207 @@ export function MemoryGraphView() {
 
         {inspectorCollapsed ? (
           <div className="flex min-h-0 flex-1 items-center justify-center p-1">
-            <span className="select-none text-mc-caption tracking-wide text-muted-foreground/70 [writing-mode:vertical-rl]">
+            <span className="select-none text-xs tracking-wide text-muted-foreground/70 [writing-mode:vertical-rl]">
               Inspector
             </span>
           </div>
         ) : (
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
-          {selectedNode ? (
-            <div className="space-y-2 rounded-lg border border-foreground/[0.08] bg-card/45 p-3">
-              <p className="text-mc-sub font-semibold text-foreground">{selectedNode.label}</p>
-              <p className="text-mc-body-sm text-muted-foreground">
-                {selectedNode.kind} · confidence {Math.round(selectedNode.confidence * 100)}% · updated {formatAgo(nodeInsights.get(selectedNode.id)?.recencyMs || 0)}
-              </p>
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
+            {selectedNode ? (
+              <div className="space-y-2 rounded-lg border border-foreground/10 bg-card/45 p-3">
+                <p className="text-xs font-semibold text-foreground">{selectedNode.label}</p>
+                <p className="text-xs text-muted-foreground">
+                  {selectedNode.kind} · confidence {Math.round(selectedNode.confidence * 100)}% · updated {formatAgo(nodeInsights.get(selectedNode.id)?.recencyMs || 0)}
+                </p>
 
-              <div className="flex flex-wrap gap-1 text-mc-caption">
-                <span className="rounded bg-muted px-1.5 py-0.5">usefulness {Math.round((nodeInsights.get(selectedNode.id)?.usefulness || 0) * 100)}</span>
-                <span className="rounded bg-muted px-1.5 py-0.5">provenance {Math.round((nodeInsights.get(selectedNode.id)?.provenanceQuality || 0) * 100)}%</span>
-                <span className="rounded bg-muted px-1.5 py-0.5">retrieval {nodeInsights.get(selectedNode.id)?.retrievalInWindow || 0}</span>
-                {(overlayConflicts && (nodeInsights.get(selectedNode.id)?.conflicts || 0) > 0) ? (
-                  <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-rose-700 dark:text-rose-200">conflicts {nodeInsights.get(selectedNode.id)?.conflicts}</span>
-                ) : null}
-                {(overlayStaleness && nodeInsights.get(selectedNode.id)?.stale) ? (
-                  <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-700 dark:text-amber-200">stale</span>
-                ) : null}
-                {(overlayLowProvenance && nodeInsights.get(selectedNode.id)?.lowProvenance) ? (
-                  <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-700 dark:text-amber-200">low provenance</span>
-                ) : null}
-              </div>
-
-              {editingNodeId === selectedNode.id ? (
-                <div className="space-y-1">
-                  <textarea
-                    value={editDraft}
-                    onChange={(e) => setEditDraft(e.target.value)}
-                    rows={4}
-                    className="w-full rounded-md border border-foreground/[0.08] bg-background px-2 py-1.5 text-mc-caption text-foreground/90 outline-none"
-                  />
-                  <div className="flex gap-1">
-                    <button type="button" onClick={saveEdit} className="rounded bg-violet-600 px-2 py-1 text-mc-caption text-white hover:bg-violet-500">Save edit</button>
-                    <button type="button" onClick={() => setEditingNodeId(null)} className="rounded border border-foreground/[0.08] px-2 py-1 text-mc-caption text-muted-foreground hover:bg-muted">Cancel</button>
-                  </div>
+                <div className="flex flex-wrap gap-1 text-xs">
+                  <span className="rounded bg-muted px-1.5 py-0.5">usefulness {Math.round((nodeInsights.get(selectedNode.id)?.usefulness || 0) * 100)}</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5">provenance {Math.round((nodeInsights.get(selectedNode.id)?.provenanceQuality || 0) * 100)}%</span>
+                  <span className="rounded bg-muted px-1.5 py-0.5">retrieval {nodeInsights.get(selectedNode.id)?.retrievalInWindow || 0}</span>
+                  {(overlayConflicts && (nodeInsights.get(selectedNode.id)?.conflicts || 0) > 0) ? (
+                    <span className="rounded bg-rose-500/20 px-1.5 py-0.5 text-rose-700 dark:text-rose-200">conflicts {nodeInsights.get(selectedNode.id)?.conflicts}</span>
+                  ) : null}
+                  {(overlayStaleness && nodeInsights.get(selectedNode.id)?.stale) ? (
+                    <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-700 dark:text-amber-200">stale</span>
+                  ) : null}
+                  {(overlayLowProvenance && nodeInsights.get(selectedNode.id)?.lowProvenance) ? (
+                    <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-amber-700 dark:text-amber-200">low provenance</span>
+                  ) : null}
                 </div>
-              ) : (
-                <p className="text-mc-caption text-muted-foreground">{selectedNode.summary || "No summary yet."}</p>
-              )}
 
-              <div className="grid grid-cols-2 gap-1 text-mc-caption">
-                <button type="button" onClick={handleConfirm} className="inline-flex items-center justify-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-200"><CheckCircle2 className="h-3 w-3" />confirm</button>
-                <button type="button" onClick={startEditing} className="inline-flex items-center justify-center gap-1 rounded border border-foreground/[0.08] bg-card px-2 py-1 text-foreground/80 hover:bg-muted">edit</button>
-                <button type="button" onClick={handleDeprecate} className="inline-flex items-center justify-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-700 hover:bg-amber-500/20 dark:text-amber-200">deprecate</button>
-                <button type="button" onClick={() => togglePin(selectedNode.id)} className="inline-flex items-center justify-center gap-1 rounded border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-violet-700 hover:bg-violet-500/20 dark:text-violet-200">{pinnedIds.includes(selectedNode.id) ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}{pinnedIds.includes(selectedNode.id) ? "unpin" : "pin"}</button>
-              </div>
-
-              <div className="rounded border border-foreground/[0.08] bg-background/30 p-2 text-mc-caption text-muted-foreground">
-                <p className="font-medium text-foreground/85">Provenance</p>
-                {(nodeInsights.get(selectedNode.id)?.sources || []).length === 0 ? (
-                  <p className="mt-1">No explicit provenance source.</p>
-                ) : (
-                  <div className="mt-1 space-y-0.5">
-                    {(nodeInsights.get(selectedNode.id)?.sources || []).slice(0, 8).map((source) => (
-                      <p key={source} className="truncate">{source}</p>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-foreground/[0.12] bg-card/30 p-3 text-mc-body-sm text-muted-foreground">
-              Select a node to inspect what is wrong and what to do next.
-            </div>
-          )}
-
-          {(layer === "topic" || layer === "forensics") && selectedTopic ? (
-            <div className="space-y-2 rounded-lg border border-foreground/[0.08] bg-card/45 p-3">
-              <p className="text-mc-caption font-semibold text-foreground">Topic focus: {selectedTopic.label}</p>
-              <div className="space-y-1 text-mc-caption">
-                {collapsed.edges
-                  .filter((edge) => edge.source === selectedTopic.id || edge.target === selectedTopic.id)
-                  .sort((a, b) => b.confidence - a.confidence)
-                  .slice(0, 8)
-                  .map((edge) => {
-                    const otherId = edge.source === selectedTopic.id ? edge.target : edge.source;
-                    const other = collapsed.nodeById.get(otherId);
-                    return (
-                      <button
-                        key={edge.id}
-                        type="button"
-                        onClick={() => setSelectedNodeId(otherId)}
-                        className="w-full rounded border border-foreground/[0.08] bg-card px-2 py-1 text-left text-foreground/85 hover:bg-muted"
-                      >
-                        <p className="truncate">{other?.label || otherId}</p>
-                        <p className="truncate text-muted-foreground">{relationLabel(edge.relation)} · conf {Math.round(edge.confidence * 100)}% · {formatAgo(edge.lastSeenMs)}</p>
-                      </button>
-                    );
-                  })}
-              </div>
-            </div>
-          ) : null}
-
-          {layer === "forensics" ? (
-            <div className="space-y-2 rounded-lg border border-foreground/[0.08] bg-card/45 p-3">
-              <p className="text-mc-caption font-semibold text-foreground">Forensics</p>
-              <p className="text-mc-caption text-muted-foreground">
-                Raw chunks, provenance, and diffs for current focus.
-              </p>
-
-              <div className="space-y-1">
-                <p className="text-mc-caption font-medium text-foreground/85">Raw chunks</p>
-                {forensics.docs.length === 0 ? (
-                  <p className="text-mc-caption text-muted-foreground">No matching chunks for this focus.</p>
-                ) : (
-                  forensics.docs.slice(0, 4).map((doc) => (
-                    <div key={doc.id} className="rounded border border-foreground/[0.08] bg-card px-2 py-1.5">
-                      <p className="truncate text-mc-caption font-medium text-foreground/90">{doc.name}</p>
-                      <p className="text-mc-micro text-muted-foreground">{doc.path}</p>
-                      <div className="mt-1 max-h-24 space-y-1 overflow-y-auto">
-                        {doc.chunks.slice(0, 4).map((chunk) => (
-                          <p key={chunk.id} className="rounded bg-background/60 px-1.5 py-1 text-mc-micro text-muted-foreground">
-                            L{chunk.startLine}: {chunk.text}
-                          </p>
-                        ))}
-                      </div>
+                {editingNodeId === selectedNode.id ? (
+                  <div className="space-y-1">
+                    <textarea
+                      value={editDraft}
+                      onChange={(e) => setEditDraft(e.target.value)}
+                      rows={4}
+                      className="w-full rounded-md border border-foreground/10 bg-background px-2 py-1.5 text-xs text-foreground/90 outline-none"
+                    />
+                    <div className="flex gap-1">
+                      <button type="button" onClick={saveEdit} className="rounded bg-violet-600 px-2 py-1 text-xs text-white hover:bg-violet-500">Save edit</button>
+                      <button type="button" onClick={() => setEditingNodeId(null)} className="rounded border border-foreground/10 px-2 py-1 text-xs text-muted-foreground hover:bg-muted">Cancel</button>
                     </div>
-                  ))
-                )}
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-mc-caption font-medium text-foreground/85">Provenance facts</p>
-                <div className="max-h-28 space-y-1 overflow-y-auto">
-                  {forensics.facts.slice(0, 12).map((fact) => (
-                    <p key={`${fact.doc}:${fact.id}`} className="rounded border border-foreground/[0.08] bg-background/40 px-1.5 py-1 text-mc-micro text-muted-foreground">
-                      {fact.doc}:L{fact.line} · {fact.statement}
-                    </p>
-                  ))}
-                  {forensics.facts.length === 0 ? <p className="text-mc-micro text-muted-foreground">No matched facts.</p> : null}
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <p className="text-mc-caption font-medium text-foreground/85">Diffs / contradictions</p>
-                {forensics.diffs.length === 0 ? (
-                  <p className="text-mc-micro text-muted-foreground">No contradictions detected in current forensics scope.</p>
+                  </div>
                 ) : (
-                  forensics.diffs.slice(0, 6).map((diff) => (
-                    <div key={diff.canonical} className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-mc-micro text-rose-700 dark:text-rose-100">
-                      {diff.statements.map((statement, idx) => (
-                        <p key={`${diff.canonical}:${idx}`}>• {statement}</p>
+                  <p className="text-xs text-muted-foreground">{selectedNode.summary || "No summary yet."}</p>
+                )}
+
+                <div className="grid grid-cols-2 gap-1 text-xs">
+                  <button type="button" onClick={handleConfirm} className="inline-flex items-center justify-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-200"><CheckCircle2 className="h-3 w-3" />confirm</button>
+                  <button type="button" onClick={startEditing} className="inline-flex items-center justify-center gap-1 rounded border border-foreground/10 bg-card px-2 py-1 text-foreground/80 hover:bg-muted">edit</button>
+                  <button type="button" onClick={handleDeprecate} className="inline-flex items-center justify-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-700 hover:bg-amber-500/20 dark:text-amber-200">deprecate</button>
+                  <button type="button" onClick={() => togglePin(selectedNode.id)} className="inline-flex items-center justify-center gap-1 rounded border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-violet-700 hover:bg-violet-500/20 dark:text-violet-200">{pinnedIds.includes(selectedNode.id) ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}{pinnedIds.includes(selectedNode.id) ? "unpin" : "pin"}</button>
+                </div>
+
+                <div className="rounded border border-foreground/10 bg-background/30 p-2 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground/90">Provenance</p>
+                  {(nodeInsights.get(selectedNode.id)?.sources || []).length === 0 ? (
+                    <p className="mt-1">No explicit provenance source.</p>
+                  ) : (
+                    <div className="mt-1 space-y-0.5">
+                      {(nodeInsights.get(selectedNode.id)?.sources || []).slice(0, 8).map((source) => (
+                        <p key={source} className="truncate">{source}</p>
                       ))}
                     </div>
-                  ))
-                )}
+                  )}
+                </div>
               </div>
-            </div>
-          ) : null}
+            ) : (
+              <div className="rounded-lg border border-dashed border-foreground/15 bg-card/30 p-3 text-xs text-muted-foreground">
+                Select a node to inspect what is wrong and what to do next.
+              </div>
+            )}
 
-          {(overlayDupes || overlayMergeSuggestions) ? (
-            <div className="space-y-2 rounded-lg border border-foreground/[0.08] bg-card/45 p-3">
-              {overlayDupes ? (
-                <div>
-                  <p className="text-mc-caption font-medium text-foreground/85">Duplication</p>
-                  <div className="mt-1 max-h-20 space-y-1 overflow-y-auto">
-                    {diagnostics.duplicates.slice(0, 8).map((group) => (
-                      <p key={group.labelKey} className="text-mc-micro text-muted-foreground">
-                        {group.labels.join(" | ")}
+            {(layer === "topic" || layer === "forensics") && selectedTopic ? (
+              <div className="space-y-2 rounded-lg border border-foreground/10 bg-card/45 p-3">
+                <p className="text-xs font-semibold text-foreground">Topic focus: {selectedTopic.label}</p>
+                <div className="space-y-1 text-xs">
+                  {collapsed.edges
+                    .filter((edge) => edge.source === selectedTopic.id || edge.target === selectedTopic.id)
+                    .sort((a, b) => b.confidence - a.confidence)
+                    .slice(0, 8)
+                    .map((edge) => {
+                      const otherId = edge.source === selectedTopic.id ? edge.target : edge.source;
+                      const other = collapsed.nodeById.get(otherId);
+                      return (
+                        <button
+                          key={edge.id}
+                          type="button"
+                          onClick={() => setSelectedNodeId(otherId)}
+                          className="w-full rounded border border-foreground/10 bg-card px-2 py-1 text-left text-foreground/90 hover:bg-muted"
+                        >
+                          <p className="truncate">{other?.label || otherId}</p>
+                          <p className="truncate text-muted-foreground">{relationLabel(edge.relation)} · conf {Math.round(edge.confidence * 100)}% · {formatAgo(edge.lastSeenMs)}</p>
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            ) : null}
+
+            {layer === "forensics" ? (
+              <div className="space-y-2 rounded-lg border border-foreground/10 bg-card/45 p-3">
+                <p className="text-xs font-semibold text-foreground">Forensics</p>
+                <p className="text-xs text-muted-foreground">
+                  Raw chunks, provenance, and diffs for current focus.
+                </p>
+
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-foreground/90">Raw chunks</p>
+                  {forensics.docs.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No matching chunks for this focus.</p>
+                  ) : (
+                    forensics.docs.slice(0, 4).map((doc) => (
+                      <div key={doc.id} className="rounded border border-foreground/10 bg-card px-2 py-1.5">
+                        <p className="truncate text-xs font-medium text-foreground/90">{doc.name}</p>
+                        <p className="text-xs text-muted-foreground">{doc.path}</p>
+                        <div className="mt-1 max-h-24 space-y-1 overflow-y-auto">
+                          {doc.chunks.slice(0, 4).map((chunk) => (
+                            <p key={chunk.id} className="rounded bg-background/60 px-1.5 py-1 text-xs text-muted-foreground">
+                              L{chunk.startLine}: {chunk.text}
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-foreground/90">Provenance facts</p>
+                  <div className="max-h-28 space-y-1 overflow-y-auto">
+                    {forensics.facts.slice(0, 12).map((fact) => (
+                      <p key={`${fact.doc}:${fact.id}`} className="rounded border border-foreground/10 bg-background/40 px-1.5 py-1 text-xs text-muted-foreground">
+                        {fact.doc}:L{fact.line} · {fact.statement}
                       </p>
                     ))}
-                    {diagnostics.duplicates.length === 0 ? <p className="text-mc-micro text-muted-foreground">No duplicate labels.</p> : null}
+                    {forensics.facts.length === 0 ? <p className="text-xs text-muted-foreground">No matched facts.</p> : null}
                   </div>
                 </div>
-              ) : null}
 
-              {overlayMergeSuggestions ? (
-                <div>
-                  <p className="text-mc-caption font-medium text-foreground/85">Merge suggestions</p>
-                  <div className="mt-1 max-h-20 space-y-1 overflow-y-auto">
-                    {diagnostics.mergeSuggestions.slice(0, 8).map((pair) => (
-                      <p key={`${pair.a.id}:${pair.b.id}`} className="text-mc-micro text-muted-foreground">
-                        {pair.a.label} ↔ {pair.b.label} ({Math.round(pair.similarity * 100)}%)
-                      </p>
-                    ))}
-                    {diagnostics.mergeSuggestions.length === 0 ? <p className="text-mc-micro text-muted-foreground">No merge candidates.</p> : null}
-                  </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-foreground/90">Diffs / contradictions</p>
+                  {forensics.diffs.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">No contradictions detected in current forensics scope.</p>
+                  ) : (
+                    forensics.diffs.slice(0, 6).map((diff) => (
+                      <div key={diff.canonical} className="rounded border border-rose-500/30 bg-rose-500/10 px-2 py-1 text-xs text-rose-700 dark:text-rose-100">
+                        {diff.statements.map((statement, idx) => (
+                          <p key={`${diff.canonical}:${idx}`}>• {statement}</p>
+                        ))}
+                      </div>
+                    ))
+                  )}
                 </div>
-              ) : null}
+              </div>
+            ) : null}
+
+            {(overlayDupes || overlayMergeSuggestions) ? (
+              <div className="space-y-2 rounded-lg border border-foreground/10 bg-card/45 p-3">
+                {overlayDupes ? (
+                  <div>
+                    <p className="text-xs font-medium text-foreground/90">Duplication</p>
+                    <div className="mt-1 max-h-20 space-y-1 overflow-y-auto">
+                      {diagnostics.duplicates.slice(0, 8).map((group) => (
+                        <p key={group.labelKey} className="text-xs text-muted-foreground">
+                          {group.labels.join(" | ")}
+                        </p>
+                      ))}
+                      {diagnostics.duplicates.length === 0 ? <p className="text-xs text-muted-foreground">No duplicate labels.</p> : null}
+                    </div>
+                  </div>
+                ) : null}
+
+                {overlayMergeSuggestions ? (
+                  <div>
+                    <p className="text-xs font-medium text-foreground/90">Merge suggestions</p>
+                    <div className="mt-1 max-h-20 space-y-1 overflow-y-auto">
+                      {diagnostics.mergeSuggestions.slice(0, 8).map((pair) => (
+                        <p key={`${pair.a.id}:${pair.b.id}`} className="text-xs text-muted-foreground">
+                          {pair.a.label} ↔ {pair.b.label} ({Math.round(pair.similarity * 100)}%)
+                        </p>
+                      ))}
+                      {diagnostics.mergeSuggestions.length === 0 ? <p className="text-xs text-muted-foreground">No merge candidates.</p> : null}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="rounded-lg border border-foreground/10 bg-card/40 p-3 text-xs text-muted-foreground">
+              <p className="font-medium text-foreground/90">Current defaults</p>
+              <p>Focus + context: 1-hop full, 2-hop faint, 3-hop hidden unless expanded.</p>
+              <p>Render caps: top {MAX_VISIBLE_NODES} nodes, top {MAX_VISIBLE_EDGES} edges in scope.</p>
+              <p>Ranking signals: retrieval frequency, recency, conflict rate, provenance, task relevance, breadth.</p>
             </div>
-          ) : null}
-
-          <div className="rounded-lg border border-foreground/[0.08] bg-card/40 p-3 text-mc-caption text-muted-foreground">
-            <p className="font-medium text-foreground/85">Current defaults</p>
-            <p>Focus + context: 1-hop full, 2-hop faint, 3-hop hidden unless expanded.</p>
-            <p>Render caps: top {MAX_VISIBLE_NODES} nodes, top {MAX_VISIBLE_EDGES} edges in scope.</p>
-            <p>Ranking signals: retrieval frequency, recency, conflict rate, provenance, task relevance, breadth.</p>
           </div>
-        </div>
         )}
       </aside>
 
       {notice ? (
         <div
           className={cn(
-            "pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-lg border px-3 py-2 text-mc-caption shadow-lg backdrop-blur-sm",
+            "pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-lg border px-3 py-2 text-xs shadow-lg backdrop-blur-sm",
             notice.kind === "success"
               ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
               : "border-red-500/30 bg-red-500/15 text-red-700 dark:text-red-200"
@@ -1964,7 +1963,7 @@ export function MemoryGraphView() {
       ) : null}
 
       {(saving || publishing) ? (
-        <div className="pointer-events-none absolute right-4 top-4 z-30 inline-flex items-center gap-1.5 rounded-md border border-foreground/[0.12] bg-card/90 px-2 py-1 text-mc-body-sm text-foreground/80">
+        <div className="pointer-events-none absolute right-4 top-4 z-30 inline-flex items-center gap-1.5 rounded-md border border-foreground/15 bg-card/90 px-2 py-1 text-xs text-foreground/80">
           <InlineSpinner size="sm" />
           {saving ? "Saving graph..." : "Publishing snapshot..."}
         </div>

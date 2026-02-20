@@ -36,7 +36,7 @@ export function AppSidebar() {
   const section = searchParams.get("section") || "tasks";
 
   return (
-    <aside className="flex h-full w-[220px] shrink-0 flex-col border-r border-foreground/10 bg-secondary">
+    <aside className="flex h-full w-56 shrink-0 flex-col border-r border-foreground/10 bg-secondary">
       <nav className="flex flex-1 flex-col gap-0.5 p-3">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -45,7 +45,7 @@ export function AppSidebar() {
               key={item.label}
               href={"/?section=" + item.section}
               className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2 text-mc-body font-medium transition-colors",
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 section === item.section
                   ? "bg-violet-600/20 text-violet-300"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground/90"

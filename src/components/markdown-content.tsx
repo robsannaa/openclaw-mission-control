@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 const baseComponents = {
   h1: ({ children, ...props }: React.ComponentPropsWithoutRef<"h1">) => (
     <h1
-      className="mb-3 mt-6 text-mc-heading font-semibold text-foreground first:mt-0"
+      className="mb-3 mt-6 text-xs font-semibold text-foreground first:mt-0"
       {...props}
     >
       {children}
@@ -16,7 +16,7 @@ const baseComponents = {
   ),
   h2: ({ children, ...props }: React.ComponentPropsWithoutRef<"h2">) => (
     <h2
-      className="mb-2 mt-5 text-mc-sub font-semibold text-violet-300 first:mt-0"
+      className="mb-2 mt-5 text-xs font-semibold text-violet-300 first:mt-0"
       {...props}
     >
       {children}
@@ -24,7 +24,7 @@ const baseComponents = {
   ),
   h3: ({ children, ...props }: React.ComponentPropsWithoutRef<"h3">) => (
     <h3
-      className="mb-2 mt-4 text-mc-body font-semibold text-foreground/90 first:mt-0"
+      className="mb-2 mt-4 text-sm font-semibold text-foreground/90 first:mt-0"
       {...props}
     >
       {children}
@@ -32,14 +32,14 @@ const baseComponents = {
   ),
   h4: ({ children, ...props }: React.ComponentPropsWithoutRef<"h4">) => (
     <h4
-      className="mb-1.5 mt-3 text-mc-body font-medium text-foreground/70 first:mt-0"
+      className="mb-1.5 mt-3 text-sm font-medium text-foreground/70 first:mt-0"
       {...props}
     >
       {children}
     </h4>
   ),
   p: ({ children, ...props }: React.ComponentPropsWithoutRef<"p">) => (
-    <p className="mb-2 text-mc-body leading-7 text-muted-foreground" {...props}>
+    <p className="mb-2 text-sm leading-7 text-muted-foreground" {...props}>
       {children}
     </p>
   ),
@@ -60,12 +60,12 @@ const baseComponents = {
     </ol>
   ),
   li: ({ children, ...props }: React.ComponentPropsWithoutRef<"li">) => (
-    <li className="text-mc-body text-muted-foreground" {...props}>
+    <li className="text-sm text-muted-foreground" {...props}>
       {children}
     </li>
   ),
   hr: (props: React.ComponentPropsWithoutRef<"hr">) => (
-    <hr className="my-4 border-foreground/[0.06]" {...props} />
+    <hr className="my-4 border-foreground/10" {...props} />
   ),
   strong: ({ children, ...props }: React.ComponentPropsWithoutRef<"strong">) => (
     <strong className="font-semibold text-foreground/90" {...props}>
@@ -79,7 +79,7 @@ const baseComponents = {
   ),
   code: ({ children, ...props }: React.ComponentPropsWithoutRef<"code">) => (
     <code
-      className="rounded bg-muted px-1.5 py-0.5 font-mono text-mc-body text-foreground/70"
+      className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm text-foreground/70"
       {...props}
     >
       {children}
@@ -87,7 +87,7 @@ const baseComponents = {
   ),
   pre: ({ children, ...props }: React.ComponentPropsWithoutRef<"pre">) => (
     <pre
-      className="my-3 overflow-x-auto rounded-lg bg-muted/80 p-4 text-mc-body text-foreground/70"
+      className="my-3 overflow-x-auto rounded-lg bg-muted/80 p-4 text-sm text-foreground/70"
       {...props}
     >
       {children}
@@ -122,7 +122,7 @@ const baseComponents = {
   table: ({ children, ...props }: React.ComponentPropsWithoutRef<"table">) => (
     <div className="my-4 overflow-x-auto">
       <table
-        className="min-w-full border-collapse border border-foreground/[0.06] text-mc-body text-muted-foreground"
+        className="min-w-full border-collapse border border-foreground/10 text-sm text-muted-foreground"
         {...props}
       >
         {children}
@@ -131,19 +131,19 @@ const baseComponents = {
   ),
   th: ({ children, ...props }: React.ComponentPropsWithoutRef<"th">) => (
     <th
-      className="border border-foreground/[0.06] bg-muted/60 px-3 py-2 text-left text-mc-body font-medium text-foreground/90"
+      className="border border-foreground/10 bg-muted/60 px-3 py-2 text-left text-sm font-medium text-foreground/90"
       {...props}
     >
       {children}
     </th>
   ),
   td: ({ children, ...props }: React.ComponentPropsWithoutRef<"td">) => (
-    <td className="border border-foreground/[0.06] px-3 py-2 text-mc-body" {...props}>
+    <td className="border border-foreground/10 px-3 py-2 text-sm" {...props}>
       {children}
     </td>
   ),
   tr: ({ children, ...props }: React.ComponentPropsWithoutRef<"tr">) => (
-    <tr className="border-b border-foreground/[0.06]" {...props}>
+    <tr className="border-b border-foreground/10" {...props}>
       {children}
     </tr>
   ),
@@ -159,7 +159,7 @@ export function MarkdownContent({
   const source = typeof content === "string" ? content : "";
   if (!source.trim()) {
     return (
-      <p className={cn("text-mc-body italic text-muted-foreground/60", className)}>
+      <p className={cn("text-sm italic text-muted-foreground/60", className)}>
         No content
       </p>
     );

@@ -99,7 +99,8 @@ async function readWorkspaceMemoryFile(
     .then((s) => (s.isFile() ? s : null))
     .catch(() => null);
 
-  const hasAltCaseFile = Boolean(upper && lower);
+  // On case-insensitive filesystems (macOS/Windows), both paths can stat the same file → same inode
+  const hasAltCaseFile = Boolean(upper && lower && upper.ino !== lower.ino);
 
   if (!upper && !lower) {
     return {

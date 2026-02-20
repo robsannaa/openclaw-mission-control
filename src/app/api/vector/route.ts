@@ -201,9 +201,10 @@ export async function POST(request: NextRequest) {
       }
 
       case "setup-memory": {
-        // One-click setup: enable memorySearch with given provider/model
+        // One-click setup: enable memorySearch with given provider/model; optional local model path
         const setupProvider = body.provider as string;
         const setupModel = body.model as string;
+        const localModelPath = body.localModelPath as string | undefined;
 
         if (!setupProvider || !setupModel) {
           return NextResponse.json(
@@ -219,15 +220,20 @@ export async function POST(request: NextRequest) {
         );
         const setupHash = setupConfig.hash as string;
 
+        const memorySearch: Record<string, unknown> = {
+          enabled: true,
+          provider: setupProvider,
+          model: setupModel,
+          sources: ["memory"],
+        };
+        if (setupProvider === "local" && localModelPath?.trim()) {
+          memorySearch.local = { modelPath: localModelPath.trim() };
+        }
+
         const setupPatch = JSON.stringify({
           agents: {
             defaults: {
-              memorySearch: {
-                enabled: true,
-                provider: setupProvider,
-                model: setupModel,
-                sources: ["memory"],
-              },
+              memorySearch,
             },
           },
         });
@@ -249,9 +255,12 @@ export async function POST(request: NextRequest) {
       }
 
       case "update-embedding-model": {
-        // Update embedding provider/model via config.patch
+        // Update embedding provider/model and optional memorySearch options (local path, fallback, cache)
         const provider = body.provider as string;
         const model = body.model as string;
+        const localModelPath = body.localModelPath as string | undefined;
+        const fallback = body.fallback as string | undefined;
+        const cacheEnabled = body.cacheEnabled as boolean | undefined;
 
         if (!provider || !model) {
           return NextResponse.json(
@@ -266,13 +275,39 @@ export async function POST(request: NextRequest) {
           10000
         );
         const hash = configData.hash as string;
+        const resolved = (configData.resolved || {}) as Record<string, unknown>;
+        const agentsConfig = (resolved.agents || {}) as Record<string, unknown>;
+        const defaults = (agentsConfig.defaults || {}) as Record<string, unknown>;
+        const currentMemorySearch = (defaults.memorySearch || {}) as Record<string, unknown>;
 
-        // The memory embedding config is at agents.defaults level
-        // Patch the memory search config
+        const memorySearch: Record<string, unknown> = {
+          ...currentMemorySearch,
+          enabled: currentMemorySearch.enabled ?? true,
+          provider,
+          model,
+          sources: currentMemorySearch.sources ?? ["memory"],
+        };
+        if (provider === "local" && localModelPath !== undefined) {
+          memorySearch.local = {
+            ...((currentMemorySearch.local as Record<string, unknown>) || {}),
+            modelPath: localModelPath.trim() || undefined,
+          };
+        }
+        if (fallback !== undefined) {
+          memorySearch.fallback = fallback === "none" || fallback === "" ? "none" : fallback;
+        }
+        if (cacheEnabled !== undefined) {
+          memorySearch.cache = {
+            ...((currentMemorySearch.cache as Record<string, unknown>) || {}),
+            enabled: cacheEnabled,
+          };
+        }
+
         const patchRaw = JSON.stringify({
-          memory: {
-            provider,
-            model,
+          agents: {
+            defaults: {
+              memorySearch,
+            },
           },
         });
 

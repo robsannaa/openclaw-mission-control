@@ -251,7 +251,7 @@ function StatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-md border px-1.5 py-0.5 text-[0.5rem] font-medium",
+        "inline-flex items-center rounded-md border px-1.5 py-0.5 text-xs font-medium",
         toneClass(tone)
       )}
     >
@@ -276,7 +276,7 @@ function ModelSelect({
       value={value}
       disabled={disabled}
       onChange={(e) => onSelect(e.target.value)}
-      className="mc-control w-full min-w-64 px-3 py-2 text-mc-body text-foreground outline-none transition-colors focus:border-cyan-500/40 disabled:opacity-50"
+      className="rounded-lg border border-border bg-muted/50 w-full min-w-64 px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-cyan-500/40 disabled:opacity-50"
     >
       {options.map((opt) => {
         const suffix = !opt.known
@@ -692,7 +692,7 @@ export function ModelsView() {
 
   if (!status) {
     return (
-      <div className="flex flex-1 items-center justify-center text-mc-body text-red-400">
+      <div className="flex flex-1 items-center justify-center text-sm text-red-400">
         Failed to load model configuration
       </div>
     );
@@ -702,7 +702,7 @@ export function ModelsView() {
     <SectionLayout>
       <SectionHeader
         title="Models"
-        description="Clear model control: what each agent is using now, what is saved, and quick switching."
+        description="See and switch each agent's model — saved, in-use, and last session."
         actions={
           <button
             type="button"
@@ -711,7 +711,7 @@ export function ModelsView() {
               fetchModels();
             }}
             disabled={Boolean(busyKey)}
-            className="mc-action-btn"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", busyKey && "animate-spin")} />
             Refresh
@@ -720,28 +720,28 @@ export function ModelsView() {
       />
 
       <SectionBody width="narrow" padding="roomy" innerClassName="space-y-6">
-        <section className="mc-panel">
+        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Bot className="h-4 w-4 text-cyan-400" />
-              <h2 className="text-mc-sub font-semibold text-foreground">Agent Models</h2>
+              <h2 className="text-xs font-semibold text-foreground">Agent Models</h2>
             </div>
             {mainHasOverride && (
               <StatusPill tone="warn" label="Main uses an explicit override" />
             )}
           </div>
-          <p className="mt-2 text-mc-body text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             Changes save immediately to <code>openclaw.json</code>. &quot;Using now&quot; comes
             from <code>openclaw models status --agent</code>.
           </p>
 
           {mainAgent && (
             <div className="mt-4 rounded-xl border border-cyan-500/25 bg-cyan-500/8 p-3">
-              <p className="mc-kicker text-[0.5rem] text-cyan-700 dark:text-cyan-300">
+              <p className="uppercase tracking-wide text-muted-foreground text-xs text-cyan-700 dark:text-cyan-300">
                 Main Agent Using Now
               </p>
               <div className="mt-1 flex flex-wrap items-center gap-2">
-                <p className="text-mc-sub font-semibold text-foreground">
+                <p className="text-xs font-semibold text-foreground">
                   {getModelDisplayName(mainResolved, models, aliases)}
                 </p>
                 <StatusPill
@@ -750,7 +750,7 @@ export function ModelsView() {
                 />
               </div>
               {mainLive && (
-                <p className="mt-1 text-mc-caption text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Last session: {getModelDisplayName(mainLive, models, aliases)}
                 </p>
               )}
@@ -775,10 +775,10 @@ export function ModelsView() {
                   className="rounded-xl border border-border/70 bg-card/50 p-3"
                 >
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-mc-sub font-semibold text-foreground">
+                    <span className="text-xs font-semibold text-foreground">
                       {agent.name}
                     </span>
-                    <span className="rounded bg-muted px-1 py-0.5 text-[0.5rem] text-muted-foreground">
+                    <span className="rounded bg-muted px-1 py-0.5 text-xs text-muted-foreground">
                       {agent.id}
                     </span>
                     <StatusPill
@@ -788,45 +788,45 @@ export function ModelsView() {
                   </div>
 
                   <div className="mt-3 grid gap-2 md:grid-cols-3">
-                    <div className="mc-subpanel">
-                      <p className="mc-kicker text-[0.5rem]">
+                    <div className="rounded-lg border border-border p-2.5 bg-muted/20">
+                      <p className="uppercase tracking-wide text-muted-foreground text-xs">
                         Using now
                       </p>
-                      <p className="mt-1 text-mc-sub font-semibold text-foreground">
+                      <p className="mt-1 text-xs font-semibold text-foreground">
                         {getModelDisplayName(resolved, models, aliases)}
                       </p>
                       {fallbackActive && (
-                        <p className="mc-note-warning mt-1 text-mc-caption">Fallback active now</p>
+                        <p className="text-amber-700 dark:text-amber-300 mt-1 text-xs">Fallback active now</p>
                       )}
                     </div>
 
-                    <div className="mc-subpanel">
-                      <p className="mc-kicker text-[0.5rem]">
+                    <div className="rounded-lg border border-border p-2.5 bg-muted/20">
+                      <p className="uppercase tracking-wide text-muted-foreground text-xs">
                         Saved setting
                       </p>
-                      <p className="mt-1 text-mc-sub font-semibold text-foreground">
+                      <p className="mt-1 text-xs font-semibold text-foreground">
                         {getModelDisplayName(configured, models, aliases)}
                       </p>
-                      <p className="mt-1 text-mc-caption text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         {agent.usesDefaults ? "From global defaults" : "Saved as agent override"}
                       </p>
                     </div>
 
-                    <div className="mc-subpanel">
-                      <p className="mc-kicker text-[0.5rem]">
+                    <div className="rounded-lg border border-border p-2.5 bg-muted/20">
+                      <p className="uppercase tracking-wide text-muted-foreground text-xs">
                         Last session
                       </p>
                       {lastSession ? (
                         <>
-                          <p className="mt-1 text-mc-sub font-semibold text-foreground">
+                          <p className="mt-1 text-xs font-semibold text-foreground">
                             {getModelDisplayName(lastSession, models, aliases)}
                           </p>
-                          <p className="mt-1 text-mc-caption text-muted-foreground">
+                          <p className="mt-1 text-xs text-muted-foreground">
                             {formatAgo(live?.updatedAt ?? null)}
                           </p>
                         </>
                       ) : (
-                        <p className="mt-1 text-mc-body text-muted-foreground">No session yet</p>
+                        <p className="mt-1 text-sm text-muted-foreground">No session yet</p>
                       )}
                     </div>
                   </div>
@@ -849,17 +849,17 @@ export function ModelsView() {
                           void resetAgentToDefaults(agent);
                         }}
                         disabled={Boolean(busyKey)}
-                        className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-mc-caption text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+                        className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
                       >
                         <RotateCcw className="h-3.5 w-3.5" />
                         Use defaults
                       </button>
                     )}
-                    {rowBusy && <p className="mc-note-info text-mc-caption">Applying...</p>}
+                    {rowBusy && <p className="text-cyan-700 dark:text-cyan-300 text-xs">Applying...</p>}
                   </div>
 
                   {sessionLag && (
-                    <p className="mc-note-warning mt-2 text-mc-caption">
+                    <p className="text-amber-700 dark:text-amber-300 mt-2 text-xs">
                       Last session still shows the previous model. New turns should use the
                       model shown in &quot;Using now&quot;.
                     </p>
@@ -870,43 +870,43 @@ export function ModelsView() {
           </div>
         </section>
 
-        <section className="mc-panel">
+        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-violet-400" />
-              <h2 className="text-mc-sub font-semibold text-foreground">Global Default</h2>
+              <h2 className="text-xs font-semibold text-foreground">Global Default</h2>
             </div>
             <StatusPill
               tone={defaultResolved === defaultPrimary ? "good" : "warn"}
               label={defaultResolved === defaultPrimary ? "resolves as configured" : "resolved to fallback now"}
             />
           </div>
-          <p className="mt-2 text-mc-body text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             Saved at <code>agents.defaults.model</code> in <code>openclaw.json</code>. Agents
             set to &quot;inherits default&quot; will use this model chain.
           </p>
 
           <div className="mt-3 grid gap-2 md:grid-cols-2">
-            <div className="mc-subpanel">
-              <p className="mc-kicker text-[0.5rem]">
+            <div className="rounded-lg border border-border p-2.5 bg-muted/20">
+              <p className="uppercase tracking-wide text-muted-foreground text-xs">
                 Saved default
               </p>
-              <p className="mt-1 text-mc-sub font-semibold text-foreground">
+              <p className="mt-1 text-xs font-semibold text-foreground">
                 {getModelDisplayName(defaultPrimary, models, aliases)}
               </p>
             </div>
-            <div className="mc-subpanel">
-              <p className="mc-kicker text-[0.5rem]">
+            <div className="rounded-lg border border-border p-2.5 bg-muted/20">
+              <p className="uppercase tracking-wide text-muted-foreground text-xs">
                 Using now
               </p>
-              <p className="mt-1 text-mc-sub font-semibold text-foreground">
+              <p className="mt-1 text-xs font-semibold text-foreground">
                 {getModelDisplayName(defaultResolved, models, aliases)}
               </p>
             </div>
           </div>
 
           {mainHasOverride && (
-            <p className="mc-note-warning mt-3 text-mc-caption">
+            <p className="text-amber-700 dark:text-amber-300 mt-3 text-xs">
               Main agent has its own override. Reset main to defaults if you want this default
               model to apply there too.
             </p>
@@ -924,10 +924,10 @@ export function ModelsView() {
           </div>
         </section>
 
-        <section className="mc-panel">
+        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-mc-sub font-semibold text-foreground">Model Availability</h2>
-            <div className="flex flex-wrap items-center gap-2 text-mc-caption">
+            <h2 className="text-xs font-semibold text-foreground">Model Availability</h2>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
               <StatusPill tone="good" label={`${availableModels.length} ready`} />
               <StatusPill
                 tone="info"
@@ -936,14 +936,14 @@ export function ModelsView() {
               <StatusPill tone="warn" label={`${lockedModels.length} sign in required`} />
             </div>
           </div>
-          <p className="mt-2 text-mc-body text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             Auth labels come from <code>openclaw models status --json</code> provider auth and
             OAuth profiles, not only from <code>models list</code>.
           </p>
 
           {providerAuthSummary.length > 0 && (
             <div className="mt-3">
-              <p className="text-mc-caption text-muted-foreground">Provider auth status</p>
+              <p className="text-xs text-muted-foreground">Provider auth status</p>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
                 {providerAuthSummary.map((provider) => (
                   <StatusPill
@@ -989,9 +989,9 @@ export function ModelsView() {
           </div>
         </section>
 
-        <section className="mc-panel">
+        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-mc-sub font-semibold text-foreground">
+            <h2 className="text-xs font-semibold text-foreground">
               Model Credentials & Auth Stores
             </h2>
             <div className="flex items-center gap-2">
@@ -1002,7 +1002,7 @@ export function ModelsView() {
               <button
                 type="button"
                 onClick={() => setRevealModelSecrets((prev) => !prev)}
-                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-mc-caption text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
               >
                 {revealModelSecrets ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
                 {revealModelSecrets ? "Hide values" : "Reveal values"}
@@ -1010,34 +1010,34 @@ export function ModelsView() {
             </div>
           </div>
 
-          <p className="mt-2 text-mc-body text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             Unified model auth inventory (moved from Accounts & Keys): provider auth, env-backed model keys, and auth profile stores.
           </p>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-mc-caption">
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
             <StatusPill tone="good" label={`provider access ${modelCredentialSummary.connected}/${modelCredentialSummary.total}`} />
             <StatusPill tone="info" label={`auth profiles ${modelCredentialSummary.profiles}`} />
             <StatusPill tone="neutral" label={`${modelAuthByAgent.length} agents`} />
           </div>
 
           {modelCredsError && (
-            <p className="mc-note-warning mt-3 text-mc-caption">
+            <p className="text-amber-700 dark:text-amber-300 mt-3 text-xs">
               Could not load model credential details: {modelCredsError}
             </p>
           )}
 
           <div className="mt-4 space-y-3">
             {modelAuthByAgent.length === 0 ? (
-              <p className="text-mc-body text-muted-foreground">No model auth rows found.</p>
+              <p className="text-sm text-muted-foreground">No model auth rows found.</p>
             ) : (
               modelAuthByAgent.map((row) => (
                 <div key={row.agentId} className="rounded-xl border border-border/70 bg-card/50 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="text-mc-sub font-semibold text-foreground">
+                    <p className="text-xs font-semibold text-foreground">
                       {agentNameById.get(row.agentId) || row.agentId}
-                      <span className="ml-1 text-mc-caption text-muted-foreground">({row.agentId})</span>
+                      <span className="ml-1 text-xs text-muted-foreground">({row.agentId})</span>
                     </p>
-                    <p className="text-mc-caption text-muted-foreground">
+                    <p className="text-xs text-muted-foreground">
                       store: <code>{row.storePath || "n/a"}</code>
                     </p>
                   </div>
@@ -1045,7 +1045,7 @@ export function ModelsView() {
                     {row.providers.map((provider) => (
                       <div
                         key={`${row.agentId}:${provider.provider}`}
-                        className="rounded-md border border-border/60 bg-muted/20 p-2 text-mc-caption"
+                        className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs"
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <p className="font-medium text-foreground">{provider.provider}</p>
@@ -1071,7 +1071,7 @@ export function ModelsView() {
                     ))}
                   </div>
                   {row.unusableProfiles.length > 0 && (
-                    <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-mc-caption text-amber-300">
+                    <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-300">
                       {row.unusableProfiles.map((u) => (
                         <p key={`${row.agentId}:${u.profileId}`}>
                           {u.profileId} ({u.provider}) · {u.kind} · {formatDuration(u.remainingMs)} remaining
@@ -1085,23 +1085,23 @@ export function ModelsView() {
           </div>
 
           <div className="mt-4 space-y-3">
-            <h3 className="text-mc-sub font-semibold text-foreground">Auth Profile Stores</h3>
+            <h3 className="text-xs font-semibold text-foreground">Auth Profile Stores</h3>
             {agentAuthProfiles.length === 0 ? (
-              <p className="text-mc-body text-muted-foreground">No auth profile stores discovered.</p>
+              <p className="text-sm text-muted-foreground">No auth profile stores discovered.</p>
             ) : (
               agentAuthProfiles.map((agentRow) => (
                 <div key={agentRow.agentId} className="rounded-xl border border-border/70 bg-card/50 p-3">
-                  <p className="text-mc-caption text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {agentNameById.get(agentRow.agentId) || agentRow.agentId} · <code>{agentRow.path}</code>
                   </p>
                   {!agentRow.exists ? (
-                    <p className="mt-2 text-mc-caption text-amber-300">auth-profiles.json not found.</p>
+                    <p className="mt-2 text-xs text-amber-300">auth-profiles.json not found.</p>
                   ) : (
                     <div className="mt-2 space-y-2">
                       {agentRow.profiles.map((profile) => (
                         <div
                           key={`${agentRow.agentId}:${profile.id}`}
-                          className="rounded-md border border-border/60 bg-muted/20 p-2 text-mc-caption"
+                          className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs"
                         >
                           <div className="flex flex-wrap items-center justify-between gap-2">
                             <p className="font-medium text-foreground">
@@ -1137,7 +1137,7 @@ export function ModelsView() {
       {toast && (
         <div
           className={cn(
-            "fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg border px-4 py-2.5 text-mc-body shadow-xl backdrop-blur-sm",
+            "fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm shadow-xl backdrop-blur-sm",
             toast.type === "success"
               ? "border-emerald-500/25 bg-emerald-500/12 text-emerald-700 dark:text-emerald-300"
               : "border-red-500/25 bg-red-500/12 text-red-700 dark:text-red-300"

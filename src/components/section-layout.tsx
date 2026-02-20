@@ -64,11 +64,11 @@ export function SectionHeader({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className={cn("text-mc-heading font-semibold text-foreground", titleClassName)}>{title}</h1>
+          <h1 className={cn("text-xs font-semibold text-foreground", titleClassName)}>{title}</h1>
           {description ? (
-            <p className={cn("mt-0.5 text-mc-body text-muted-foreground", descriptionClassName)}>{description}</p>
+            <p className={cn("mt-0.5 text-muted-foreground", descriptionClassName ?? "text-sm")}>{description}</p>
           ) : null}
-          {meta ? <p className={cn("mt-1 text-mc-caption text-muted-foreground/80", metaClassName)}>{meta}</p> : null}
+          {meta ? <p className={cn("mt-1 text-xs text-muted-foreground/80", metaClassName)}>{meta}</p> : null}
         </div>
         {actions ? <div className={cn("flex shrink-0 items-center gap-2", actionsClassName)}>{actions}</div> : null}
       </div>

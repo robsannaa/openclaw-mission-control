@@ -32,7 +32,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 
 const MonacoEditor = dynamic(
   () => import("@monaco-editor/react").then((mod) => mod.default),
-  { ssr: false, loading: () => <div className="flex h-[50vh] items-center justify-center rounded-lg bg-muted/60 font-mono text-xs text-muted-foreground">Loading editor…</div> }
+  { ssr: false, loading: () => <div className="flex h-1/2 min-h-48 items-center justify-center rounded-lg bg-muted/60 font-mono text-xs text-muted-foreground">Loading editor…</div> }
 );
 
 /* ================================================================
@@ -260,7 +260,7 @@ function ToastBar({ toast, onDone }: { toast: Toast; onDone: () => void }) {
   return (
     <div
       className={cn(
-        "fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-lg border px-4 py-2.5 text-mc-body font-medium shadow-xl backdrop-blur-sm",
+        "fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border px-4 py-2.5 text-sm font-medium shadow-xl backdrop-blur-sm",
         toast.ok
           ? "border-emerald-500/30 bg-emerald-950/80 text-emerald-300"
           : "border-red-500/30 bg-red-950/80 text-red-300"
@@ -284,19 +284,19 @@ function ToastBar({ toast, onDone }: { toast: Toast; onDone: () => void }) {
 
 function RestartBanner({ onRestart, onDismiss }: { onRestart: () => void; onDismiss: () => void }) {
   return (
-    <div className="mx-4 md:mx-6 mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/[0.08] px-4 py-3">
+    <div className="mx-4 md:mx-6 mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
       <AlertTriangle className="h-5 w-5 shrink-0 text-amber-400" />
       <div className="flex-1">
-        <p className="text-mc-body font-medium text-amber-200">
+        <p className="text-sm font-medium text-amber-200">
           Configuration changed — restart recommended
         </p>
-        <p className="text-mc-body-sm text-amber-400/70 mt-0.5">
+        <p className="text-xs text-amber-400/70 mt-0.5">
           Some changes require a gateway restart to take effect.
         </p>
       </div>
       <button
         onClick={onRestart}
-        className="rounded-lg bg-amber-500/20 px-4 py-1.5 text-mc-caption font-semibold text-amber-200 transition-colors hover:bg-amber-500/30"
+        className="rounded-lg bg-amber-500/20 px-4 py-1.5 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-500/30"
       >
         Restart Gateway
       </button>
@@ -328,7 +328,7 @@ function FieldLabel({
   return (
     <div className="mb-1">
       <div className="flex items-center gap-1.5">
-        <label className="text-mc-caption font-medium text-foreground/70">
+        <label className="text-xs font-medium text-foreground/70">
           {label}
           {required && <span className="text-red-400 ml-0.5">*</span>}
         </label>
@@ -337,7 +337,7 @@ function FieldLabel({
         )}
       </div>
       {help && (
-        <p className="text-mc-caption text-muted-foreground/60 mt-0.5 leading-relaxed">
+        <p className="text-xs text-muted-foreground/60 mt-0.5 leading-relaxed">
           {help}
         </p>
       )}
@@ -371,7 +371,7 @@ function StringField({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         placeholder={placeholder || ""}
-        className="flex-1 rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-mc-caption text-foreground/90 outline-none transition-colors focus:border-violet-500/30 disabled:opacity-50 font-mono"
+        className="flex-1 rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none transition-colors focus:border-violet-500/30 disabled:opacity-50 font-mono"
       />
       {sensitive && (
         <button
@@ -404,7 +404,7 @@ function NumberField({
         onChange(v === "" ? undefined : Number(v));
       }}
       disabled={disabled}
-      className="w-full rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-mc-caption text-foreground/90 outline-none transition-colors focus:border-violet-500/30 disabled:opacity-50 font-mono"
+      className="w-full rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none transition-colors focus:border-violet-500/30 disabled:opacity-50 font-mono"
     />
   );
 }
@@ -432,7 +432,7 @@ function BooleanField({
       <span
         className={cn(
           "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
-          value ? "left-[22px]" : "left-0.5"
+          value ? "left-6" : "left-0.5"
         )}
       />
     </button>
@@ -464,7 +464,7 @@ function EnumField({
               "rounded border px-2 py-1 text-xs font-medium transition-all",
               value === opt
                 ? "border-violet-500/40 bg-violet-500/15 text-violet-300"
-                : "border-foreground/[0.08] bg-foreground/[0.02] text-muted-foreground hover:border-foreground/[0.15] hover:text-foreground/70"
+                : "border-foreground/10 bg-foreground/5 text-muted-foreground hover:border-foreground/15 hover:text-foreground/70"
             )}
           >
             {opt}
@@ -479,7 +479,7 @@ function EnumField({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={disabled}
-      className="rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-mc-caption text-foreground/90 outline-none"
+      className="rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none"
     >
       <option value="">Select...</option>
       {options.map((opt) => (
@@ -539,7 +539,7 @@ function ArrayField({
             value={String(item)}
             onChange={(e) => updateItem(idx, e.target.value)}
             disabled={disabled}
-            className="flex-1 rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-mc-caption text-foreground/90 outline-none font-mono focus:border-violet-500/30"
+            className="flex-1 rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30"
           />
           {!disabled && (
             <button
@@ -556,7 +556,7 @@ function ArrayField({
         <button
           type="button"
           onClick={addItem}
-          className="flex items-center gap-1 rounded-lg border border-dashed border-foreground/[0.1] px-3 py-1.5 text-mc-body-sm text-muted-foreground transition-colors hover:border-violet-500/30 hover:text-violet-400"
+          className="flex items-center gap-1 rounded-lg border border-dashed border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-violet-500/30 hover:text-violet-400"
         >
           <Plus className="h-3 w-3" />
           Add item
@@ -662,7 +662,7 @@ function ModelPrimaryFallbacksEditor({
             value={primary}
             onChange={(e) => setPrimary(e.target.value)}
             disabled={disabled}
-            className="rounded border border-foreground/[0.08] bg-muted px-2 py-1 text-xs text-foreground/90 outline-none focus:border-violet-500/30 font-mono min-w-[180px]"
+            className="rounded border border-foreground/10 bg-muted px-2 py-1 text-xs text-foreground/90 outline-none focus:border-violet-500/30 font-mono min-w-44"
           >
             {options.length === 0 && (
               <option value="">Select or type below…</option>
@@ -683,7 +683,7 @@ function ModelPrimaryFallbacksEditor({
             }}
             disabled={disabled}
             placeholder="Or type provider/model…"
-            className="rounded border border-foreground/[0.08] bg-muted px-2 py-1 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30 w-56"
+            className="rounded border border-foreground/10 bg-muted px-2 py-1 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30 w-56"
           />
         </div>
       </div>
@@ -700,7 +700,7 @@ function ModelPrimaryFallbacksEditor({
               onDragEnd={handleDragEnd}
               onDrop={(e) => handleDrop(e, idx)}
               className={cn(
-                "flex items-center gap-2 rounded border border-foreground/[0.08] bg-muted/50 py-1 pr-1",
+                "flex items-center gap-2 rounded border border-foreground/10 bg-muted/50 py-1 pr-1",
                 draggedIndex === idx && "opacity-50"
               )}
             >
@@ -737,7 +737,7 @@ function ModelPrimaryFallbacksEditor({
             <button
               type="button"
               onClick={addFallback}
-              className="flex items-center gap-1 rounded border border-dashed border-foreground/[0.1] px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:border-violet-500/30 hover:text-violet-400"
+              className="flex items-center gap-1 rounded border border-dashed border-foreground/10 px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:border-violet-500/30 hover:text-violet-400"
             >
               <Plus className="h-3 w-3" />
               Add fallback
@@ -754,7 +754,7 @@ const MAX_GENERIC_EDITOR_DEPTH = 10;
 /** Shown when nesting is too deep; edit in Raw tab. */
 function FormViewEditInRawPlaceholder() {
   return (
-    <div className="rounded-lg border border-dashed border-foreground/[0.12] bg-muted/40 px-4 py-3">
+    <div className="rounded-lg border border-dashed border-foreground/15 bg-muted/40 px-4 py-3">
       <p className="text-xs text-muted-foreground">
         Too deep to edit here. Use the <strong className="text-foreground/70">Raw</strong> tab to edit.
       </p>
@@ -785,7 +785,7 @@ function GenericValueEditor({
         value=""
         onChange={(e) => onChange(e.target.value || undefined)}
         disabled={disabled}
-        className="flex-1 min-w-0 rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-mc-caption text-foreground/90 outline-none font-mono focus:border-violet-500/30"
+        className="flex-1 min-w-0 rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30"
       />
     );
   }
@@ -796,7 +796,7 @@ function GenericValueEditor({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="flex-1 min-w-0 rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-mc-caption text-foreground/90 outline-none font-mono focus:border-violet-500/30"
+        className="flex-1 min-w-0 rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30"
       />
     );
   }
@@ -810,7 +810,7 @@ function GenericValueEditor({
           onChange(v === "" ? undefined : Number(v));
         }}
         disabled={disabled}
-        className="flex-1 min-w-0 rounded-lg border border-foreground/[0.08] bg-muted px-3 py-1.5 text-mc-caption text-foreground/90 outline-none font-mono focus:border-violet-500/30"
+        className="flex-1 min-w-0 rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30"
       />
     );
   }
@@ -829,7 +829,7 @@ function GenericValueEditor({
         <span
           className={cn(
             "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform",
-            value ? "left-[22px]" : "left-0.5"
+            value ? "left-6" : "left-0.5"
           )}
         />
       </button>
@@ -902,7 +902,7 @@ function GenericObjectEditor({
   };
 
   return (
-    <div className="space-y-2 rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] p-3">
+    <div className="space-y-2 rounded-lg border border-foreground/10 bg-foreground/5 p-3">
       <div className="space-y-2">
         {entries.map(([key]) => (
           <div key={key} className="flex flex-wrap items-start gap-2 gap-y-1">
@@ -912,10 +912,10 @@ function GenericObjectEditor({
               onChange={(e) => updateKey(key, e.target.value)}
               disabled={disabled}
               placeholder="key"
-              className="w-28 shrink-0 rounded border border-foreground/[0.08] bg-muted/80 px-2 py-1.5 text-mc-caption font-mono text-foreground/90 outline-none focus:border-violet-500/30"
+              className="w-28 shrink-0 rounded border border-foreground/10 bg-muted/80 px-2 py-1.5 text-xs font-mono text-foreground/90 outline-none focus:border-violet-500/30"
             />
             <span className="text-muted-foreground/60 pt-1.5">=</span>
-            <div className="flex-1 min-w-[140px]">
+            <div className="flex-1 min-w-36">
               <GenericValueEditor
                 value={value[key]}
                 onChange={(v) => updateValue(key, v)}
@@ -939,7 +939,7 @@ function GenericObjectEditor({
         <button
           type="button"
           onClick={addField}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-foreground/[0.15] px-3 py-1.5 text-mc-body-sm text-muted-foreground transition-colors hover:border-violet-500/30 hover:text-violet-400"
+          className="flex items-center gap-1.5 rounded-lg border border-dashed border-foreground/15 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-violet-500/30 hover:text-violet-400"
         >
           <Plus className="h-3.5 w-3.5" />
           Add field
@@ -986,11 +986,11 @@ function GenericArrayEditor({
   };
 
   return (
-    <div className="space-y-2 rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] p-3">
+    <div className="space-y-2 rounded-lg border border-foreground/10 bg-foreground/5 p-3">
       <div className="space-y-2">
         {list.map((item, idx) => (
           <div key={idx} className="flex items-start gap-2">
-            <span className="text-mc-caption text-muted-foreground/60 pt-1.5 shrink-0 w-5">{idx + 1}.</span>
+            <span className="text-xs text-muted-foreground/60 pt-1.5 shrink-0 w-5">{idx + 1}.</span>
             <div className="flex-1 min-w-0">
               <GenericValueEditor
                 value={item}
@@ -1013,13 +1013,13 @@ function GenericArrayEditor({
       </div>
       {!disabled && (
         <div className="flex flex-wrap items-center gap-1">
-          <span className="text-mc-body-sm text-muted-foreground/80">Add:</span>
+          <span className="text-xs text-muted-foreground/80">Add:</span>
           {(["string", "number", "boolean", "object", "array"] as const).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => addItem(t)}
-              className="rounded border border-foreground/[0.1] px-2 py-1 text-xs font-medium text-muted-foreground hover:border-violet-500/30 hover:text-violet-400 transition-colors"
+              className="rounded border border-foreground/10 px-2 py-1 text-xs font-medium text-muted-foreground hover:border-violet-500/30 hover:text-violet-400 transition-colors"
             >
               {t}
             </button>
@@ -1057,7 +1057,7 @@ function SectionFields({
 }) {
   if (sectionValue == null || typeof sectionValue !== "object") {
     return (
-      <div className="text-mc-body-sm text-muted-foreground/60 italic">
+      <div className="text-xs text-muted-foreground/60 italic">
         No configuration set for this section.
       </div>
     );
@@ -1094,14 +1094,14 @@ function SectionFields({
   return (
     <div className="space-y-4">
       {agentsDefaultsModel != null && onJumpToSection && (
-        <div className="rounded-lg border border-violet-500/20 bg-violet-500/[0.06] px-3 py-2.5">
-          <p className="text-mc-caption text-foreground/80">
+        <div className="rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-2.5">
+          <p className="text-xs text-foreground/80">
             Default model (primary + fallbacks) is configured under <strong>Agents → defaults → model</strong>.
           </p>
           <button
             type="button"
             onClick={() => onJumpToSection("agents")}
-            className="mt-1.5 text-mc-caption font-medium text-violet-400 hover:text-violet-300 transition-colors"
+            className="mt-1.5 text-xs font-medium text-violet-400 hover:text-violet-300 transition-colors"
           >
             Go to Agents →
           </button>
@@ -1130,7 +1130,7 @@ function SectionFields({
           if (isModelPrimaryFallbacksShape(fieldValue)) {
             return (
               <div key={key} className="space-y-2">
-                <div className="flex items-center gap-2 text-mc-caption font-medium text-foreground/70">
+                <div className="flex items-center gap-2 text-xs font-medium text-foreground/70">
                   {label}
                   {help && <span className="text-muted-foreground/60 font-normal">— {help}</span>}
                 </div>
@@ -1314,7 +1314,7 @@ function NestedSection({
       schema?.propertyNames !== undefined);
 
   return (
-    <div className="rounded-lg border border-foreground/[0.04] bg-foreground/[0.01]">
+    <div className="rounded-lg border border-foreground/5 bg-foreground/5">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -1325,15 +1325,15 @@ function NestedSection({
         ) : (
           <ChevronRight className="h-3 w-3 text-muted-foreground/60" />
         )}
-        <span className="text-mc-caption font-medium text-foreground/70">{label}</span>
-        <span className="text-mc-caption text-muted-foreground/60">
+        <span className="text-xs font-medium text-foreground/70">{label}</span>
+        <span className="text-xs text-muted-foreground/60">
           {allKeys.length} field{allKeys.length !== 1 ? "s" : ""}
         </span>
       </button>
       {expanded && (
-        <div className="border-t border-foreground/[0.04] px-3 py-3 space-y-3">
+        <div className="border-t border-foreground/5 px-3 py-3 space-y-3">
           {help && (
-            <p className="text-mc-caption text-muted-foreground/60 leading-relaxed">{help}</p>
+            <p className="text-xs text-muted-foreground/60 leading-relaxed">{help}</p>
           )}
           {isDynamicMap ? (
             <GenericObjectEditor
@@ -1365,7 +1365,7 @@ function NestedSection({
               ) {
                 return (
                   <div key={key} className="space-y-2">
-                    <div className="flex items-center gap-2 text-mc-caption font-medium text-foreground/70">
+                    <div className="flex items-center gap-2 text-xs font-medium text-foreground/70">
                       {fLabel}
                       {fHelp && <span className="text-muted-foreground/60 font-normal">— {fHelp}</span>}
                     </div>
@@ -1746,20 +1746,20 @@ export function ConfigEditor() {
 
   if (!rawConfig) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-mc-body text-muted-foreground">
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-sm text-muted-foreground">
         <div className="flex items-center">
           <AlertCircle className="mr-2 h-4 w-4" />
           Failed to load configuration
         </div>
         {loadError && (
-          <p className="max-w-xl text-center text-mc-body-sm text-muted-foreground/80">
+          <p className="max-w-xl text-center text-xs text-muted-foreground/80">
             {loadError}
           </p>
         )}
         <button
           type="button"
           onClick={fetchConfig}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] bg-muted/50 px-3 py-1.5 text-mc-body-sm text-foreground/80 transition-colors hover:bg-muted/80"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-muted/50 px-3 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-muted/80"
         >
           <RefreshCw className="h-3.5 w-3.5" />
           Retry
@@ -1774,7 +1774,7 @@ export function ConfigEditor() {
     <SectionLayout>
       <SectionHeader
         title={
-          <span className="flex items-center gap-2 text-mc-heading">
+          <span className="flex items-center gap-2 text-xs">
             <Settings2 className="h-5 w-5 text-violet-400" />
             Configuration
           </span>
@@ -1784,13 +1784,13 @@ export function ConfigEditor() {
         actions={
           <div className="flex items-center gap-2">
             {/* Search */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] bg-muted/50 px-2.5 py-1.5">
+            <div className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-muted/50 px-2.5 py-1.5">
               <Search className="h-3.5 w-3.5 text-muted-foreground/60" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search settings..."
-                className="w-36 bg-transparent text-mc-caption text-foreground/70 outline-none placeholder:text-muted-foreground/60"
+                className="w-36 bg-transparent text-xs text-foreground/70 outline-none placeholder:text-muted-foreground/60"
               />
               {search && (
                 <button onClick={() => setSearch("")} className="text-muted-foreground/60 hover:text-muted-foreground">
@@ -1806,7 +1806,7 @@ export function ConfigEditor() {
                 "flex items-center gap-1 rounded border px-2 py-1 text-xs transition-colors",
                 showSensitive
                   ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                  : "border-foreground/[0.08] text-muted-foreground hover:bg-muted/80"
+                  : "border-foreground/10 text-muted-foreground hover:bg-muted/80"
               )}
             >
               {showSensitive ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
@@ -1820,7 +1820,7 @@ export function ConfigEditor() {
                 "flex items-center gap-1 rounded border px-2 py-1 text-xs transition-colors",
                 showRawJson
                   ? "border-violet-500/30 bg-violet-500/10 text-violet-400"
-                  : "border-foreground/[0.08] text-muted-foreground hover:bg-muted/80"
+                  : "border-foreground/10 text-muted-foreground hover:bg-muted/80"
               )}
             >
               <Code className="h-3 w-3" />
@@ -1830,7 +1830,7 @@ export function ConfigEditor() {
             <button
               type="button"
               onClick={fetchConfig}
-              className="rounded-lg border border-foreground/[0.08] p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground/70"
+              className="rounded-lg border border-foreground/10 p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground/70"
             >
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
@@ -1839,8 +1839,8 @@ export function ConfigEditor() {
       />
 
       {fetchWarning && (
-        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/[0.06] px-4 py-2 md:px-6">
-          <p className="flex items-center gap-2 text-mc-body-sm text-amber-700 dark:text-amber-200">
+        <div className="shrink-0 border-b border-amber-500/20 bg-amber-500/10 px-4 py-2 md:px-6">
+          <p className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-200">
             <AlertTriangle className="h-3.5 w-3.5" />
             {fetchWarning}
           </p>
@@ -1859,9 +1859,9 @@ export function ConfigEditor() {
 
       {/* Unsaved changes bar */}
       {hasDirty && (
-        <div className="shrink-0 flex items-center gap-3 border-b border-violet-500/20 bg-violet-500/[0.06] px-4 md:px-6 py-2.5">
+        <div className="shrink-0 flex items-center gap-3 border-b border-violet-500/20 bg-violet-500/10 px-4 md:px-6 py-2.5">
           <Info className="h-4 w-4 text-violet-400 shrink-0" />
-          <p className="flex-1 text-mc-caption text-violet-300">
+          <p className="flex-1 text-xs text-violet-300">
             You have unsaved changes in{" "}
             <strong>
               {[rawViewDirty && "raw JSON", ...Array.from(dirtyPaths)].filter(Boolean).join(", ")}
@@ -1870,7 +1870,7 @@ export function ConfigEditor() {
           <button
             type="button"
             onClick={discardChanges}
-            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-mc-body-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
+            className="flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
           >
             <RotateCcw className="h-3 w-3" />
             Discard
@@ -1879,7 +1879,7 @@ export function ConfigEditor() {
             type="button"
             onClick={saveChanges}
             disabled={saving}
-            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-1.5 text-mc-caption font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
           >
             {saving ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -1902,7 +1902,7 @@ export function ConfigEditor() {
                 : "{}";
             const rawDisplayValue = showSensitive ? rawEditorValue : redactedRaw;
             return (
-              <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4">
+              <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-sm font-medium text-foreground/70">
                     Raw Configuration
@@ -1913,7 +1913,7 @@ export function ConfigEditor() {
                       : "Secrets hidden; turn on Secrets to view and edit."}
                   </span>
                 </div>
-                <div className="rounded-lg overflow-hidden border border-foreground/[0.06] bg-[#1e1e1e] dark:bg-[#1e1e1e] min-h-[50vh]">
+                <div className="rounded-lg overflow-hidden border border-foreground/10 bg-zinc-800 dark:bg-zinc-800 min-h-96">
                   <MonacoEditor
                     height="70vh"
                     language="json"
@@ -1945,7 +1945,7 @@ export function ConfigEditor() {
             {/* Sticky sidebar: Jump to section */}
             <nav
               aria-label="Config sections"
-              className="hidden lg:block shrink-0 w-48 sticky top-4 self-start rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-3 max-h-[calc(100vh-6rem)] overflow-y-auto"
+              className="hidden lg:block shrink-0 w-48 sticky top-4 self-start rounded-xl border border-foreground/10 bg-foreground/5 p-3 max-h-screen overflow-y-auto"
             >
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 px-1">
                 Jump to
@@ -1965,7 +1965,7 @@ export function ConfigEditor() {
                     <button
                       type="button"
                       onClick={toggleGroup}
-                      className="flex w-full items-center gap-1.5 rounded-lg px-1 py-1.5 text-left text-[10px] font-medium uppercase tracking-wider text-muted-foreground/70 hover:bg-foreground/[0.06] hover:text-muted-foreground transition-colors"
+                      className="flex w-full items-center gap-1.5 rounded-lg px-1 py-1.5 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground/70 hover:bg-foreground/10 hover:text-muted-foreground transition-colors"
                     >
                       {isCollapsed ? (
                         <ChevronRight className="h-3 w-3 shrink-0" />
@@ -1975,7 +1975,7 @@ export function ConfigEditor() {
                       <span>{groupName}</span>
                     </button>
                     {!isCollapsed && (
-                      <ul className="mt-0.5 space-y-0.5 border-l border-foreground/[0.06] ml-1.5 pl-2">
+                      <ul className="mt-0.5 space-y-0.5 border-l border-foreground/10 ml-1.5 pl-2">
                         {sectionKeys.map((sectionKey) => {
                           const label = hints[sectionKey]?.label || sectionKey;
                           const icon = SECTION_ICONS[sectionKey] || "📦";
@@ -1989,7 +1989,7 @@ export function ConfigEditor() {
                                   "w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
                                   isDirty
                                     ? "text-violet-400 bg-violet-500/10"
-                                    : "text-foreground/80 hover:bg-foreground/[0.06] hover:text-foreground"
+                                    : "text-foreground/80 hover:bg-foreground/10 hover:text-foreground"
                                 )}
                               >
                                 <span className="shrink-0">{icon}</span>
@@ -2038,8 +2038,8 @@ export function ConfigEditor() {
                           className={cn(
                             "rounded-xl border transition-colors",
                             isDirty
-                              ? "border-violet-500/30 bg-violet-500/[0.03]"
-                              : "border-foreground/[0.06] bg-foreground/[0.02]"
+                              ? "border-violet-500/30 bg-violet-500/5"
+                              : "border-foreground/10 bg-foreground/5"
                           )}
                         >
                           <div
@@ -2051,19 +2051,19 @@ export function ConfigEditor() {
                             ) : (
                               <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/60" />
                             )}
-                            <span className="text-mc-heading">{icon}</span>
+                            <span className="text-xs">{icon}</span>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="text-mc-body font-semibold text-foreground/90">
+                                <span className="text-sm font-semibold text-foreground/90">
                                   {label}
                                 </span>
                                 {isDirty && (
-                                  <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-mc-micro font-bold uppercase tracking-wider text-violet-300">
+                                  <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-violet-300">
                                     Modified
                                   </span>
                                 )}
                                 {isReadonly && (
-                                  <span className="rounded-full bg-muted/50 px-2 py-0.5 text-mc-micro text-muted-foreground">
+                                  <span className="rounded-full bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground">
                                     Read-only
                                   </span>
                                 )}
@@ -2071,14 +2071,14 @@ export function ConfigEditor() {
                                   <Shield className="h-3 w-3 text-amber-500" />
                                 )}
                               </div>
-                              <p className="text-mc-caption text-muted-foreground/60">
+                              <p className="text-xs text-muted-foreground/60">
                                 {sectionHint?.help || `${fieldCount} setting${fieldCount !== 1 ? "s" : ""}`}
                               </p>
                             </div>
                           </div>
 
                           {isExpanded && (
-                            <div className="border-t border-foreground/[0.04] px-4 py-4">
+                            <div className="border-t border-foreground/5 px-4 py-4">
                               <SectionFields
                                 sectionKey={sectionKey}
                                 sectionSchema={sectionSchema}
@@ -2105,10 +2105,10 @@ export function ConfigEditor() {
         {filteredSections.length === 0 && search && (
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground/60">
             <Search className="h-6 w-6 mb-2" />
-            <p className="text-mc-body">No settings match &ldquo;{search}&rdquo;</p>
+            <p className="text-sm">No settings match &ldquo;{search}&rdquo;</p>
             <button
               onClick={() => setSearch("")}
-              className="mt-2 text-mc-body-sm text-violet-400 hover:text-violet-300"
+              className="mt-2 text-xs text-violet-400 hover:text-violet-300"
             >
               Clear search
             </button>

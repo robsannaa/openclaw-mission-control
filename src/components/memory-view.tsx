@@ -750,13 +750,13 @@ export function MemoryView() {
       Boolean(selectedAgentMemory.dirty));
 
   const tabBar = (
-    <div className="shrink-0 border-b border-foreground/[0.06] bg-card/50 px-3 py-2">
-      <div className="inline-flex rounded-lg border border-foreground/[0.08] bg-card p-1">
+    <div className="shrink-0 border-b border-foreground/10 bg-card/50 px-3 py-2">
+      <div className="inline-flex rounded-lg border border-foreground/10 bg-card p-1">
         <button
           type="button"
           onClick={() => setActiveTab("journal")}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.5rem] font-medium transition-colors",
+            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
             activeTab === "journal"
               ? "bg-violet-500/15 text-violet-300"
               : "text-muted-foreground hover:text-foreground/80"
@@ -769,7 +769,7 @@ export function MemoryView() {
           type="button"
           onClick={() => setActiveTab("graph")}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[0.5rem] font-medium transition-colors",
+            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
             activeTab === "graph"
               ? "bg-sky-500/15 text-sky-300"
               : "text-muted-foreground hover:text-foreground/80"
@@ -796,15 +796,15 @@ export function MemoryView() {
       {tabBar}
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
         {/* Left panel */}
-        <div className="flex max-h-[45vh] w-full shrink-0 flex-col overflow-hidden border-b border-foreground/[0.06] bg-card/60 md:max-h-none md:w-[360px] md:border-b-0 md:border-r">
+        <div className="flex max-h-96 w-full shrink-0 flex-col overflow-hidden border-b border-foreground/10 bg-card/60 md:max-h-none md:w-80 md:border-b-0 md:border-r">
           <div className="shrink-0 p-3">
-            <div className="flex items-center gap-2 rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-mc-body text-muted-foreground">
+            <div className="flex items-center gap-2 rounded-lg border border-foreground/10 bg-card px-3 py-2 text-sm text-muted-foreground">
               <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
               <input
                 placeholder="Search memory files, agents, workspaces..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 bg-transparent text-mc-body outline-none placeholder:text-muted-foreground/60"
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
               />
             </div>
           </div>
@@ -826,7 +826,7 @@ export function MemoryView() {
               >
                 <div className="flex items-center gap-2 text-violet-300">
                   <Brain className="h-4 w-4" />
-                  <span className="text-mc-body font-medium">Core Workspace MEMORY.md</span>
+                  <span className="text-sm font-medium">Core Workspace MEMORY.md</span>
                 </div>
                 <div className="mt-0.5 flex items-center gap-2">
                   {(() => {
@@ -835,7 +835,7 @@ export function MemoryView() {
                     return (
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-[0.5rem] font-medium",
+                          "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-xs font-medium",
                           badge.className
                         )}
                       >
@@ -844,7 +844,7 @@ export function MemoryView() {
                       </span>
                     );
                   })()}
-                  <span className="text-mc-body-sm text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {memoryMd.words} words • {formatAgo(memoryMd.mtime) || "Updated recently"}
                   </span>
                 </div>
@@ -853,10 +853,10 @@ export function MemoryView() {
 
             {/* Agent memory files */}
             <div className="mb-2 flex items-center gap-2 px-1">
-              <span className="text-mc-body-sm font-medium uppercase tracking-wider text-muted-foreground/60">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
                 Agent MEMORY Files
               </span>
-              <span className="rounded bg-muted/80 px-1.5 py-0.5 text-mc-caption text-muted-foreground">
+              <span className="rounded bg-muted/80 px-1.5 py-0.5 text-xs text-muted-foreground">
                 {filteredAgentMemories.length}
               </span>
             </div>
@@ -881,26 +881,26 @@ export function MemoryView() {
                       "w-full rounded-lg border px-3 py-2 text-left transition-colors",
                       selectedHere
                         ? "border-cyan-500/35 bg-cyan-500/10 ring-1 ring-cyan-400/20"
-                        : "border-foreground/[0.08] bg-foreground/[0.015] hover:bg-foreground/[0.04]"
+                        : "border-foreground/10 bg-foreground/5 hover:bg-foreground/5"
                     )}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="truncate text-mc-caption font-semibold text-foreground/90">
+                        <p className="truncate text-xs font-semibold text-foreground/90">
                           {entry.agentName}
                         </p>
-                        <p className="truncate text-mc-caption text-muted-foreground/65">
+                        <p className="truncate text-xs text-muted-foreground/70">
                           {entry.agentId} • {shortWorkspace(entry.workspace)}
                         </p>
                       </div>
                       <div className="flex items-center gap-1">
                         {entry.isDefault && (
-                          <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-mc-micro font-medium text-violet-300">
+                          <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-xs font-medium text-violet-300">
                             default
                           </span>
                         )}
                         {!entry.exists && (
-                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-mc-micro font-medium text-amber-300">
+                          <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs font-medium text-amber-300">
                             missing
                           </span>
                         )}
@@ -910,7 +910,7 @@ export function MemoryView() {
                     <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-[0.5rem] font-medium",
+                          "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-xs font-medium",
                           badge.className
                         )}
                       >
@@ -918,11 +918,11 @@ export function MemoryView() {
                         {badge.label}
                       </span>
                       {entry.dirty && (
-                        <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-mc-micro font-medium text-amber-300">
+                        <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-300">
                           index dirty
                         </span>
                       )}
-                      <span className="text-mc-caption text-muted-foreground/70">
+                      <span className="text-xs text-muted-foreground/70">
                         {entry.exists ? `${entry.words}w` : "No file"} • {entry.indexedFiles ?? 0} files
                       </span>
                       {needsIndex && (
@@ -934,7 +934,7 @@ export function MemoryView() {
                             void indexAgentMemory(entry);
                           }}
                           disabled={indexingFile === key}
-                          className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-mc-micro font-medium text-sky-300 hover:bg-sky-500/20 disabled:opacity-60"
+                          className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-xs font-medium text-sky-300 hover:bg-sky-500/20 disabled:opacity-60"
                         >
                           <RefreshCw className={cn("h-2.5 w-2.5", indexingFile === key && "animate-spin")} />
                           {indexingFile === key ? "Indexing" : "Index"}
@@ -946,32 +946,32 @@ export function MemoryView() {
               })}
 
               {!loading && filteredAgentMemories.length === 0 && (
-                <p className="px-1 text-mc-caption text-muted-foreground/65">No matching agent memory files.</p>
+                <p className="px-1 text-xs text-muted-foreground/70">No matching agent memory files.</p>
               )}
             </div>
 
             {/* Daily journal section */}
             <div className="flex items-center gap-2 px-1">
-              <span className="text-mc-body-sm font-medium uppercase tracking-wider text-muted-foreground/60">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
                 Daily Journal
               </span>
-              <span className="rounded bg-muted/80 px-1.5 py-0.5 text-mc-caption text-muted-foreground">
+              <span className="rounded bg-muted/80 px-1.5 py-0.5 text-xs text-muted-foreground">
                 {filteredDaily.length}
               </span>
             </div>
 
             {loading ? (
-              <LoadingState label="Loading memory files..." className="mt-4 px-1 justify-start text-mc-body" />
+              <LoadingState label="Loading memory files..." className="mt-4 px-1 justify-start text-sm" />
             ) : (
               <div className="mt-2 space-y-0">
                 {periodGroups.map(({ key, entries: entriesInGroup }) => {
                   const expanded = isExpanded(key);
                   return (
-                    <div key={key} className="border-b border-foreground/[0.04] last:border-0">
+                    <div key={key} className="border-b border-foreground/5 last:border-0">
                       <button
                         type="button"
                         onClick={() => togglePeriod(key)}
-                        className="flex w-full items-center gap-1.5 py-2 text-left text-mc-body-sm font-medium text-muted-foreground hover:text-muted-foreground"
+                        className="flex w-full items-center gap-1.5 py-2 text-left text-xs font-medium text-muted-foreground hover:text-muted-foreground"
                       >
                         {expanded ? (
                           <ChevronDown className="h-3.5 w-3.5 shrink-0" />
@@ -996,20 +996,20 @@ export function MemoryView() {
                                   className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-1.5"
                                 >
                                   <Trash2 className="h-3 w-3 shrink-0 text-red-400" />
-                                  <span className="flex-1 truncate text-mc-caption text-red-300">
+                                  <span className="flex-1 truncate text-xs text-red-300">
                                     Delete {e.name}?
                                   </span>
                                   <button
                                     type="button"
                                     onClick={() => deleteEntry(e)}
-                                    className="rounded bg-red-600 px-2 py-0.5 text-mc-caption font-medium text-white hover:bg-red-500"
+                                    className="rounded bg-red-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-red-500"
                                   >
                                     Delete
                                   </button>
                                   <button
                                     type="button"
                                     onClick={() => setConfirmDelete(null)}
-                                    className="text-mc-caption text-muted-foreground hover:text-foreground/70"
+                                    className="text-xs text-muted-foreground hover:text-foreground/70"
                                   >
                                     Cancel
                                   </button>
@@ -1036,7 +1036,7 @@ export function MemoryView() {
                                         setRenaming(null);
                                     }}
                                     onBlur={() => void renameEntry(e, renameValue)}
-                                    className="flex-1 bg-transparent text-mc-body text-foreground/90 outline-none"
+                                    className="flex-1 bg-transparent text-sm text-foreground/90 outline-none"
                                     autoFocus
                                   />
                                 </div>
@@ -1052,13 +1052,13 @@ export function MemoryView() {
                                   handleContextMenu(ev, e)
                                 }
                                 className={cn(
-                                  "flex w-full justify-between rounded-lg px-3 py-1.5 text-left text-mc-body transition-colors",
+                                  "flex w-full justify-between rounded-lg px-3 py-1.5 text-left text-sm transition-colors",
                                   selected === key
                                     ? "bg-muted text-violet-300"
                                     : "text-muted-foreground hover:bg-muted/60 hover:text-foreground/70"
                                 )}
                               >
-                                <span className="text-mc-body">
+                                <span className="text-sm">
                                   {(() => {
                                     const d = new Date(e.date);
                                     return isNaN(d.getTime())
@@ -1071,7 +1071,7 @@ export function MemoryView() {
                                   })()}
                                 </span>
                                 <span className="flex items-center gap-2">
-                                  <span className="text-mc-body-sm text-muted-foreground/60">
+                                  <span className="text-xs text-muted-foreground/60">
                                     {e.words ?? 0}w
                                   </span>
                                   {(() => {
@@ -1080,7 +1080,7 @@ export function MemoryView() {
                                     return (
                                       <span
                                         className={cn(
-                                          "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-[0.5rem] font-medium",
+                                          "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-xs font-medium",
                                           badge.className
                                         )}
                                         title={`Vector status: ${badge.label}`}
@@ -1108,10 +1108,10 @@ export function MemoryView() {
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/40">
           {detailMeta ? (
             <>
-              <div className="shrink-0 border-b border-foreground/[0.06] px-6 py-4">
+              <div className="shrink-0 border-b border-foreground/10 px-6 py-4">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <Brain className="h-4 w-4 text-violet-400" />
-                  <h2 className="text-mc-sub font-semibold text-foreground">
+                  <h2 className="text-xs font-semibold text-foreground">
                     {detailMeta.title}
                   </h2>
 
@@ -1121,7 +1121,7 @@ export function MemoryView() {
                     return (
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-[0.5rem] font-medium",
+                          "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-xs font-medium",
                           badge.className
                         )}
                       >
@@ -1132,13 +1132,13 @@ export function MemoryView() {
                   })()}
 
                   {saveStatus === "saving" && (
-                    <span className="text-mc-body-sm text-muted-foreground">Saving...</span>
+                    <span className="text-xs text-muted-foreground">Saving...</span>
                   )}
                   {saveStatus === "saved" && (
-                    <span className="text-mc-body-sm text-emerald-500">Saved</span>
+                    <span className="text-xs text-emerald-500">Saved</span>
                   )}
                   {saveStatus === "unsaved" && (
-                    <span className="text-mc-body-sm text-amber-500">Unsaved</span>
+                    <span className="text-xs text-amber-500">Unsaved</span>
                   )}
 
                   {canIndexSelectedJournal && selectedDailyEntry && (
@@ -1146,7 +1146,7 @@ export function MemoryView() {
                       type="button"
                       onClick={() => void indexJournalEntry(selectedDailyEntry)}
                       disabled={indexingFile === journalKey(selectedDailyEntry.name)}
-                      className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-mc-caption font-medium text-sky-300 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Re-index this memory entry"
                     >
                       <RefreshCw
@@ -1164,7 +1164,7 @@ export function MemoryView() {
                       type="button"
                       onClick={() => void indexAgentMemory(selectedAgentMemory)}
                       disabled={indexingFile === agentMemoryKey(selectedAgentMemory.agentId)}
-                      className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-mc-caption font-medium text-sky-300 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Re-index this agent memory file"
                     >
                       <RefreshCw
@@ -1178,13 +1178,13 @@ export function MemoryView() {
                   )}
                 </div>
 
-                <p className="mt-1 text-mc-caption text-muted-foreground/60">
+                <p className="mt-1 text-xs text-muted-foreground/60">
                   {detailMeta.words != null && `${detailMeta.words} words`}
                   {detailMeta.size != null && ` • ${formatBytes(detailMeta.size)}`}
                   {detailMeta.workspace && ` • ${detailMeta.workspace}`}
                   {detailMeta.mtime && ` • ${formatAgo(detailMeta.mtime)}`}
                   {" • Click to edit • "}
-                  <kbd className="rounded bg-muted px-1 py-0.5 text-mc-micro font-mono text-muted-foreground">
+                  <kbd className="rounded bg-muted px-1 py-0.5 text-xs font-mono text-muted-foreground">
                     &#8984;S
                   </kbd>{" "}
                   to save
@@ -1193,13 +1193,13 @@ export function MemoryView() {
 
               <div className="flex-1 overflow-y-auto px-4 py-5 md:px-6 min-w-0">
                 {detailMeta.kind === "agent-memory" && selectedAgentMemory && !selectedAgentMemory.exists && (
-                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-mc-caption text-amber-200">
+                  <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
                     This agent has no `{selectedAgentMemory.fileName}` yet. Start typing and save to create it.
                   </div>
                 )}
 
                 {detailMeta.kind === "agent-memory" && selectedAgentMemory?.hasAltCaseFile && (
-                  <div className="mb-3 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-mc-caption text-sky-200">
+                  <div className="mb-3 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
                     Both `MEMORY.md` and `memory.md` exist in this workspace. Mission Control edits the canonical file shown in the title.
                   </div>
                 )}
@@ -1216,7 +1216,7 @@ export function MemoryView() {
               </div>
             </>
           ) : !loading ? (
-            <div className="flex flex-1 items-center justify-center text-mc-body text-muted-foreground/60">
+            <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
               Select a memory entry
             </div>
           ) : null}
@@ -1226,7 +1226,7 @@ export function MemoryView() {
         {ctxMenu && (
           <div
             ref={ctxRef}
-            className="fixed z-50 min-w-[180px] overflow-hidden rounded-lg border border-foreground/[0.08] bg-card/95 py-1 shadow-xl backdrop-blur-sm"
+            className="fixed z-50 min-w-44 overflow-hidden rounded-lg border border-foreground/10 bg-card/95 py-1 shadow-xl backdrop-blur-sm"
             style={{
               left: Math.min(ctxMenu.x, window.innerWidth - 200),
               top: Math.min(ctxMenu.y, window.innerHeight - 220),
@@ -1234,7 +1234,7 @@ export function MemoryView() {
           >
             <button
               type="button"
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => {
                 loadJournalFile(ctxMenu.entry.name, ctxMenu.entry.date);
                 setCtxMenu(null);
@@ -1247,7 +1247,7 @@ export function MemoryView() {
               ctxMenu.entry.vectorState === "not_indexed") && (
               <button
                 type="button"
-                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-sky-300 transition-colors hover:bg-sky-500/10"
+                className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-sky-300 transition-colors hover:bg-sky-500/10"
                 onClick={() => {
                   void indexJournalEntry(ctxMenu.entry);
                   setCtxMenu(null);
@@ -1263,10 +1263,10 @@ export function MemoryView() {
                 {indexingFile === journalKey(ctxMenu.entry.name) ? "Indexing..." : "Index now"}
               </button>
             )}
-            <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
+            <div className="mx-2 my-1 h-px bg-foreground/10" />
             <button
               type="button"
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => {
                 setRenaming(ctxMenu.entry);
                 setRenameValue(ctxMenu.entry.name);
@@ -1278,7 +1278,7 @@ export function MemoryView() {
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => {
                 void duplicateEntry(ctxMenu.entry);
                 setCtxMenu(null);
@@ -1289,7 +1289,7 @@ export function MemoryView() {
             </button>
             <button
               type="button"
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
               onClick={() => {
                 copyEntryName(ctxMenu.entry);
                 setCtxMenu(null);
@@ -1298,10 +1298,10 @@ export function MemoryView() {
               <ClipboardCopy className="h-3.5 w-3.5 text-muted-foreground" />
               Copy Filename
             </button>
-            <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
+            <div className="mx-2 my-1 h-px bg-foreground/10" />
             <button
               type="button"
-              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
               onClick={() => {
                 setConfirmDelete(ctxMenu.entry);
                 setCtxMenu(null);
@@ -1317,7 +1317,7 @@ export function MemoryView() {
         {actionMsg && (
           <div
             className={cn(
-              "fixed bottom-4 right-4 z-50 rounded-lg border px-4 py-2.5 text-mc-body shadow-lg backdrop-blur-sm transition-all",
+              "fixed bottom-4 right-4 z-50 rounded-lg border px-4 py-2.5 text-sm shadow-lg backdrop-blur-sm transition-all",
               actionMsg.ok
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
                 : "border-red-500/30 bg-red-500/10 text-red-300"

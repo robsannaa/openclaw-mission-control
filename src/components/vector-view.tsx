@@ -33,6 +33,18 @@ type AgentMemory = {
 type SearchResult = { path: string; startLine: number; endLine: number; score: number; snippet: string; source: string };
 type Toast = { message: string; type: "success" | "error" };
 
+/** Per OpenClaw docs: API-key providers use the onboarding wizard; models auth login requires provider plugins. */
+function authCommandForProvider(provider: string): string {
+  switch (provider) {
+    case "openai":
+      return "openclaw onboard --auth-choice openai-api-key";
+    case "google":
+      return "openclaw onboard --auth-choice gemini-api-key";
+    default:
+      return "openclaw onboard";
+  }
+}
+
 const EMBEDDING_MODELS: { provider: string; model: string; dims: number; label: string }[] = [
   { provider: "openai", model: "text-embedding-3-small", dims: 1536, label: "OpenAI text-embedding-3-small" },
   { provider: "openai", model: "text-embedding-3-large", dims: 3072, label: "OpenAI text-embedding-3-large" },
@@ -44,6 +56,9 @@ const EMBEDDING_MODELS: { provider: string; model: string; dims: number; label: 
   { provider: "cohere", model: "embed-v4.0", dims: 1024, label: "Cohere Embed v4" },
   { provider: "cohere", model: "embed-english-v3.0", dims: 1024, label: "Cohere English v3" },
 ];
+
+/** Default local embedding model (auto-downloads on first use, ~0.6 GB). See https://docs.openclaw.ai/concepts/memory#vector-memory-search */
+const DEFAULT_LOCAL_MODEL_PATH = "hf:ggml-org/embeddinggemma-300m-qat-q8_0-GGUF/embeddinggemma-300m-qat-Q8_0.gguf";
 
 function formatBytes(b: number): string {
   if (b >= 1073741824) return (b / 1073741824).toFixed(1) + " GB";
@@ -57,7 +72,7 @@ function scoreBarColor(s: number) { return s >= 0.7 ? "bg-emerald-500" : s >= 0.
 function ToastBar({ toast, onDone }: { toast: Toast; onDone: () => void }) {
   useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t); }, [onDone]);
   return (
-    <div className={cn("fixed bottom-6 left-1/2 z-[60] -translate-x-1/2 rounded-lg border px-4 py-2.5 text-mc-body font-medium shadow-xl backdrop-blur-sm", toast.type === "success" ? "border-emerald-500/30 bg-emerald-950/80 text-emerald-300" : "border-red-500/30 bg-red-950/80 text-red-300")}>
+    <div className={cn("fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border px-4 py-2.5 text-sm font-medium shadow-xl backdrop-blur-sm", toast.type === "success" ? "border-emerald-500/30 bg-emerald-950/80 text-emerald-300" : "border-red-500/30 bg-red-950/80 text-red-300")}>
       <div className="flex items-center gap-2">{toast.type === "success" ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}{toast.message}</div>
     </div>
   );
@@ -66,8 +81,8 @@ function ToastBar({ toast, onDone }: { toast: Toast; onDone: () => void }) {
 function ScoreBar({ score }: { score: number }) {
   return (
     <div className="flex items-center gap-2">
-      <div className="h-1.5 w-20 rounded-full bg-foreground/[0.06]"><div className={cn("h-1.5 rounded-full transition-all", scoreBarColor(score))} style={{ width: Math.round(score * 100) + "%" }} /></div>
-      <span className={cn("text-mc-caption font-mono font-semibold", scoreColor(score))}>{score.toFixed(4)}</span>
+      <div className="h-1.5 w-20 rounded-full bg-foreground/10"><div className={cn("h-1.5 rounded-full transition-all", scoreBarColor(score))} style={{ width: Math.round(score * 100) + "%" }} /></div>
+      <span className={cn("text-xs font-mono font-semibold", scoreColor(score))}>{score.toFixed(4)}</span>
     </div>
   );
 }
@@ -76,33 +91,33 @@ function ResultCard({ result, rank }: { result: SearchResult; rank: number }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   return (
-    <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] transition-all hover:border-foreground/[0.1]">
+    <div className="rounded-xl border border-foreground/10 bg-foreground/5 transition-all hover:border-foreground/10">
       <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-mc-body-sm font-bold text-violet-400">#{rank}</div>
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-xs font-bold text-violet-400">#{rank}</div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <FileText className="h-3.5 w-3.5 shrink-0 text-sky-400" />
-            <span className="truncate text-mc-body font-medium text-foreground/90">{result.path}</span>
-            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-mc-micro font-mono text-muted-foreground">L{result.startLine}-{result.endLine}</span>
-            <span className="shrink-0 rounded border border-sky-500/20 bg-sky-500/10 px-1.5 py-0.5 text-mc-micro text-sky-400">{result.source}</span>
+            <span className="truncate text-sm font-medium text-foreground/90">{result.path}</span>
+            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-xs font-mono text-muted-foreground">L{result.startLine}-{result.endLine}</span>
+            <span className="shrink-0 rounded border border-sky-500/20 bg-sky-500/10 px-1.5 py-0.5 text-xs text-sky-400">{result.source}</span>
           </div>
         </div>
         <ScoreBar score={result.score} />
         <div className="flex items-center gap-1">
-          <button onClick={() => { navigator.clipboard.writeText(result.snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-foreground/[0.06] hover:text-foreground/70" title="Copy">
+          <button onClick={() => { navigator.clipboard.writeText(result.snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-foreground/10 hover:text-foreground/70" title="Copy">
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
           </button>
-          <button onClick={() => setExpanded(!expanded)} className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-foreground/[0.06] hover:text-foreground/70">
+          <button onClick={() => setExpanded(!expanded)} className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-foreground/10 hover:text-foreground/70">
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
           </button>
         </div>
       </div>
-      {!expanded && <div className="border-t border-foreground/[0.03] px-4 py-2"><p className="line-clamp-2 text-mc-caption leading-5 text-muted-foreground">{result.snippet.replace(/\n+/g, " ").substring(0, 200)}</p></div>}
+      {!expanded && <div className="border-t border-foreground/5 px-4 py-2"><p className="line-clamp-2 text-xs leading-5 text-muted-foreground">{result.snippet.replace(/\n+/g, " ").substring(0, 200)}</p></div>}
       {expanded && (
-        <div className="border-t border-foreground/[0.06] px-4 py-3">
-          <div className="flex items-center gap-2 mb-2"><Hash className="h-3 w-3 text-muted-foreground/60" /><span className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/60">Vector Match - Chunk Content</span></div>
-          <pre className="max-h-[400px] overflow-auto rounded-lg bg-muted p-3 text-mc-caption leading-5 text-muted-foreground whitespace-pre-wrap break-words">{result.snippet}</pre>
-          <div className="mt-2 flex items-center gap-4 text-mc-caption text-muted-foreground/60">
+        <div className="border-t border-foreground/10 px-4 py-3">
+          <div className="flex items-center gap-2 mb-2"><Hash className="h-3 w-3 text-muted-foreground/60" /><span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Vector Match - Chunk Content</span></div>
+          <pre className="max-h-96 overflow-auto rounded-lg bg-muted p-3 text-xs leading-5 text-muted-foreground whitespace-pre-wrap break-words">{result.snippet}</pre>
+          <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground/60">
             <span>Lines {result.startLine}-{result.endLine}</span><span>{result.snippet.length} chars</span><span>~{Math.ceil(result.snippet.split(/\s+/).length)} tokens (est.)</span>
           </div>
         </div>
@@ -113,9 +128,9 @@ function ResultCard({ result, rank }: { result: SearchResult; rank: number }) {
 
 function MiniStat({ icon: Icon, label, value }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string }) {
   return (
-    <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-2.5 py-2">
-      <div className="flex items-center gap-1.5 text-mc-micro font-medium uppercase tracking-wider text-muted-foreground/60 mb-0.5"><Icon className="h-3 w-3" />{label}</div>
-      <p className="text-mc-caption font-mono text-foreground/70 truncate" title={value}>{value}</p>
+    <div className="rounded-lg border border-foreground/5 bg-muted/50 px-2.5 py-2">
+      <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/60 mb-0.5"><Icon className="h-3 w-3" />{label}</div>
+      <p className="text-xs font-mono text-foreground/70 truncate" title={value}>{value}</p>
     </div>
   );
 }
@@ -124,31 +139,31 @@ function AgentIndexCard({ agent, onReindex, reindexing }: { agent: AgentMemory; 
   const [expanded, setExpanded] = useState(false);
   const st = agent.status; const vec = st.vector;
   return (
-    <div className={cn("rounded-xl border transition-all", agent.scan.issues.length > 0 ? "border-amber-500/20 bg-amber-500/[0.03]" : "border-foreground/[0.06] bg-foreground/[0.02]")}>
+    <div className={cn("rounded-xl border transition-all", agent.scan.issues.length > 0 ? "border-amber-500/20 bg-amber-500/5" : "border-foreground/10 bg-foreground/5")}>
       <div className="flex items-center gap-3 px-4 py-3.5">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-sm">{agent.agentId === "main" ? "\u{1F99E}" : "\u{1F480}"}</div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-mc-sub font-semibold text-foreground/90 capitalize">{agent.agentId}</span>
-            {st.dirty && <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-mc-micro font-semibold uppercase tracking-wider text-amber-300">Dirty</span>}
-            {vec.available && <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-mc-micro font-semibold uppercase tracking-wider text-emerald-300">Vector</span>}
-            {st.fts.available && <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-mc-micro font-semibold uppercase tracking-wider text-sky-300">FTS</span>}
+            <span className="text-xs font-semibold text-foreground/90 capitalize">{agent.agentId}</span>
+            {st.dirty && <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-amber-300">Dirty</span>}
+            {vec.available && <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-emerald-300">Vector</span>}
+            {st.fts.available && <span className="rounded-full bg-sky-500/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-sky-300">FTS</span>}
           </div>
-          <div className="mt-0.5 flex items-center gap-3 text-mc-body-sm text-muted-foreground">
+          <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
             <span>{st.files} files</span><span>{st.chunks} chunks</span>{vec.dims && <span>{vec.dims}d vectors</span>}<span>{formatBytes(agent.dbSizeBytes)}</span>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => onReindex(agent.agentId, false)} disabled={reindexing} className="flex items-center gap-1.5 rounded-lg bg-foreground/[0.06] px-3 py-1.5 text-mc-body-sm font-medium text-foreground/70 hover:bg-foreground/[0.1] disabled:opacity-50">
+          <button onClick={() => onReindex(agent.agentId, false)} disabled={reindexing} className="flex items-center gap-1.5 rounded-lg bg-foreground/10 px-3 py-1.5 text-xs font-medium text-foreground/70 hover:bg-foreground/10 disabled:opacity-50">
             {reindexing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}Reindex
           </button>
-          <button onClick={() => setExpanded(!expanded)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground/70">
+          <button onClick={() => setExpanded(!expanded)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground/70">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
           </button>
         </div>
       </div>
       {expanded && (
-        <div className="border-t border-foreground/[0.04] px-4 py-3 space-y-3">
+        <div className="border-t border-foreground/5 px-4 py-3 space-y-3">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <MiniStat icon={Layers} label="Backend" value={st.backend} />
             <MiniStat icon={Cpu} label="Provider" value={st.provider} />
@@ -157,28 +172,28 @@ function AgentIndexCard({ agent, onReindex, reindexing }: { agent: AgentMemory; 
           </div>
           {st.sourceCounts.length > 0 && (
             <div>
-              <p className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/60 mb-1.5">Sources</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60 mb-1.5">Sources</p>
               <div className="space-y-1">{st.sourceCounts.map((sc) => (
-                <div key={sc.source} className="flex items-center justify-between rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2">
-                  <div className="flex items-center gap-2"><CircleDot className="h-3 w-3 text-violet-400" /><span className="text-mc-caption text-foreground/70">{sc.source}</span></div>
-                  <div className="flex items-center gap-3 text-mc-body-sm text-muted-foreground"><span>{sc.files} files</span><span>{sc.chunks} chunks</span></div>
+                <div key={sc.source} className="flex items-center justify-between rounded-lg border border-foreground/5 bg-muted/50 px-3 py-2">
+                  <div className="flex items-center gap-2"><CircleDot className="h-3 w-3 text-violet-400" /><span className="text-xs text-foreground/70">{sc.source}</span></div>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground"><span>{sc.files} files</span><span>{sc.chunks} chunks</span></div>
                 </div>
               ))}</div>
             </div>
           )}
-          <div className="flex items-center gap-4 text-mc-body-sm">
+          <div className="flex items-center gap-4 text-xs">
             <span className="text-muted-foreground/60">Cache: <span className={st.cache.enabled ? "text-emerald-400" : "text-muted-foreground/60"}>{st.cache.enabled ? st.cache.entries + " entries" : "disabled"}</span></span>
             <span className="text-muted-foreground/60">FTS: <span className={st.fts.available ? "text-emerald-400" : "text-red-400"}>{st.fts.available ? "available" : "unavailable"}</span></span>
             <span className="text-muted-foreground/60">Vector: <span className={vec.available ? "text-emerald-400" : "text-red-400"}>{vec.available ? "available" : "unavailable"}</span></span>
           </div>
-          <div className="rounded-lg bg-muted/50 px-3 py-2"><p className="text-mc-caption text-muted-foreground/60 mb-0.5">Database Path</p><code className="text-mc-body-sm text-muted-foreground break-all">{st.dbPath}</code></div>
+          <div className="rounded-lg bg-muted/50 px-3 py-2"><p className="text-xs text-muted-foreground/60 mb-0.5">Database Path</p><code className="text-xs text-muted-foreground break-all">{st.dbPath}</code></div>
           {agent.scan.issues.length > 0 && (
-            <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2 space-y-1">
-              <p className="flex items-center gap-1.5 text-mc-body-sm font-medium text-amber-300"><AlertTriangle className="h-3 w-3" />Issues</p>
-              {agent.scan.issues.map((issue, i) => <p key={i} className="text-mc-body-sm text-amber-400/80 pl-5">{issue}</p>)}
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 space-y-1">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-amber-300"><AlertTriangle className="h-3 w-3" />Issues</p>
+              {agent.scan.issues.map((issue, i) => <p key={i} className="text-xs text-amber-400/80 pl-5">{issue}</p>)}
             </div>
           )}
-          <button onClick={() => onReindex(agent.agentId, true)} disabled={reindexing} className="flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/[0.05] px-3 py-1.5 text-mc-body-sm text-red-400 hover:bg-red-500/[0.1] disabled:opacity-50">
+          <button onClick={() => onReindex(agent.agentId, true)} disabled={reindexing} className="flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/10 disabled:opacity-50">
             <RotateCcw className="h-3 w-3" />Force Full Reindex
           </button>
         </div>
@@ -187,11 +202,14 @@ function AgentIndexCard({ agent, onReindex, reindexing }: { agent: AgentMemory; 
   );
 }
 
+type EmbeddingOptions = { localModelPath?: string; fallback?: string; cacheEnabled?: boolean };
+
 function EmbeddingModelEditor({
   currentProvider,
   currentModel,
   currentDims,
   currentBackend,
+  memorySearch,
   onSave,
   saving,
 }: {
@@ -199,14 +217,25 @@ function EmbeddingModelEditor({
   currentModel: string;
   currentDims: number | null;
   currentBackend: string;
-  onSave: (p: string, m: string) => void;
+  memorySearch: Record<string, unknown> | null;
+  onSave: (p: string, m: string, options?: EmbeddingOptions) => void;
   saving: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [provider, setProvider] = useState(currentProvider);
   const [model, setModel] = useState(currentModel);
+  const [localModelPath, setLocalModelPath] = useState(() => {
+    const local = memorySearch?.local as Record<string, unknown> | undefined;
+    return (local?.modelPath as string) || "";
+  });
+  const [fallback, setFallback] = useState(() => (memorySearch?.fallback as string) || "none");
+  const [cacheEnabled, setCacheEnabled] = useState(() => {
+    const c = memorySearch?.cache as Record<string, unknown> | undefined;
+    return c?.enabled !== false;
+  });
   const [authProviders, setAuthProviders] = useState<Set<string>>(new Set());
   const [authLoading, setAuthLoading] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const preset = EMBEDDING_MODELS.find((m) => m.provider === provider && m.model === model);
 
   // Fetch authenticated providers when editor opens
@@ -234,13 +263,13 @@ function EmbeddingModelEditor({
     })();
   }, [editing, currentProvider]);
 
-  // Split models into available (authenticated) and locked (not authenticated)
+  // Local is always available (no API key). Remote providers need auth.
   const availableModels = useMemo(
     () => EMBEDDING_MODELS.filter((m) => authProviders.has(m.provider)),
     [authProviders]
   );
   const lockedModels = useMemo(
-    () => EMBEDDING_MODELS.filter((m) => !authProviders.has(m.provider)),
+    () => EMBEDDING_MODELS.filter((m) => m.provider !== "local" && !authProviders.has(m.provider)),
     [authProviders]
   );
   const lockedProviders = useMemo(
@@ -249,38 +278,69 @@ function EmbeddingModelEditor({
   );
 
   if (!editing) return (
-    <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4">
+    <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-mc-body font-semibold text-foreground/90"><Cpu className="h-4 w-4 text-violet-400" />Index Control Plane</div>
-        <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 rounded-lg bg-foreground/[0.06] px-3 py-1.5 text-mc-body-sm font-medium text-foreground/70 hover:bg-foreground/[0.1]"><Pencil className="h-3 w-3" />Change</button>
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground/90"><Cpu className="h-4 w-4 text-violet-400" />Index Control Plane</div>
+        <button onClick={() => setEditing(true)} className="flex items-center gap-1.5 rounded-lg bg-foreground/10 px-3 py-1.5 text-xs font-medium text-foreground/70 hover:bg-foreground/10"><Pencil className="h-3 w-3" />Change</button>
       </div>
       <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2"><p className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/60">Provider</p><p className="text-mc-body font-mono text-foreground/90 mt-0.5">{currentProvider}</p></div>
-        <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2"><p className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/60">Model</p><p className="text-mc-body font-mono text-foreground/90 mt-0.5 truncate" title={currentModel}>{currentModel}</p><p className="mt-1 text-mc-caption text-muted-foreground/70">{currentDims ? `${currentDims}d embeddings` : "\u2014"}</p></div>
-        <div className="rounded-lg border border-foreground/[0.04] bg-muted/50 px-3 py-2"><p className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/60">Backend</p><p className="text-mc-body font-mono text-foreground/90 mt-0.5">{currentBackend || "\u2014"}</p></div>
+        <div className="rounded-lg border border-foreground/5 bg-muted/50 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Provider</p><p className="text-sm font-mono text-foreground/90 mt-0.5">{currentProvider}</p></div>
+        <div className="rounded-lg border border-foreground/5 bg-muted/50 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Model</p><p className="text-sm font-mono text-foreground/90 mt-0.5 truncate" title={currentModel}>{currentModel}</p><p className="mt-1 text-xs text-muted-foreground/70">{currentDims ? `${currentDims}d embeddings` : "\u2014"}</p></div>
+        <div className="rounded-lg border border-foreground/5 bg-muted/50 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Backend</p><p className="text-sm font-mono text-foreground/90 mt-0.5">{currentBackend || "\u2014"}</p></div>
       </div>
+      {currentProvider === "local" && (() => {
+        const local = memorySearch?.local as Record<string, unknown> | undefined;
+        const path = local?.modelPath as string | undefined;
+        return path ? <p className="mt-2 text-xs text-muted-foreground/70">Local path: <span className="font-mono truncate block" title={path}>{path}</span></p> : null;
+      })()}
     </div>
   );
 
   return (
-    <div className="rounded-xl border border-violet-500/30 bg-violet-500/[0.04] p-4 space-y-3">
+    <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 p-4 space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-mc-body font-semibold text-foreground/90"><Cpu className="h-4 w-4 text-violet-400" />Change Embedding Model</div>
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground/90"><Cpu className="h-4 w-4 text-violet-400" />Change Embedding Model</div>
         <button onClick={() => { setEditing(false); setProvider(currentProvider); setModel(currentModel); }} className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground/70"><X className="h-4 w-4" /></button>
       </div>
-      <p className="text-mc-body-sm text-muted-foreground">Changing the embedding model requires a full reindex.</p>
+      <p className="text-xs text-muted-foreground">Changing the embedding model requires a full reindex.</p>
 
       {/* Available models — from authenticated providers */}
       {authLoading ? (
-        <div className="flex items-center gap-2 py-4 text-mc-body-sm text-muted-foreground/60">
+        <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground/60">
           <Loader2 className="h-3 w-3 animate-spin" />Checking authenticated providers...
         </div>
       ) : (
         <>
+          {/* Local (Offline) — always available, no API key */}
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60 mb-1.5">
+              Local (offline)
+            </p>
+            <button
+              type="button"
+              onClick={() => { setProvider("local"); setModel("auto"); }}
+              className={cn(
+                "w-full rounded-lg border px-3 py-2 text-left transition-all",
+                provider === "local"
+                  ? "border-violet-500/40 bg-violet-500/15"
+                  : "border-foreground/10 bg-foreground/5 hover:border-foreground/15"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg" title="Runs on device">💻</span>
+                <div>
+                  <span className={cn("text-xs font-medium", provider === "local" ? "text-violet-300" : "text-foreground/70")}>Local (Offline)</span>
+                  {currentProvider === "local" && provider === "local" && <span className="ml-2 rounded bg-emerald-500/20 px-1 py-0.5 text-xs text-emerald-400">CURRENT</span>}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground/60 mt-0.5">No API key. Model auto-downloads on first use (~0.6 GB).</p>
+            </button>
+          </div>
+
           {availableModels.length > 0 && (
             <div>
-              <p className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/60 mb-1.5">
-                Available Models
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60 mb-1.5">
+                Available (remote)
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                 {availableModels.map((m) => {
@@ -294,14 +354,14 @@ function EmbeddingModelEditor({
                         "rounded-lg border px-3 py-2 text-left transition-all",
                         sel
                           ? "border-violet-500/40 bg-violet-500/15"
-                          : "border-foreground/[0.06] bg-foreground/[0.02] hover:border-foreground/[0.12]"
+                          : "border-foreground/10 bg-foreground/5 hover:border-foreground/15"
                       )}
                     >
                       <div className="flex items-center gap-2">
-                        <span className={cn("text-mc-caption font-medium", sel ? "text-violet-300" : "text-foreground/70")}>{m.label}</span>
-                        {cur && <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-mc-micro text-emerald-400">CURRENT</span>}
+                        <span className={cn("text-xs font-medium", sel ? "text-violet-300" : "text-foreground/70")}>{m.label}</span>
+                        {cur && <span className="rounded bg-emerald-500/20 px-1 py-0.5 text-xs text-emerald-400">CURRENT</span>}
                       </div>
-                      <p className="text-mc-caption text-muted-foreground/60 mt-0.5">{m.dims}d &middot; {m.provider}</p>
+                      <p className="text-xs text-muted-foreground/60 mt-0.5">{m.dims}d &middot; {m.provider}</p>
                     </button>
                   );
                 })}
@@ -312,7 +372,7 @@ function EmbeddingModelEditor({
           {/* Locked models — providers not authenticated */}
           {lockedModels.length > 0 && (
             <div>
-              <p className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/40 mb-1.5 flex items-center gap-1">
+              <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/40 mb-1.5 flex items-center gap-1">
                 <Lock className="h-3 w-3" />
                 Requires Authentication
               </p>
@@ -320,57 +380,113 @@ function EmbeddingModelEditor({
                 {lockedModels.map((m) => (
                   <div
                     key={m.provider + "/" + m.model}
-                    className="rounded-lg border border-foreground/[0.04] bg-foreground/[0.01] px-3 py-2 text-left"
+                    className="rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-2 text-left"
                   >
                     <div className="flex items-center gap-2">
                       <Lock className="h-3 w-3 shrink-0 text-muted-foreground/40" />
-                      <span className="text-mc-caption font-medium text-muted-foreground/60">{m.label}</span>
+                      <span className="text-xs font-medium text-muted-foreground/60">{m.label}</span>
                     </div>
-                    <p className="text-mc-caption text-muted-foreground/40 mt-0.5">{m.dims}d &middot; {m.provider}</p>
+                    <p className="text-xs text-muted-foreground/40 mt-0.5">{m.dims}d &middot; {m.provider}</p>
                   </div>
                 ))}
               </div>
-              <div className="mt-2 rounded-lg border border-foreground/[0.06] bg-muted/30 px-3 py-2.5">
-                <p className="flex items-center gap-1.5 text-mc-body-sm text-muted-foreground">
+              <div className="mt-2 rounded-lg border border-foreground/10 bg-muted/30 px-3 py-2.5">
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
                   <KeyRound className="h-3.5 w-3.5 shrink-0 text-violet-400" />
-                  Authenticate more providers to unlock these models:
+                  Authenticate providers via the onboarding wizard (API keys; no plugins required):
                 </p>
-                <p className="mt-1 pl-5 text-mc-body-sm font-mono text-muted-foreground/70">
-                  {lockedProviders.map((p, i) => (
-                    <span key={p}>
-                      {i > 0 && ", "}
-                      <code className="rounded bg-muted px-1 py-0.5 text-violet-400/80">openclaw models auth --provider {p}</code>
-                    </span>
+                <ul className="mt-1.5 pl-5 space-y-1 text-xs font-mono text-muted-foreground/70 list-disc">
+                  {lockedProviders.map((p) => (
+                    <li key={p}>
+                      <code className="rounded bg-muted px-1 py-0.5 text-violet-400/80">{authCommandForProvider(p)}</code>
+                    </li>
                   ))}
-                </p>
+                </ul>
               </div>
             </div>
           )}
         </>
       )}
 
+      {/* Local model path — when using local provider */}
+      {provider === "local" && (
+        <div className="space-y-2 rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Local model path</p>
+          <input
+            value={localModelPath}
+            onChange={(e) => setLocalModelPath(e.target.value)}
+            placeholder={DEFAULT_LOCAL_MODEL_PATH}
+            className="w-full rounded-lg border border-foreground/10 bg-muted px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
+          />
+          <p className="text-xs text-muted-foreground/70">
+            Leave empty to use the default (EmbeddingGemma, ~0.6 GB). Use a path to a GGUF file or an <code className="rounded bg-muted px-1">hf:...</code> URI. The model auto-downloads on first use. See{" "}
+            <a href="https://docs.openclaw.ai/concepts/memory#vector-memory-search" target="_blank" rel="noopener noreferrer" className="text-violet-400 underline hover:text-violet-300">docs</a>.
+          </p>
+        </div>
+      )}
+
+      {/* Advanced: fallback + cache */}
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground/60 hover:text-foreground/70"
+        >
+          {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          Advanced
+        </button>
+        {showAdvanced && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-foreground/10 bg-muted/30 p-3">
+            <label className="space-y-1">
+              <span className="text-xs text-muted-foreground">Fallback provider</span>
+              <select value={fallback} onChange={(e) => setFallback(e.target.value)} className="w-full rounded-lg border border-foreground/10 bg-muted px-3 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30">
+                <option value="none">None</option>
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Gemini</option>
+                <option value="local">Local</option>
+              </select>
+            </label>
+            <label className="flex items-center gap-2 pt-6">
+              <input type="checkbox" checked={cacheEnabled} onChange={(e) => setCacheEnabled(e.target.checked)} className="rounded border-foreground/20" />
+              <span className="text-xs text-muted-foreground">Embedding cache (faster reindex)</span>
+            </label>
+          </div>
+        )}
+      </div>
+
       {/* Custom entry */}
       <div className="space-y-2">
-        <p className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/60">Or enter custom</p>
+        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Or enter custom</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <input value={provider} onChange={(e) => setProvider(e.target.value)} className="rounded-lg border border-foreground/[0.08] bg-muted px-3 py-2 text-mc-caption text-foreground/90 outline-none focus:border-violet-500/30" placeholder="Provider" />
-          <input value={model} onChange={(e) => setModel(e.target.value)} className="rounded-lg border border-foreground/[0.08] bg-muted px-3 py-2 text-mc-caption text-foreground/90 outline-none focus:border-violet-500/30" placeholder="Model" />
+          <input value={provider} onChange={(e) => setProvider(e.target.value)} className="rounded-lg border border-foreground/10 bg-muted px-3 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30" placeholder="Provider" />
+          <input value={model} onChange={(e) => setModel(e.target.value)} className="rounded-lg border border-foreground/10 bg-muted px-3 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30" placeholder="Model" />
         </div>
       </div>
 
       {/* Reindex warning */}
       {(provider !== currentProvider || model !== currentModel) && (
-        <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-3 py-2">
-          <p className="flex items-center gap-1.5 text-mc-body-sm text-amber-300"><AlertTriangle className="h-3 w-3" />Changing model requires a full reindex. Existing embeddings will be replaced.{preset && currentDims && preset.dims !== currentDims && " Vector dimensions will change."}</p>
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+          <p className="flex items-center gap-1.5 text-xs text-amber-300"><AlertTriangle className="h-3 w-3" />Changing model requires a full reindex. Existing embeddings will be replaced.{preset && currentDims && preset.dims !== currentDims && " Vector dimensions will change."}</p>
         </div>
       )}
 
       {/* Actions */}
       <div className="flex items-center gap-2">
-        <button onClick={() => { onSave(provider, model); setEditing(false); }} disabled={saving || !provider.trim() || !model.trim() || (provider === currentProvider && model === currentModel)} className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-mc-caption font-medium text-white hover:bg-violet-500 disabled:opacity-50">
+        <button
+          onClick={() => {
+            const options: EmbeddingOptions = {};
+            if (provider === "local" && localModelPath.trim()) options.localModelPath = localModelPath.trim();
+            if (fallback && fallback !== "none") options.fallback = fallback;
+            options.cacheEnabled = cacheEnabled;
+            onSave(provider, model, options);
+            setEditing(false);
+          }}
+          disabled={saving || !provider.trim() || !model.trim() || (provider === currentProvider && model === currentModel)}
+          className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+        >
           {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}Save & Reindex
         </button>
-        <button onClick={() => { setEditing(false); setProvider(currentProvider); setModel(currentModel); }} className="rounded-lg px-3 py-2 text-mc-caption text-muted-foreground hover:text-foreground/90">Cancel</button>
+        <button onClick={() => { setEditing(false); setProvider(currentProvider); setModel(currentModel); }} className="rounded-lg px-3 py-2 text-xs text-muted-foreground hover:text-foreground/90">Cancel</button>
       </div>
     </div>
   );
@@ -387,8 +503,11 @@ const SETUP_OPTIONS: SetupProvider[] = [
   { id: "local", provider: "local", model: "auto", dims: 0, label: "Local (Offline)", description: "Runs on your device. No API key needed. Downloads ~600MB model.", needsKey: "", icon: "💻" },
 ];
 
-function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]; onSetup: (provider: string, model: string) => void; busy: boolean }) {
+function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]; onSetup: (provider: string, model: string, options?: { localModelPath?: string }) => void; busy: boolean }) {
   const [selected, setSelected] = useState<string | null>(null);
+  const [customProvider, setCustomProvider] = useState("");
+  const [customModel, setCustomModel] = useState("");
+  const [localModelPath, setLocalModelPath] = useState("");
 
   // Auto-select best available option
   useEffect(() => {
@@ -414,8 +533,8 @@ function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-500/15">
             <Database className="h-8 w-8 text-violet-400" />
           </div>
-          <h1 className="text-mc-title font-semibold text-foreground">Set Up Vector Memory</h1>
-          <p className="text-mc-body text-muted-foreground max-w-md mx-auto">
+          <h1 className="text-sm font-semibold text-foreground">Set Up Vector Memory</h1>
+          <p className="text-sm text-muted-foreground max-w-md mx-auto">
             Vector memory lets your agents search notes, documents, and knowledge semantically.
             Pick an embedding provider to get started — it takes one click.
           </p>
@@ -436,32 +555,32 @@ function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]
                 className={cn(
                   "w-full rounded-xl border p-4 text-left transition-all",
                   !isAuth
-                    ? "cursor-not-allowed border-foreground/[0.04] bg-foreground/[0.01] opacity-50"
+                    ? "cursor-not-allowed border-foreground/5 bg-foreground/5 opacity-50"
                     : isSel
-                      ? "border-violet-500/40 bg-violet-500/10 scale-[1.01]"
-                      : "border-foreground/[0.06] bg-foreground/[0.02] hover:border-foreground/[0.12]"
+                      ? "border-violet-500/40 bg-violet-500/10 scale-105"
+                      : "border-foreground/10 bg-foreground/5 hover:border-foreground/15"
                 )}
               >
                 <div className="flex items-center gap-3">
                   <span className="text-lg">{opt.icon}</span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className={cn("text-mc-sub font-semibold", isSel ? "text-violet-300" : isAuth ? "text-foreground/90" : "text-foreground/50")}>{opt.label}</p>
+                      <p className={cn("text-xs font-semibold", isSel ? "text-violet-300" : isAuth ? "text-foreground/90" : "text-foreground/50")}>{opt.label}</p>
                       {isRec && isAuth && (
-                        <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-mc-micro font-semibold text-emerald-300">RECOMMENDED</span>
+                        <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-semibold text-emerald-300">RECOMMENDED</span>
                       )}
                       {isAuth && !isSel && (
-                        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-mc-micro font-medium text-emerald-400/80">Ready</span>
+                        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400/80">Ready</span>
                       )}
                       {!isAuth && (
-                        <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-mc-micro text-muted-foreground">
+                        <span className="flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                           <Lock className="h-2.5 w-2.5" />No API key
                         </span>
                       )}
                     </div>
-                    <p className="text-mc-body-sm text-muted-foreground mt-0.5">{opt.description}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{opt.description}</p>
                     {opt.dims > 0 && (
-                      <p className="text-mc-caption text-muted-foreground/50 mt-0.5">
+                      <p className="text-xs text-muted-foreground/50 mt-0.5">
                         {opt.model} · {opt.dims}d vectors
                       </p>
                     )}
@@ -477,27 +596,74 @@ function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]
           })}
         </div>
 
-        {/* Auth hint for locked providers */}
+        {/* Auth hint for locked providers — use onboard (API keys), not models auth login (needs plugins) */}
         {SETUP_OPTIONS.some((o) => o.provider !== "local" && !authProviders.includes(o.provider)) && (
-          <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-3.5">
-            <p className="flex items-center gap-2 text-mc-body-sm text-muted-foreground">
+          <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3.5">
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
               <KeyRound className="h-3.5 w-3.5 shrink-0 text-violet-400" />
-              Missing a provider? Add your API key:
+              Add your API key via the onboarding wizard:
             </p>
-            <div className="mt-2 space-y-1 pl-5">
+            <ul className="mt-2 space-y-1 pl-5 list-disc text-xs font-mono text-muted-foreground/60">
               {!authProviders.includes("openai") && (
-                <p className="text-mc-body-sm font-mono text-muted-foreground/60">
-                  <code className="rounded bg-muted px-1.5 py-0.5 text-violet-400/80">openclaw models auth --provider openai</code>
-                </p>
+                <li><code className="rounded bg-muted px-1.5 py-0.5 text-violet-400/80">openclaw onboard --auth-choice openai-api-key</code></li>
               )}
               {!authProviders.includes("google") && (
-                <p className="text-mc-body-sm font-mono text-muted-foreground/60">
-                  <code className="rounded bg-muted px-1.5 py-0.5 text-violet-400/80">openclaw models auth --provider google</code>
-                </p>
+                <li><code className="rounded bg-muted px-1.5 py-0.5 text-violet-400/80">openclaw onboard --auth-choice gemini-api-key</code></li>
               )}
-            </div>
+            </ul>
+            <p className="mt-2 text-xs text-muted-foreground/70">
+              Or run <code className="rounded bg-muted px-1 py-0.5">openclaw onboard</code> and pick a provider in the wizard.
+            </p>
           </div>
         )}
+
+        {/* Local model path — when Local is selected */}
+        {selected === "local" && (
+          <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3.5 space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Local model (optional)</p>
+            <input
+              value={localModelPath}
+              onChange={(e) => setLocalModelPath(e.target.value)}
+              placeholder={DEFAULT_LOCAL_MODEL_PATH}
+              className="w-full rounded-lg border border-foreground/10 bg-muted px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
+            />
+            <p className="text-xs text-muted-foreground/70">
+              Leave empty to use the default (auto-downloads ~0.6 GB). Or set a path or <code className="rounded bg-muted px-1">hf:...</code> URI.{" "}
+              <a href="https://docs.openclaw.ai/concepts/memory#vector-memory-search" target="_blank" rel="noopener noreferrer" className="text-violet-400 underline hover:text-violet-300">Docs</a>
+            </p>
+          </div>
+        )}
+
+        {/* Or configure manually — always allow setting provider/model via app */}
+        <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3.5 space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Or configure manually</p>
+          <p className="text-xs text-muted-foreground">
+            Enter any embedding provider and model (e.g. after authenticating with the commands above).
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <input
+              value={customProvider}
+              onChange={(e) => setCustomProvider(e.target.value)}
+              placeholder="Provider (e.g. openai)"
+              className="rounded-lg border border-foreground/10 bg-muted px-3 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30"
+            />
+            <input
+              value={customModel}
+              onChange={(e) => setCustomModel(e.target.value)}
+              placeholder="Model (e.g. text-embedding-3-small)"
+              className="rounded-lg border border-foreground/10 bg-muted px-3 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30"
+            />
+          </div>
+          <button
+            type="button"
+            disabled={busy || !customProvider.trim() || !customModel.trim()}
+            onClick={() => onSetup(customProvider.trim(), customModel.trim())}
+            className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+          >
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            Save & Enable
+          </button>
+        </div>
 
         {/* Action */}
         {selected && (
@@ -507,9 +673,9 @@ function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]
               disabled={busy || !selected}
               onClick={() => {
                 const opt = SETUP_OPTIONS.find((o) => o.id === selected);
-                if (opt) onSetup(opt.provider, opt.model);
+                if (opt) onSetup(opt.provider, opt.model, selected === "local" && localModelPath.trim() ? { localModelPath: localModelPath.trim() } : undefined);
               }}
-              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-8 py-3 text-mc-sub font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-8 py-3 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
             >
               {busy ? (
                 <><Loader2 className="h-4 w-4 animate-spin" />Setting up...</>
@@ -517,7 +683,7 @@ function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]
                 <><Zap className="h-4 w-4" />Enable Vector Memory</>
               )}
             </button>
-            <p className="mt-2 text-mc-caption text-muted-foreground/40">
+            <p className="mt-2 text-xs text-muted-foreground/40">
               This configures your embedding provider and runs the initial index.
             </p>
           </div>
@@ -529,10 +695,10 @@ function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]
 
 function OverviewStat({ icon: Icon, value, label, sub, color }: { icon: React.ComponentType<{ className?: string }>; value: string; label: string; sub?: string; color: string }) {
   return (
-    <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-3">
-      <div className="flex items-center gap-2 text-mc-caption font-medium uppercase tracking-wider text-muted-foreground mb-1"><Icon className={cn("h-3.5 w-3.5", color)} />{label}</div>
-      <p className="text-mc-sub font-semibold text-foreground/90">{value}</p>
-      {sub && <p className="text-mc-micro text-muted-foreground/60 mt-0.5 truncate">{sub}</p>}
+    <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3">
+      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1"><Icon className={cn("h-3.5 w-3.5", color)} />{label}</div>
+      <p className="text-xs font-semibold text-foreground/90">{value}</p>
+      {sub && <p className="text-xs text-muted-foreground/60 mt-0.5 truncate">{sub}</p>}
     </div>
   );
 }
@@ -599,23 +765,29 @@ export function VectorView() {
     } catch (e) { setToast({ message: String(e), type: "error" }); } finally { setReindexing(false); }
   }, [fetchStatus]);
 
-  const handleUpdateModel = useCallback(async (prov: string, mod: string) => {
+  const handleUpdateModel = useCallback(async (prov: string, mod: string, options?: EmbeddingOptions) => {
     setSaving(true);
     try {
-      const res = await fetch("/api/vector", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update-embedding-model", provider: prov, model: mod }) });
+      const body: Record<string, unknown> = { action: "update-embedding-model", provider: prov, model: mod };
+      if (options?.localModelPath !== undefined) body.localModelPath = options.localModelPath;
+      if (options?.fallback !== undefined) body.fallback = options.fallback;
+      if (options?.cacheEnabled !== undefined) body.cacheEnabled = options.cacheEnabled;
+      const res = await fetch("/api/vector", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const d = await res.json();
       if (d.ok) { setToast({ message: "Model changed to " + prov + "/" + mod + ". Run reindex.", type: "success" }); await fetchStatus(); }
       else setToast({ message: d.error || "Failed", type: "error" });
     } catch (e) { setToast({ message: String(e), type: "error" }); } finally { setSaving(false); }
   }, [fetchStatus]);
 
-  const handleSetup = useCallback(async (provider: string, model: string) => {
+  const handleSetup = useCallback(async (provider: string, model: string, options?: { localModelPath?: string }) => {
     setSettingUp(true);
     try {
+      const body: Record<string, unknown> = { action: "setup-memory", provider, model };
+      if (options?.localModelPath) body.localModelPath = options.localModelPath;
       const res = await fetch("/api/vector", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "setup-memory", provider, model }),
+        body: JSON.stringify(body),
       });
       const d = await res.json();
       if (d.ok) {
@@ -683,7 +855,7 @@ export function VectorView() {
               setLoading(true);
               fetchStatus();
             }}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground/70"
+            className="rounded-lg p-2 text-muted-foreground hover:bg-foreground/10 hover:text-foreground/70"
           >
             <RefreshCw className="h-4 w-4" />
           </button>
@@ -698,53 +870,67 @@ export function VectorView() {
           <OverviewStat icon={Hash} value={`${vectorReadyNamespaces}/${agents.length}`} label="Vector Ready" sub={`FTS ${ftsReadyNamespaces}/${agents.length}`} color="text-pink-400" />
         </div>
 
+        {/* Explicit OpenAI-for-embeddings status so you can see at a glance if it's configured */}
+        <div className="rounded-lg border border-foreground/10 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground/80">Embedding status: </span>
+          {curProv === "openai" ? (
+            <span>OpenAI is configured for embeddings ({curModel}).</span>
+          ) : authProviders.includes("openai") ? (
+            <span>Current provider is <span className="font-mono">{curProv || "—"}/{curModel || "—"}</span>. OpenAI is available — click Change below to use it for embeddings.</span>
+          ) : curProv ? (
+            <span>Current: <span className="font-mono">{curProv}/{curModel}</span>. To add OpenAI for embeddings, run <code className="rounded bg-muted px-1 py-0.5 text-violet-400/90">openclaw onboard --auth-choice openai-api-key</code> then refresh.</span>
+          ) : (
+            <span>No embedding provider set. Use &quot;Or configure manually&quot; below with provider <span className="font-mono">openai</span> and model <span className="font-mono">text-embedding-3-small</span> after running <code className="rounded bg-muted px-1 py-0.5 text-violet-400/90">openclaw onboard --auth-choice openai-api-key</code>.</span>
+          )}
+        </div>
+
         <EmbeddingModelEditor
           currentProvider={curProv}
           currentModel={curModel}
           currentDims={curDims}
           currentBackend={curBackend}
+          memorySearch={memorySearch}
           onSave={handleUpdateModel}
           saving={saving}
         />
 
-        <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4 space-y-3">
-          <div className="flex items-center gap-2 text-mc-body font-semibold text-foreground/90"><Search className="h-4 w-4 text-violet-400" />Query Console</div>
-          <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" /><input type="text" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") doSearch(query); }} placeholder="Semantic search across your vector memory..." className="w-full rounded-lg border border-foreground/[0.08] bg-muted py-2.5 pl-10 pr-4 text-mc-body text-foreground/90 placeholder-zinc-600 outline-none focus:border-violet-500/30" />{searching && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-violet-400" />}</div>
+        <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-3">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground/90"><Search className="h-4 w-4 text-violet-400" />Query Console</div>
+          <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" /><input type="text" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") doSearch(query); }} placeholder="Semantic search across your vector memory..." className="w-full rounded-lg border border-foreground/10 bg-muted py-2.5 pl-10 pr-4 text-sm text-foreground/90 placeholder-zinc-600 outline-none focus:border-violet-500/30" />{searching && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-violet-400" />}</div>
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5"><Filter className="h-3 w-3 text-muted-foreground/60" /><span className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/60">Filters</span></div>
-            <select value={searchAgent} onChange={(e) => setSearchAgent(e.target.value)} className="rounded-md border border-foreground/[0.08] bg-muted px-2.5 py-1.5 text-mc-body-sm text-foreground/70 outline-none"><option value="">All namespaces</option>{agents.map((a) => <option key={a.agentId} value={a.agentId}>{a.agentId}</option>)}</select>
-            <div className="flex items-center gap-1.5"><span className="text-mc-caption text-muted-foreground/60">Top-K:</span><select value={maxResults} onChange={(e) => setMaxResults(e.target.value)} className="rounded-md border border-foreground/[0.08] bg-muted px-2 py-1.5 text-mc-body-sm text-foreground/70 outline-none">{["3","5","10","20","50"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
-            <div className="flex items-center gap-1.5"><span className="text-mc-caption text-muted-foreground/60">Min score:</span><input type="number" step="0.05" min="0" max="1" value={minScore} onChange={(e) => setMinScore(e.target.value)} placeholder="0.0" className="w-16 rounded-md border border-foreground/[0.08] bg-muted px-2 py-1.5 text-mc-body-sm text-foreground/70 outline-none" /></div>
-            <div className="flex items-center gap-1.5"><ArrowUpDown className="h-3 w-3 text-muted-foreground/60" /><select value={sortBy} onChange={(e) => setSortBy(e.target.value as "score"|"path")} className="rounded-md border border-foreground/[0.08] bg-muted px-2 py-1.5 text-mc-body-sm text-foreground/70 outline-none"><option value="score">By score</option><option value="path">By path</option></select></div>
+            <div className="flex items-center gap-1.5"><Filter className="h-3 w-3 text-muted-foreground/60" /><span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Filters</span></div>
+            <select value={searchAgent} onChange={(e) => setSearchAgent(e.target.value)} className="rounded-md border border-foreground/10 bg-muted px-2.5 py-1.5 text-xs text-foreground/70 outline-none"><option value="">All namespaces</option>{agents.map((a) => <option key={a.agentId} value={a.agentId}>{a.agentId}</option>)}</select>
+            <div className="flex items-center gap-1.5"><span className="text-xs text-muted-foreground/60">Top-K:</span><select value={maxResults} onChange={(e) => setMaxResults(e.target.value)} className="rounded-md border border-foreground/10 bg-muted px-2 py-1.5 text-xs text-foreground/70 outline-none">{["3","5","10","20","50"].map((v) => <option key={v} value={v}>{v}</option>)}</select></div>
+            <div className="flex items-center gap-1.5"><span className="text-xs text-muted-foreground/60">Min score:</span><input type="number" step="0.05" min="0" max="1" value={minScore} onChange={(e) => setMinScore(e.target.value)} placeholder="0.0" className="w-16 rounded-md border border-foreground/10 bg-muted px-2 py-1.5 text-xs text-foreground/70 outline-none" /></div>
+            <div className="flex items-center gap-1.5"><ArrowUpDown className="h-3 w-3 text-muted-foreground/60" /><select value={sortBy} onChange={(e) => setSortBy(e.target.value as "score"|"path")} className="rounded-md border border-foreground/10 bg-muted px-2 py-1.5 text-xs text-foreground/70 outline-none"><option value="score">By score</option><option value="path">By path</option></select></div>
           </div>
-          {lastQuery && <div className="flex items-center gap-3 text-mc-body-sm text-muted-foreground"><span>{results.length} result{results.length !== 1 ? "s" : ""} for <span className="font-medium text-violet-400">{"\u201C"}{lastQuery}{"\u201D"}</span></span><span className="text-muted-foreground/40">&middot;</span><span>{searchTime}ms</span>{results.length > 0 && <><span className="text-muted-foreground/40">&middot;</span><span>top: <span className={cn("font-mono", scoreColor(results[0].score))}>{results[0].score.toFixed(4)}</span></span></>}</div>}
+          {lastQuery && <div className="flex items-center gap-3 text-xs text-muted-foreground"><span>{results.length} result{results.length !== 1 ? "s" : ""} for <span className="font-medium text-violet-400">{"\u201C"}{lastQuery}{"\u201D"}</span></span><span className="text-muted-foreground/40">&middot;</span><span>{searchTime}ms</span>{results.length > 0 && <><span className="text-muted-foreground/40">&middot;</span><span>top: <span className={cn("font-mono", scoreColor(results[0].score))}>{results[0].score.toFixed(4)}</span></span></>}</div>}
         </div>
 
         {sorted.length > 0 && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-mc-caption font-semibold uppercase tracking-wider text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" />Results<span className="rounded bg-muted px-1.5 py-0.5 text-mc-caption font-normal text-muted-foreground">{sorted.length}</span></div>
-            <div className="flex h-8 items-end gap-0.5 rounded-lg border border-foreground/[0.04] bg-muted/50 p-1.5">{sorted.map((r, i) => <div key={i} className={cn("flex-1 rounded-sm transition-all", scoreBarColor(r.score))} style={{ height: Math.max(8, r.score * 100) + "%" }} title={"#" + (i+1) + ": " + r.score.toFixed(4)} />)}</div>
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><BarChart3 className="h-3.5 w-3.5" />Results<span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">{sorted.length}</span></div>
             {sorted.map((r, i) => <ResultCard key={r.path + "-" + r.startLine + "-" + i} result={r} rank={i + 1} />)}
           </div>
         )}
 
         {lastQuery && results.length === 0 && !searching && (
-          <div className="rounded-xl border border-dashed border-foreground/[0.08] bg-muted/50 p-8 text-center">
+          <div className="rounded-xl border border-dashed border-foreground/10 bg-muted/50 p-8 text-center">
             <Search className="mx-auto h-8 w-8 text-muted-foreground/40 mb-3" />
-            <p className="text-mc-body text-muted-foreground">No results for <span className="text-violet-400">{"\u201C"}{lastQuery}{"\u201D"}</span></p>
-            <p className="text-mc-body-sm text-muted-foreground/60 mt-1">Try different keywords or lower the minimum score.</p>
+            <p className="text-sm text-muted-foreground">No results for <span className="text-violet-400">{"\u201C"}{lastQuery}{"\u201D"}</span></p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Try different keywords or lower the minimum score.</p>
           </div>
         )}
 
-        <div><h2 className="mb-3 flex items-center gap-2 text-mc-sub font-semibold text-foreground/90"><Database className="h-4 w-4 text-violet-400" />Namespaces<span className="rounded bg-muted px-1.5 py-0.5 text-mc-caption font-normal text-muted-foreground">{agents.length}</span></h2><div className="space-y-2">{agents.map((a) => <AgentIndexCard key={a.agentId} agent={a} onReindex={handleReindex} reindexing={reindexing} />)}</div></div>
+        <div><h2 className="mb-3 flex items-center gap-2 text-xs font-semibold text-foreground/90"><Database className="h-4 w-4 text-violet-400" />Namespaces<span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">{agents.length}</span></h2><div className="space-y-2">{agents.map((a) => <AgentIndexCard key={a.agentId} agent={a} onReindex={handleReindex} reindexing={reindexing} />)}</div></div>
 
-        <div className="rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-4 space-y-2">
-          <div className="flex items-center gap-2 text-mc-body font-semibold text-foreground/90"><Settings2 className="h-4 w-4 text-muted-foreground" />How It Works</div>
-          <div className="text-mc-caption text-muted-foreground space-y-1">
-            <p>OpenClaw indexes workspace <code className="rounded bg-foreground/[0.06] px-1 text-mc-body-sm text-muted-foreground">memory/</code> files into SQLite with vector embeddings (sqlite-vec).</p>
+        <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-foreground/90"><Settings2 className="h-4 w-4 text-muted-foreground" />How It Works</div>
+          <div className="text-xs text-muted-foreground space-y-1">
+            <p>OpenClaw indexes workspace <code className="rounded bg-foreground/10 px-1 text-xs text-muted-foreground">memory/</code> files into SQLite with vector embeddings (sqlite-vec).</p>
             <p>Each file is chunked and embedded using the configured model (default: text-embedding-3-small, 1536d). Search uses cosine similarity. FTS5 is available as fallback.</p>
           </div>
-          <div className="rounded-lg bg-muted p-3 font-mono text-mc-body-sm text-muted-foreground space-y-0.5">
+          <div className="rounded-lg bg-muted p-3 font-mono text-xs text-muted-foreground space-y-0.5">
             <p><span className="text-violet-400">openclaw memory status</span> <span className="text-muted-foreground/60"># Index status</span></p>
             <p><span className="text-violet-400">openclaw memory index</span> <span className="text-muted-foreground/60"># Incremental reindex</span></p>
             <p><span className="text-violet-400">openclaw memory index --force</span> <span className="text-muted-foreground/60"># Full reindex</span></p>

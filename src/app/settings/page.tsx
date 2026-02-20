@@ -22,10 +22,10 @@ export default async function SettingsPage() {
   return (
     <div className="p-6 h-full">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-mc-title font-semibold">Settings</h1>
+        <h1 className="text-sm font-semibold">Settings</h1>
       </div>
 
-      <ScrollArea className="h-[calc(100vh-150px)]">
+      <ScrollArea className="h-full min-h-0">
         <div className="space-y-6">
           {/* Cron Jobs Section */}
           <Card>
@@ -39,7 +39,7 @@ export default async function SettingsPage() {
                   <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
                     <div>
                       <p className="font-medium">{job.name}</p>
-                      <p className="text-mc-body text-muted-foreground">{job.schedule}</p>
+                      <p className="text-sm text-muted-foreground">{job.schedule}</p>
                     </div>
                     <Badge variant={job.enabled ? 'default' : 'secondary'}>
                       {job.enabled ? 'Active' : 'Disabled'}

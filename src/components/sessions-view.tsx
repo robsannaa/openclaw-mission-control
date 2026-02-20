@@ -127,7 +127,7 @@ export function SessionsView() {
               setLoading(true);
               fetchSessions();
             }}
-            className="flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] px-3 py-1.5 text-mc-body-sm text-muted-foreground hover:bg-muted/80"
+            className="flex items-center gap-1.5 rounded-lg border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/80"
           >
             <RefreshCw className="h-3 w-3" /> Refresh
           </button>
@@ -144,20 +144,20 @@ export function SessionsView() {
           return (
             <div
               key={s.key}
-              className="rounded-xl border border-foreground/[0.06] bg-card/90 p-4"
+              className="rounded-xl border border-foreground/10 bg-card/90 p-4"
             >
               <div className="flex flex-col sm:flex-row sm:items-start gap-3">
                 <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/60" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className={cn("rounded px-1.5 py-0.5 text-mc-caption font-medium", badge)}>
+                    <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", badge)}>
                       {type}
                     </span>
-                    <span className="truncate text-mc-caption font-mono text-muted-foreground">
+                    <span className="truncate text-xs font-mono text-muted-foreground">
                       {s.key}
                     </span>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-4 text-mc-body-sm text-muted-foreground">
+                  <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" /> {ageLabel}
                     </span>
@@ -167,7 +167,7 @@ export function SessionsView() {
                     <span>
                       In: {formatTokens(s.inputTokens)} / Out: {formatTokens(s.outputTokens)}
                     </span>
-                    <span className="rounded bg-muted/80 px-1.5 py-0.5 text-mc-caption font-mono">
+                    <span className="rounded bg-muted/80 px-1.5 py-0.5 text-xs font-mono">
                       {s.model}
                     </span>
                   </div>
@@ -181,14 +181,14 @@ export function SessionsView() {
                         type="button"
                         onClick={() => killSession(s.key)}
                         disabled={isDeleting}
-                        className="rounded bg-red-600 px-2.5 py-1 text-mc-caption font-medium text-white hover:bg-red-500 disabled:opacity-50"
+                        className="rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-500 disabled:opacity-50"
                       >
                         {isDeleting ? "Killing..." : "Confirm Kill"}
                       </button>
                       <button
                         type="button"
                         onClick={() => setConfirmDelete(null)}
-                        className="rounded px-2 py-1 text-mc-caption text-muted-foreground hover:text-foreground/70"
+                        className="rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground/70"
                       >
                         Cancel
                       </button>

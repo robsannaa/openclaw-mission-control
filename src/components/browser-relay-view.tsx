@@ -337,8 +337,8 @@ export function BrowserRelayView() {
         <div className="rounded-xl border border-border/70 bg-card p-4">
           <p className="mb-3 text-sm font-medium text-foreground">Controls</p>
 
-          <div className="mb-3 grid gap-2 md:grid-cols-[220px_1fr]">
-            <label className="space-y-1">
+          <div className="mb-3 grid gap-2 md:grid-cols-2">
+            <label className="space-y-1 md:min-w-56 md:max-w-56">
               <span className="text-xs text-muted-foreground">Profile</span>
               <select
                 value={selectedProfile}
@@ -353,7 +353,7 @@ export function BrowserRelayView() {
                 ))}
               </select>
             </label>
-            <label className="space-y-1">
+            <label className="space-y-1 md:min-w-56 md:max-w-56">
               <span className="text-xs text-muted-foreground">Test URL</span>
               <input
                 value={testUrl}
@@ -409,7 +409,7 @@ export function BrowserRelayView() {
           </div>
 
           {actionOutput && (
-            <pre className="mt-3 max-h-52 overflow-auto rounded-md border border-border bg-background p-2 text-mc-body-sm text-muted-foreground">
+            <pre className="mt-3 max-h-52 overflow-auto rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
               {actionOutput}
             </pre>
           )}

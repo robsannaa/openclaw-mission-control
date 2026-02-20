@@ -269,9 +269,9 @@ function MetricTile({
       <div className={cn("pointer-events-none absolute inset-0 bg-gradient-to-br", toneClass.wash)} />
       <div className={cn("pointer-events-none absolute -right-10 -top-10 h-24 w-24 rounded-full blur-3xl", toneClass.glow)} />
       <div className="relative">
-        <p className="text-mc-caption font-medium uppercase tracking-[0.18em] text-muted-foreground/68">{label}</p>
+        <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground/68">{label}</p>
         <p className="mt-2 text-2xl font-semibold leading-none tracking-tight text-foreground/95">{value}</p>
-        {sub && <p className="mt-2 text-mc-body-sm text-muted-foreground/80">{sub}</p>}
+        {sub && <p className="mt-2 text-xs text-muted-foreground/80">{sub}</p>}
       </div>
     </div>
   );
@@ -289,11 +289,11 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-foreground/[0.08] bg-card/78 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] backdrop-blur-sm md:p-5">
+    <section className="rounded-2xl border border-foreground/10 bg-card/80 p-4 shadow-inner backdrop-blur-sm md:p-5">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <div>
-          <h2 className="text-mc-sub font-semibold text-foreground/90">{title}</h2>
-          {subtitle && <p className="mt-1 text-mc-body-sm text-muted-foreground/70">{subtitle}</p>}
+          <h2 className="text-xs font-semibold text-foreground/90">{title}</h2>
+          {subtitle && <p className="mt-1 text-xs text-muted-foreground/70">{subtitle}</p>}
         </div>
         {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
@@ -316,9 +316,9 @@ function ActivityTooltip({
   if (!active || !payload?.length || typeof label !== "number") return null;
   const total = payload.reduce((sum, row) => sum + Number(row.value || 0), 0);
   return (
-    <div className="rounded-xl border border-foreground/[0.1] bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
-      <p className="text-mc-body-sm font-medium text-foreground/90">{labelForPoint(label, period)}</p>
-      <div className="mt-1.5 space-y-1 text-mc-body-sm">
+    <div className="rounded-xl border border-foreground/10 bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
+      <p className="text-xs font-medium text-foreground/90">{labelForPoint(label, period)}</p>
+      <div className="mt-1.5 space-y-1 text-xs">
         {payload.map((row) => (
           <div key={row.name} className="flex items-center justify-between gap-4">
             <span className="text-muted-foreground" style={{ color: row.color || undefined }}>
@@ -327,7 +327,7 @@ function ActivityTooltip({
             <span className="font-mono text-foreground/90">{fmtTokensLong(Number(row.value || 0))}</span>
           </div>
         ))}
-        <div className="mt-1 border-t border-foreground/[0.08] pt-1.5 text-mc-body-sm font-semibold text-foreground/90">
+        <div className="mt-1 border-t border-foreground/10 pt-1.5 text-xs font-semibold text-foreground/90">
           Total {fmtTokensLong(total)}
         </div>
       </div>
@@ -346,9 +346,9 @@ function GenericTooltip({
 }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-xl border border-foreground/[0.1] bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
-      {label != null && <p className="text-mc-body-sm font-medium text-foreground/90">{String(label)}</p>}
-      <div className="mt-1.5 space-y-1 text-mc-body-sm">
+    <div className="rounded-xl border border-foreground/10 bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
+      {label != null && <p className="text-xs font-medium text-foreground/90">{String(label)}</p>}
+      <div className="mt-1.5 space-y-1 text-xs">
         {payload.map((row) => (
           <div key={row.name} className="flex items-center justify-between gap-4">
             <span className="text-muted-foreground" style={{ color: row.color || undefined }}>
@@ -377,9 +377,9 @@ function ModelMixTooltip({
   const total = input + output;
   const split = ratio(input, output);
   return (
-    <div className="rounded-xl border border-foreground/[0.1] bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
-      <p className="text-mc-body-sm font-medium text-foreground/90">{shortModel(modelName)}</p>
-      <div className="mt-1.5 space-y-1 text-mc-body-sm">
+    <div className="rounded-xl border border-foreground/10 bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
+      <p className="text-xs font-medium text-foreground/90">{shortModel(modelName)}</p>
+      <div className="mt-1.5 space-y-1 text-xs">
         <div className="flex items-center justify-between gap-4">
           <span className="text-sky-400">input</span>
           <span className="font-mono text-foreground/90">{fmtTokensLong(input)} ({split.inPct}%)</span>
@@ -388,7 +388,7 @@ function ModelMixTooltip({
           <span className="text-orange-400">output</span>
           <span className="font-mono text-foreground/90">{fmtTokensLong(output)} ({split.outPct}%)</span>
         </div>
-        <div className="mt-1 border-t border-foreground/[0.08] pt-1.5 text-mc-body-sm font-semibold text-foreground/90">
+        <div className="mt-1 border-t border-foreground/10 pt-1.5 text-xs font-semibold text-foreground/90">
           Total {fmtTokensLong(total)}
         </div>
       </div>
@@ -512,7 +512,7 @@ export function UsageView() {
             setLoading(true);
             void fetchData();
           }}
-          className="rounded-lg border border-foreground/[0.1] bg-card px-3 py-1.5 text-xs text-foreground/80 hover:bg-muted"
+          className="rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs text-foreground/80 hover:bg-muted"
         >
           Retry
         </button>
@@ -524,14 +524,14 @@ export function UsageView() {
   const io = ratio(activeBucket?.input || 0, activeBucket?.output || 0);
 
   return (
-    <SectionLayout className="bg-[radial-gradient(circle_at_14%_-20%,rgba(59,130,246,0.14),transparent_40%),radial-gradient(circle_at_88%_-15%,rgba(20,184,166,0.10),transparent_36%)]">
+    <SectionLayout className="bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-500/10">
       <SectionHeader
-        title={<span className="text-mc-title tracking-tight">Usage Intelligence</span>}
+        title={<span className="text-sm tracking-tight">Usage Intelligence</span>}
         description="Token economics, model pressure, and agent throughput"
         descriptionClassName="mt-1 text-sm text-muted-foreground/70"
         actions={
           <div className="flex items-center gap-2">
-          <div className="inline-flex rounded-xl border border-foreground/[0.1] bg-card/70 p-1 backdrop-blur-sm">
+          <div className="inline-flex rounded-xl border border-foreground/10 bg-card/70 p-1 backdrop-blur-sm">
             {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
               <button
                 key={p}
@@ -541,7 +541,7 @@ export function UsageView() {
                   "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
                   period === p
                     ? "border-cyan-300/35 bg-cyan-500/14 text-cyan-100"
-                    : "border-transparent text-muted-foreground hover:border-foreground/[0.08] hover:bg-foreground/[0.04] hover:text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-foreground/10 hover:bg-foreground/5 hover:text-foreground"
                 )}
               >
                 {PERIOD_LABELS[p]}
@@ -554,7 +554,7 @@ export function UsageView() {
               setLoading(true);
               void fetchData();
             }}
-            className="rounded-xl border border-foreground/[0.1] bg-card/70 px-3 py-1.5 text-xs font-medium text-foreground/80 backdrop-blur-sm hover:bg-foreground/[0.06]"
+            className="rounded-xl border border-foreground/10 bg-card/70 px-3 py-1.5 text-xs font-medium text-foreground/80 backdrop-blur-sm hover:bg-foreground/10"
           >
             Refresh
           </button>
@@ -611,7 +611,7 @@ export function UsageView() {
                   <select
                     value={tokenFlowModel}
                     onChange={(e) => setTokenFlowModel(e.target.value)}
-                    className="rounded-lg border border-foreground/[0.1] bg-card/80 px-2.5 py-1.5 text-xs text-foreground/90 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                    className="rounded-lg border border-foreground/10 bg-card/80 px-2.5 py-1.5 text-xs text-foreground/90 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
                   >
                     <option value="all">All models</option>
                     {data.modelBreakdown.map((m) => (
@@ -622,7 +622,7 @@ export function UsageView() {
                   </select>
                 }
               >
-                <div className="h-[340px] w-full">
+                <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={tokenFlowSeries} margin={{ top: 4, right: 6, left: 0, bottom: 0 }}>
                       <defs>
@@ -701,7 +701,7 @@ export function UsageView() {
 
             <div className="xl:col-span-4">
               <Panel title="Model Mix" subtitle="Top models by token volume">
-                <div className="h-[340px] w-full">
+                <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
                       data={modelChart}
@@ -750,7 +750,7 @@ export function UsageView() {
           <div className="grid gap-5 xl:grid-cols-12">
             <div className="xl:col-span-7">
               <Panel title="Agent Throughput" subtitle="Token production by agent">
-                <div className="h-[300px] w-full">
+                <div className="h-72 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={agentChart} margin={{ top: 8, right: 8, left: 0, bottom: 10 }}>
                       <CartesianGrid stroke={USAGE_COLORS.grid} strokeDasharray="3 3" vertical={false} />
@@ -784,7 +784,7 @@ export function UsageView() {
 
             <div className="xl:col-span-5">
               <Panel title="Context Pressure Map" subtitle="Session size relative to context budget">
-                <div className="h-[300px] w-full">
+                <div className="h-72 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <ScatterChart margin={{ top: 8, right: 10, left: 2, bottom: 8 }}>
                       <CartesianGrid stroke={USAGE_COLORS.grid} strokeDasharray="3 3" />
@@ -815,10 +815,10 @@ export function UsageView() {
                             | undefined;
                           if (!p) return null;
                           return (
-                            <div className="rounded-xl border border-foreground/[0.1] bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
-                              <p className="text-mc-body-sm font-medium text-foreground/90">{p.agent}</p>
-                              <p className="text-mc-caption text-muted-foreground/70">{p.model}</p>
-                              <div className="mt-1.5 space-y-1 text-mc-body-sm">
+                            <div className="rounded-xl border border-foreground/10 bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm">
+                              <p className="text-xs font-medium text-foreground/90">{p.agent}</p>
+                              <p className="text-xs text-muted-foreground/70">{p.model}</p>
+                              <div className="mt-1.5 space-y-1 text-xs">
                                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Context</span><span className="font-mono">{fmtTokensLong(p.x)}</span></div>
                                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Used</span><span className="font-mono">{fmtTokensLong(p.y)}</span></div>
                                 <div className="flex justify-between gap-4"><span className="text-muted-foreground">Pressure</span><span className="font-mono">{Math.round(p.z)}%</span></div>
@@ -846,22 +846,22 @@ export function UsageView() {
                     const pressure = m.contextTokens > 0 ? Math.round((m.totalTokens / Math.max(1, m.sessions)) / m.contextTokens * 100) : 0;
                     const pct = totals.totalTokens > 0 ? Math.round((m.totalTokens / totals.totalTokens) * 100) : 0;
                     return (
-                      <div key={m.model} className="rounded-xl border border-foreground/[0.07] bg-foreground/[0.02] px-3 py-2.5">
+                      <div key={m.model} className="rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5">
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate text-mc-caption font-semibold text-foreground/90">{shortModel(m.model)}</p>
-                            <p className="text-mc-caption text-muted-foreground/70">
+                            <p className="truncate text-xs font-semibold text-foreground/90">{shortModel(m.model)}</p>
+                            <p className="text-xs text-muted-foreground/70">
                               {m.sessions} sessions · {m.agents.length} agent{m.agents.length !== 1 ? "s" : ""} · {fmtAgo(m.lastUsed)}
                             </p>
                           </div>
                           <div className="text-right">
-                            <p className="text-mc-caption font-semibold text-foreground/90">{fmtTokens(m.totalTokens)}</p>
-                            <p className="text-mc-caption text-muted-foreground/70">{pct}% of total tokens</p>
+                            <p className="text-xs font-semibold text-foreground/90">{fmtTokens(m.totalTokens)}</p>
+                            <p className="text-xs text-muted-foreground/70">{pct}% of total tokens</p>
                           </div>
                         </div>
                         <div className="mt-2 flex items-center gap-2">
                           <span className="shrink-0 text-xs text-muted-foreground/70">Token share</span>
-                          <div className="min-w-0 flex-1 h-1.5 overflow-hidden rounded-full bg-foreground/[0.07]">
+                          <div className="min-w-0 flex-1 h-1.5 overflow-hidden rounded-full bg-foreground/10">
                             <div
                               className="h-full"
                               style={{
@@ -871,7 +871,7 @@ export function UsageView() {
                             />
                           </div>
                         </div>
-                        <p className="mt-1.5 text-mc-caption text-muted-foreground/70">
+                        <p className="mt-1.5 text-xs text-muted-foreground/70">
                           Context pressure: {pressure}% (avg % of context window used per session)
                         </p>
                       </div>
@@ -884,17 +884,17 @@ export function UsageView() {
             <div className="xl:col-span-5 space-y-5">
               <Panel title="Model Routing" subtitle="Primary, fallbacks, and auth posture">
                 {modelConfig ? (
-                  <div className="space-y-3 text-mc-body-sm">
-                    <div className="rounded-xl border border-foreground/[0.07] bg-foreground/[0.02] p-3">
-                      <p className="text-mc-caption uppercase tracking-[0.14em] text-muted-foreground/70">Primary</p>
+                  <div className="space-y-3 text-xs">
+                    <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3">
+                      <p className="text-xs uppercase tracking-widest text-muted-foreground/70">Primary</p>
                       <p className="mt-1 font-semibold text-foreground/90">{shortModel(modelConfig.primary)}</p>
                     </div>
                     {modelConfig.fallbacks.length > 0 && (
-                      <div className="rounded-xl border border-foreground/[0.07] bg-foreground/[0.02] p-3">
-                        <p className="text-mc-caption uppercase tracking-[0.14em] text-muted-foreground/70">Fallback Chain</p>
+                      <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3">
+                        <p className="text-xs uppercase tracking-widest text-muted-foreground/70">Fallback Chain</p>
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                           {modelConfig.fallbacks.map((f, i) => (
-                            <span key={f} className="rounded-md border border-foreground/[0.1] bg-card px-2 py-1 text-mc-caption text-foreground/80">
+                            <span key={f} className="rounded-md border border-foreground/10 bg-card px-2 py-1 text-xs text-foreground/80">
                               {i + 1}. {shortModel(f)}
                             </span>
                           ))}
@@ -902,12 +902,12 @@ export function UsageView() {
                       </div>
                     )}
                     {modelConfig.authProviders.length > 0 && (
-                      <div className="rounded-xl border border-foreground/[0.07] bg-foreground/[0.02] p-3">
-                        <p className="text-mc-caption uppercase tracking-[0.14em] text-muted-foreground/70">Auth Providers</p>
+                      <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3">
+                        <p className="text-xs uppercase tracking-widest text-muted-foreground/70">Auth Providers</p>
                         <div className="mt-1.5 space-y-1.5">
                           {modelConfig.authProviders.map((ap) => (
                             <div key={ap.provider} className="flex items-center justify-between rounded-md bg-card px-2 py-1.5">
-                              <span className="font-medium text-foreground/85">{ap.provider}</span>
+                              <span className="font-medium text-foreground/90">{ap.provider}</span>
                               <span className="text-muted-foreground/70">{ap.authKind}</span>
                             </div>
                           ))}
@@ -916,17 +916,17 @@ export function UsageView() {
                     )}
                   </div>
                 ) : (
-                  <p className="text-mc-caption text-muted-foreground/70">No routing metadata available.</p>
+                  <p className="text-xs text-muted-foreground/70">No routing metadata available.</p>
                 )}
               </Panel>
 
               <Panel title="Session Storage" subtitle="JSONL footprint by agent">
-                <div className="space-y-2 text-mc-body-sm">
+                <div className="space-y-2 text-xs">
                   {sessionFileSizes.map((s) => (
-                    <div key={s.agentId} className="flex items-center justify-between rounded-lg border border-foreground/[0.07] bg-foreground/[0.02] px-3 py-2">
+                    <div key={s.agentId} className="flex items-center justify-between rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2">
                       <div>
-                        <p className="font-semibold text-foreground/85">{s.agentId}</p>
-                        <p className="text-mc-caption text-muted-foreground/70">{s.fileCount} file{s.fileCount !== 1 ? "s" : ""}</p>
+                        <p className="font-semibold text-foreground/90">{s.agentId}</p>
+                        <p className="text-xs text-muted-foreground/70">{s.fileCount} file{s.fileCount !== 1 ? "s" : ""}</p>
                       </div>
                       <span className="font-mono text-foreground/80">{fmtBytes(s.sizeBytes)}</span>
                     </div>
@@ -941,18 +941,18 @@ export function UsageView() {
               {sessions.slice(0, 20).map((s, i) => {
                 const p = s.contextTokens > 0 ? Math.round((s.totalTokens / s.contextTokens) * 100) : 0;
                 return (
-                  <div key={`${s.sessionId}-${i}`} className="rounded-xl border border-foreground/[0.07] bg-foreground/[0.02] px-3 py-2.5">
+                  <div key={`${s.sessionId}-${i}`} className="rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2.5">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-mc-caption font-semibold text-foreground/90">{s.agentId} · {shortModel(s.model)}</p>
-                        <p className="truncate text-mc-caption text-muted-foreground/70">{s.key || s.sessionId} · {fmtAgo(s.updatedAt)}</p>
+                        <p className="truncate text-xs font-semibold text-foreground/90">{s.agentId} · {shortModel(s.model)}</p>
+                        <p className="truncate text-xs text-muted-foreground/70">{s.key || s.sessionId} · {fmtAgo(s.updatedAt)}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-mc-caption font-semibold text-foreground/90">{fmtTokens(s.totalTokens)}</p>
-                        <p className="text-mc-caption text-muted-foreground/70">{p}% context</p>
+                        <p className="text-xs font-semibold text-foreground/90">{fmtTokens(s.totalTokens)}</p>
+                        <p className="text-xs text-muted-foreground/70">{p}% context</p>
                       </div>
                     </div>
-                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-foreground/[0.08]">
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-foreground/10">
                       <div
                         className={cn(
                           "h-full",

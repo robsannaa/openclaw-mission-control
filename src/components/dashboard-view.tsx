@@ -275,7 +275,7 @@ function RadialGauge({
           r={r}
           fill="none"
           stroke="currentColor"
-          className="text-white/[0.04]"
+          className="text-white/5"
           strokeWidth={5}
         />
         <circle
@@ -291,13 +291,13 @@ function RadialGauge({
         />
       </svg>
       <div className="absolute flex flex-col items-center justify-center" style={{ width: size, height: size }}>
-        <span className="text-mc-sub font-bold text-foreground">
+        <span className="text-xs font-bold text-foreground">
           {Math.round(percent)}
-          <span className="text-mc-caption text-muted-foreground">%</span>
+          <span className="text-xs text-muted-foreground">%</span>
         </span>
       </div>
-      <p className="mt-1 text-mc-caption font-medium text-muted-foreground">{label}</p>
-      {unit && <p className="text-mc-micro text-muted-foreground/40">{unit}</p>}
+      <p className="mt-1 text-xs font-medium text-muted-foreground">{label}</p>
+      {unit && <p className="text-xs text-muted-foreground/40">{unit}</p>}
     </div>
   );
 }
@@ -306,7 +306,7 @@ function RadialGauge({
 
 function MiniBar({ percent, color }: { percent: number; color: string }) {
   return (
-    <div className="h-1.5 w-full rounded-full bg-foreground/[0.04]">
+    <div className="h-1.5 w-full rounded-full bg-foreground/5">
       <div
         className="h-1.5 rounded-full transition-all duration-700 ease-out"
         style={{ width: `${Math.min(100, Math.max(0, percent))}%`, backgroundColor: color }}
@@ -357,7 +357,7 @@ function MemoryCompositionBar({
 
   return (
     <div className="space-y-1.5">
-      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-foreground/[0.05]">
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-foreground/5">
         {segments.map((item) => (
           <div
             key={item.key}
@@ -367,7 +367,7 @@ function MemoryCompositionBar({
           />
         ))}
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-mc-micro text-muted-foreground/70">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground/70">
         {segments.map((item) => (
           <span key={`${item.key}-legend`} className="inline-flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.color }} />
@@ -384,8 +384,8 @@ function MemoryCompositionBar({
 function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; connected: boolean }) {
   if (!stats) {
     return (
-      <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-6">
-        <div className="flex items-center gap-2 text-mc-caption text-muted-foreground/60">
+      <div className="rounded-xl border border-foreground/10 bg-card/90 p-6">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
           <Gauge className="h-4 w-4 animate-pulse" />
           Connecting to system stats stream...
         </div>
@@ -415,7 +415,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-mc-caption font-semibold uppercase tracking-wider text-muted-foreground">
+        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           <Server className="h-3.5 w-3.5" /> System Monitor
         </h2>
         <div className="flex items-center gap-1.5">
@@ -425,14 +425,14 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
               connected ? "bg-emerald-500 animate-pulse" : "bg-red-500"
             )}
           />
-          <span className="text-mc-micro text-muted-foreground/60">
+          <span className="text-xs text-muted-foreground/60">
             {connected ? "LIVE" : "RECONNECTING"}
           </span>
         </div>
       </div>
 
       {/* Gauges row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 rounded-xl border border-foreground/[0.06] bg-card/90 px-4 py-5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 rounded-xl border border-foreground/10 bg-card/90 px-4 py-5">
         <div className="relative flex justify-center">
           <RadialGauge
             value={stats.cpu.usage}
@@ -465,58 +465,58 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
       {/* Detail cards grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {/* CPU details */}
-        <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3 space-y-2">
+        <div className="rounded-xl border border-foreground/10 bg-card/90 p-3 space-y-2">
           <div className="flex items-center gap-2">
             <Cpu className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="text-mc-body-sm font-semibold text-foreground/70">CPU</span>
+            <span className="text-xs font-semibold text-foreground/70">CPU</span>
           </div>
           <div className="space-y-1.5">
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Usage</span>
               <span className="font-mono text-foreground/70">{stats.cpu.usage}%</span>
             </div>
             <MiniBar percent={stats.cpu.usage} color={cpuColor} />
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Load (1/5/15m)</span>
               <span className="font-mono text-muted-foreground">
                 {stats.cpu.load1} / {stats.cpu.load5} / {stats.cpu.load15}
               </span>
             </div>
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Speed</span>
               <span className="font-mono text-muted-foreground">{stats.cpu.speed} MHz</span>
             </div>
-            <p className="truncate text-mc-micro text-muted-foreground/40" title={stats.cpu.model}>
+            <p className="truncate text-xs text-muted-foreground/40" title={stats.cpu.model}>
               {stats.cpu.model}
             </p>
           </div>
         </div>
 
         {/* Memory details */}
-        <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3 space-y-2">
+        <div className="rounded-xl border border-foreground/10 bg-card/90 p-3 space-y-2">
           <div className="flex items-center gap-2">
             <MemoryStick className="h-3.5 w-3.5 text-violet-400" />
-            <span className="text-mc-body-sm font-semibold text-foreground/70">
+            <span className="text-xs font-semibold text-foreground/70">
               Memory
               {memorySourceLabel}
             </span>
           </div>
           <div className="space-y-1.5">
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Used</span>
               <span className="font-mono text-foreground/70">
                 {formatBytesCompact(stats.memory.used)}
               </span>
             </div>
             <MemoryCompositionBar memory={stats.memory} memoryFreeLabel={memoryFreeLabel} />
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">{memoryFreeLabel}</span>
               <span className="font-mono text-muted-foreground">
                 {formatBytesCompact(stats.memory.free)}
               </span>
             </div>
             {typeof stats.memory.app === "number" && (
-              <div className="flex justify-between text-mc-caption">
+              <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground/60">App</span>
                 <span className="font-mono text-muted-foreground">
                   {formatBytesCompact(stats.memory.app)}
@@ -524,7 +524,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
               </div>
             )}
             {typeof stats.memory.wired === "number" && (
-              <div className="flex justify-between text-mc-caption">
+              <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground/60">Wired</span>
                 <span className="font-mono text-muted-foreground">
                   {formatBytesCompact(stats.memory.wired)}
@@ -532,7 +532,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
               </div>
             )}
             {typeof stats.memory.compressed === "number" && (
-              <div className="flex justify-between text-mc-caption">
+              <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground/60">Compressed</span>
                 <span className="font-mono text-muted-foreground">
                   {formatBytesCompact(stats.memory.compressed)}
@@ -540,7 +540,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
               </div>
             )}
             {typeof stats.memory.cached === "number" && (
-              <div className="flex justify-between text-mc-caption">
+              <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground/60">Cached Files</span>
                 <span className="font-mono text-muted-foreground">
                   {formatBytesCompact(stats.memory.cached)}
@@ -548,14 +548,14 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
               </div>
             )}
             {typeof stats.memory.swapUsed === "number" && (
-              <div className="flex justify-between text-mc-caption">
+              <div className="flex justify-between text-xs">
                 <span className="text-muted-foreground/60">Swap Used</span>
                 <span className="font-mono text-muted-foreground">
                   {formatBytesCompact(stats.memory.swapUsed)}
                 </span>
               </div>
             )}
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Total</span>
               <span className="font-mono text-muted-foreground">
                 {formatBytesCompact(stats.memory.total)}
@@ -565,26 +565,26 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* Disk details */}
-        <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3 space-y-2">
+        <div className="rounded-xl border border-foreground/10 bg-card/90 p-3 space-y-2">
           <div className="flex items-center gap-2">
             <HardDrive className="h-3.5 w-3.5 text-blue-400" />
-            <span className="text-mc-body-sm font-semibold text-foreground/70">Disk</span>
+            <span className="text-xs font-semibold text-foreground/70">Disk</span>
           </div>
           <div className="space-y-1.5">
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Used</span>
               <span className="font-mono text-foreground/70">
                 {formatBytesCompact(stats.disk.used)}
               </span>
             </div>
             <MiniBar percent={stats.disk.percent} color={diskColor} />
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Free</span>
               <span className="font-mono text-muted-foreground">
                 {formatBytesCompact(stats.disk.free)}
               </span>
             </div>
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Total</span>
               <span className="font-mono text-muted-foreground">
                 {formatBytesCompact(stats.disk.total)}
@@ -594,27 +594,27 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* System info */}
-        <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3 space-y-2">
+        <div className="rounded-xl border border-foreground/10 bg-card/90 p-3 space-y-2">
           <div className="flex items-center gap-2">
             <Timer className="h-3.5 w-3.5 text-amber-400" />
-            <span className="text-mc-body-sm font-semibold text-foreground/70">System</span>
+            <span className="text-xs font-semibold text-foreground/70">System</span>
           </div>
           <div className="space-y-1.5">
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Hostname</span>
               <span className="font-mono text-muted-foreground">{stats.system.hostname}</span>
             </div>
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Platform</span>
               <span className="font-mono text-muted-foreground">
                 {stats.system.platform} {stats.system.arch}
               </span>
             </div>
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Uptime</span>
               <span className="font-mono text-muted-foreground">{stats.system.uptimeDisplay}</span>
             </div>
-            <div className="flex justify-between text-mc-caption">
+            <div className="flex justify-between text-xs">
               <span className="text-muted-foreground/60">Processes</span>
               <span className="font-mono text-muted-foreground">{stats.system.processCount}</span>
             </div>
@@ -623,10 +623,10 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
       </div>
 
       {/* OpenClaw storage stats */}
-      <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3 space-y-2">
+      <div className="rounded-xl border border-foreground/10 bg-card/90 p-3 space-y-2">
         <div className="flex items-center gap-2">
           <Database className="h-3.5 w-3.5 text-pink-400" />
-          <span className="text-mc-body-sm font-semibold text-foreground/70">OpenClaw Storage</span>
+          <span className="text-xs font-semibold text-foreground/70">OpenClaw Storage</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <OcStatMini
@@ -680,11 +680,11 @@ function GatewayDiagnosticsPanel({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-4">
+      <div className="rounded-xl border border-foreground/10 bg-card/90 p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs text-foreground/90">Gateway Diagnostics</p>
-            <p className="text-mc-caption text-muted-foreground/65">
+            <p className="text-xs text-muted-foreground/70">
               Live snapshot from <code>openclaw gateway status --json</code> and{" "}
               <code>openclaw doctor --non-interactive</code>.
             </p>
@@ -693,7 +693,7 @@ function GatewayDiagnosticsPanel({
             type="button"
             onClick={onRefresh}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/[0.08] bg-card px-2.5 py-1.5 text-mc-body-sm text-foreground/80 transition-colors hover:bg-muted/70 disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-card px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-muted/70 disabled:opacity-60"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
             Refresh
@@ -701,40 +701,40 @@ function GatewayDiagnosticsPanel({
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <div className="rounded-lg border border-red-500/20 bg-red-500/[0.04] px-2.5 py-1.5">
-            <p className="text-mc-caption uppercase tracking-wide text-red-300/80">Errors</p>
-            <p className="mt-0.5 text-mc-body font-semibold text-red-200">{summary.error}</p>
+          <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-2.5 py-1.5">
+            <p className="text-xs uppercase tracking-wide text-red-300/80">Errors</p>
+            <p className="mt-0.5 text-sm font-semibold text-red-200">{summary.error}</p>
           </div>
-          <div className="rounded-lg border border-amber-500/20 bg-amber-500/[0.04] px-2.5 py-1.5">
-            <p className="text-mc-caption uppercase tracking-wide text-amber-300/80">Warnings</p>
-            <p className="mt-0.5 text-mc-body font-semibold text-amber-200">{summary.warning}</p>
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5">
+            <p className="text-xs uppercase tracking-wide text-amber-300/80">Warnings</p>
+            <p className="mt-0.5 text-sm font-semibold text-amber-200">{summary.warning}</p>
           </div>
-          <div className="rounded-lg border border-blue-500/20 bg-blue-500/[0.04] px-2.5 py-1.5">
-            <p className="text-mc-caption uppercase tracking-wide text-blue-300/80">Signals</p>
-            <p className="mt-0.5 text-mc-body font-semibold text-blue-200">{summary.info}</p>
+          <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-2.5 py-1.5">
+            <p className="text-xs uppercase tracking-wide text-blue-300/80">Signals</p>
+            <p className="mt-0.5 text-sm font-semibold text-blue-200">{summary.info}</p>
           </div>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-          <div className="rounded-lg border border-foreground/[0.08] bg-background/40 px-2.5 py-1.5">
-            <p className="text-mc-micro text-muted-foreground/60">Runtime</p>
-            <p className="mt-0.5 text-mc-caption font-medium text-foreground/85">{runtimeStatus}</p>
+          <div className="rounded-lg border border-foreground/10 bg-background/40 px-2.5 py-1.5">
+            <p className="text-xs text-muted-foreground/60">Runtime</p>
+            <p className="mt-0.5 text-xs font-medium text-foreground/90">{runtimeStatus}</p>
           </div>
-          <div className="rounded-lg border border-foreground/[0.08] bg-background/40 px-2.5 py-1.5">
-            <p className="text-mc-micro text-muted-foreground/60">Bind</p>
-            <p className="mt-0.5 text-mc-caption font-medium text-foreground/85">{bind}</p>
+          <div className="rounded-lg border border-foreground/10 bg-background/40 px-2.5 py-1.5">
+            <p className="text-xs text-muted-foreground/60">Bind</p>
+            <p className="mt-0.5 text-xs font-medium text-foreground/90">{bind}</p>
           </div>
-          <div className="rounded-lg border border-foreground/[0.08] bg-background/40 px-2.5 py-1.5">
-            <p className="text-mc-micro text-muted-foreground/60">Port</p>
-            <p className="mt-0.5 text-mc-caption font-medium text-foreground/85">{portLabel}</p>
+          <div className="rounded-lg border border-foreground/10 bg-background/40 px-2.5 py-1.5">
+            <p className="text-xs text-muted-foreground/60">Port</p>
+            <p className="mt-0.5 text-xs font-medium text-foreground/90">{portLabel}</p>
           </div>
-          <div className="rounded-lg border border-foreground/[0.08] bg-background/40 px-2.5 py-1.5">
-            <p className="text-mc-micro text-muted-foreground/60">RPC</p>
-            <p className="mt-0.5 text-mc-caption font-medium text-foreground/85">{rpcLabel}</p>
+          <div className="rounded-lg border border-foreground/10 bg-background/40 px-2.5 py-1.5">
+            <p className="text-xs text-muted-foreground/60">RPC</p>
+            <p className="mt-0.5 text-xs font-medium text-foreground/90">{rpcLabel}</p>
           </div>
-          <div className="rounded-lg border border-foreground/[0.08] bg-background/40 px-2.5 py-1.5">
-            <p className="text-mc-micro text-muted-foreground/60">Doctor</p>
-            <p className="mt-0.5 text-mc-caption font-medium text-foreground/85">
+          <div className="rounded-lg border border-foreground/10 bg-background/40 px-2.5 py-1.5">
+            <p className="text-xs text-muted-foreground/60">Doctor</p>
+            <p className="mt-0.5 text-xs font-medium text-foreground/90">
               {data?.doctor?.ok ? "ok" : `exit ${data?.doctor?.exitCode ?? "?"}`}
             </p>
           </div>
@@ -742,13 +742,13 @@ function GatewayDiagnosticsPanel({
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/[0.04] p-3 text-mc-caption text-red-200">
+        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-200">
           {error}
         </div>
       )}
 
       {loading && !data && (
-        <div className="rounded-xl border border-foreground/[0.06] bg-card/70 px-4 py-8 text-center text-mc-caption text-muted-foreground/70">
+        <div className="rounded-xl border border-foreground/10 bg-card/70 px-4 py-8 text-center text-xs text-muted-foreground/70">
           <RefreshCw className="mx-auto mb-2 h-4 w-4 animate-spin" />
           Running gateway checks...
         </div>
@@ -756,8 +756,8 @@ function GatewayDiagnosticsPanel({
 
       {data && (
         <>
-          <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3">
-            <h3 className="mb-1.5 text-mc-caption font-semibold uppercase tracking-wider text-muted-foreground/70">
+          <div className="rounded-xl border border-foreground/10 bg-card/90 p-3">
+            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
               Alerts & Recommendations
             </h3>
             <div className="space-y-1">
@@ -766,18 +766,18 @@ function GatewayDiagnosticsPanel({
                   item.severity === "error"
                     ? {
                       icon: AlertCircle,
-                      row: "border-red-500/20 bg-red-500/[0.04] text-red-200",
+                      row: "border-red-500/20 bg-red-500/5 text-red-200",
                       chip: "bg-red-500/15 text-red-300",
                     }
                     : item.severity === "warning"
                       ? {
                         icon: AlertTriangle,
-                        row: "border-amber-500/20 bg-amber-500/[0.04] text-amber-100",
+                        row: "border-amber-500/20 bg-amber-500/5 text-amber-100",
                         chip: "bg-amber-500/15 text-amber-300",
                       }
                       : {
                         icon: Info,
-                        row: "border-blue-500/20 bg-blue-500/[0.04] text-blue-100",
+                        row: "border-blue-500/20 bg-blue-500/5 text-blue-100",
                         chip: "bg-blue-500/15 text-blue-300",
                       };
                 const Icon = cfg.icon;
@@ -787,8 +787,8 @@ function GatewayDiagnosticsPanel({
                     className={cn("flex items-start gap-2 rounded-lg border px-2 py-1.5", cfg.row)}
                   >
                     <Icon className="mt-0.5 h-3 w-3 shrink-0" />
-                    <div className="min-w-0 flex-1 text-mc-caption leading-snug">{item.text}</div>
-                    <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-mc-micro uppercase tracking-wide", cfg.chip)}>
+                    <div className="min-w-0 flex-1 text-xs leading-snug">{item.text}</div>
+                    <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-xs uppercase tracking-wide", cfg.chip)}>
                       {item.source === "doctor" ? "doctor" : "status"}
                     </span>
                   </div>
@@ -797,11 +797,11 @@ function GatewayDiagnosticsPanel({
             </div>
           </div>
 
-          <div className="rounded-xl border border-foreground/[0.06] bg-card/90 p-3">
-            <h3 className="mb-1.5 text-mc-caption font-semibold uppercase tracking-wider text-muted-foreground/70">
+          <div className="rounded-xl border border-foreground/10 bg-card/90 p-3">
+            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
               Doctor Output
             </h3>
-            <div className="max-h-[320px] overflow-y-auto rounded-lg border border-foreground/[0.08] bg-background/40 p-2 font-mono text-mc-caption leading-snug text-muted-foreground/85">
+            <div className="max-h-80 overflow-y-auto rounded-lg border border-foreground/10 bg-background/40 p-2 font-mono text-xs leading-snug text-muted-foreground/90">
               {(data.doctor.lines || []).slice(0, 120).map((line, idx) => (
                 <div key={`${idx}-${line}`} className="truncate">
                   {line}
@@ -832,9 +832,9 @@ function OcStatMini({
   return (
     <div className="text-center">
       <Icon className={cn("mx-auto h-3.5 w-3.5", color)} />
-      <p className="mt-1 text-mc-body font-semibold text-foreground/90">{value}</p>
-      <p className="text-mc-micro text-muted-foreground/60">{label}</p>
-      {sub && <p className="text-mc-micro text-muted-foreground/40">{sub}</p>}
+      <p className="mt-1 text-sm font-semibold text-foreground/90">{value}</p>
+      <p className="text-xs text-muted-foreground/60">{label}</p>
+      {sub && <p className="text-xs text-muted-foreground/40">{sub}</p>}
     </div>
   );
 }
@@ -950,7 +950,7 @@ export function DashboardView() {
 
   if (!live) {
     return (
-      <div className="flex flex-1 items-center justify-center text-mc-body text-muted-foreground/60">
+      <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
         <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
         Connecting to system...
       </div>
@@ -1060,7 +1060,7 @@ export function DashboardView() {
   return (
     <SectionLayout>
       {/* ── Gateway status bar ────────────────────── */}
-      <div className="shrink-0 border-b border-foreground/[0.06] bg-card/80 px-4 py-2 md:px-6">
+      <div className="shrink-0 border-b border-foreground/10 bg-card/80 px-4 py-2 md:px-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="relative flex items-center gap-1.5">
@@ -1073,15 +1073,15 @@ export function DashboardView() {
               {isOnline && (
                 <div className="absolute left-0 h-2 w-2 animate-ping rounded-full bg-emerald-500/50" />
               )}
-              <span className="text-mc-caption font-medium text-foreground/90">
+              <span className="text-xs font-medium text-foreground/90">
                 Gateway {isOnline ? "Online" : "Offline"}
               </span>
             </div>
-            <span className="text-mc-caption text-muted-foreground/60">
+            <span className="text-xs text-muted-foreground/60">
               v{gw.version} &bull; port {gw.port} &bull; {gw.latencyMs}ms
             </span>
           </div>
-          <span className="text-mc-micro text-muted-foreground/60">
+          <span className="text-xs text-muted-foreground/60">
             Refreshed {Math.floor((now - lastRefresh) / 1000)}s ago &bull; auto-refresh 5s
           </span>
         </div>
@@ -1089,7 +1089,7 @@ export function DashboardView() {
 
       <SectionBody width="content" padding="regular" innerClassName="space-y-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex rounded-lg border border-foreground/[0.08] bg-card/70 p-0.5">
+          <div className="inline-flex rounded-lg border border-foreground/10 bg-card/70 p-0.5">
             <button
               type="button"
               onClick={() => setDashboardTab("overview")}
@@ -1114,7 +1114,7 @@ export function DashboardView() {
             >
               Gateway Diagnostics
               {gatewayDiag && (gatewayDiag.summary.error > 0 || gatewayDiag.summary.warning > 0) && (
-                <span className="ml-1.5 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-mc-micro text-amber-200">
+                <span className="ml-1.5 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-200">
                   {gatewayDiag.summary.error > 0
                     ? `${gatewayDiag.summary.error} err`
                     : `${gatewayDiag.summary.warning} warn`}
@@ -1123,7 +1123,7 @@ export function DashboardView() {
             </button>
           </div>
           {dashboardTab === "gateway" && (
-            <span className="text-mc-caption text-muted-foreground/65">
+            <span className="text-xs text-muted-foreground/70">
               Auto-refresh every 30s while this tab is open
             </span>
           )}
@@ -1174,10 +1174,10 @@ export function DashboardView() {
           {/* ── Top Issues Now ─────────────────────────── */}
           {issues.length > 0 && (
             <div>
-              <h2 className="mb-2.5 flex items-center gap-2 text-mc-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              <h2 className="mb-2.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Shield className="h-3.5 w-3.5" />
                 Top Issues
-                <span className="ml-1 rounded-full bg-foreground/[0.06] px-1.5 py-0.5 text-mc-caption font-medium">
+                <span className="ml-1 rounded-full bg-foreground/10 px-1.5 py-0.5 text-xs font-medium">
                   {issues.length}
                 </span>
               </h2>
@@ -1186,7 +1186,7 @@ export function DashboardView() {
                   const severityCfg = {
                     critical: {
                       border: "border-red-500/20",
-                      bg: "bg-red-500/[0.04]",
+                      bg: "bg-red-500/5",
                       icon: AlertCircle,
                       iconColor: "text-red-400",
                       badge: "bg-red-500/15 text-red-400",
@@ -1194,7 +1194,7 @@ export function DashboardView() {
                     },
                     warning: {
                       border: "border-amber-500/20",
-                      bg: "bg-amber-500/[0.03]",
+                      bg: "bg-amber-500/5",
                       icon: AlertTriangle,
                       iconColor: "text-amber-400",
                       badge: "bg-amber-500/15 text-amber-400",
@@ -1202,7 +1202,7 @@ export function DashboardView() {
                     },
                     info: {
                       border: "border-blue-500/15",
-                      bg: "bg-blue-500/[0.02]",
+                      bg: "bg-blue-500/5",
                       icon: Info,
                       iconColor: "text-blue-400",
                       badge: "bg-blue-500/10 text-blue-400",
@@ -1222,21 +1222,21 @@ export function DashboardView() {
                       <SevIcon className={cn("mt-0.5 h-4 w-4 shrink-0", severityCfg.iconColor)} />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-mc-caption font-medium text-foreground/80">
+                          <p className="text-xs font-medium text-foreground/80">
                             {issue.title}
                           </p>
-                          <span className={cn("rounded-full px-1.5 py-0.5 text-[0.5rem] font-medium", severityCfg.badge)}>
+                          <span className={cn("rounded-full px-1.5 py-0.5 text-xs font-medium", severityCfg.badge)}>
                             {severityCfg.badgeLabel}
                           </span>
                         </div>
-                        <p className="mt-0.5 text-mc-body-sm text-muted-foreground/70 line-clamp-2">
+                        <p className="mt-0.5 text-xs text-muted-foreground/70 line-clamp-2">
                           {issue.detail}
                         </p>
                       </div>
                       {issue.fixLabel && issue.fixHref && (
                         <a
                           href={issue.fixHref}
-                          className="flex shrink-0 items-center gap-1 rounded-lg border border-foreground/[0.08] bg-card px-2.5 py-1.5 text-mc-body-sm font-medium text-foreground/70 transition-colors hover:bg-muted/80 hover:text-foreground"
+                          className="flex shrink-0 items-center gap-1 rounded-lg border border-foreground/10 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground/70 transition-colors hover:bg-muted/80 hover:text-foreground"
                         >
                           {issue.fixLabel}
                           <ArrowRight className="h-3 w-3" />
@@ -1251,16 +1251,16 @@ export function DashboardView() {
 
           {/* ── Getting Started (newbie rails) ────────── */}
           {isFreshSetup && issues.length === 0 && (
-            <div className="rounded-xl border border-violet-500/20 bg-violet-500/[0.03] p-5">
+            <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-5">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/15">
                   <Rocket className="h-5 w-5 text-violet-400" />
                 </div>
                 <div>
-                  <h3 className="text-mc-sub font-semibold text-foreground/90">
+                  <h3 className="text-xs font-semibold text-foreground/90">
                     Welcome to Mission Control
                   </h3>
-                  <p className="mt-1 text-mc-caption text-muted-foreground/70">
+                  <p className="mt-1 text-xs text-muted-foreground/70">
                     Your OpenClaw agent is running. Here are some things to try:
                   </p>
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1273,11 +1273,11 @@ export function DashboardView() {
                       <a
                         key={item.href}
                         href={item.href}
-                        className="flex items-center gap-2.5 rounded-lg border border-foreground/[0.06] bg-card/80 px-3 py-2.5 transition-colors hover:border-violet-500/20 hover:bg-violet-500/[0.04]"
+                        className="flex items-center gap-2.5 rounded-lg border border-foreground/10 bg-card/80 px-3 py-2.5 transition-colors hover:border-violet-500/20 hover:bg-violet-500/5"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="text-mc-caption font-medium text-foreground/80">{item.label}</p>
-                          <p className="text-mc-caption text-muted-foreground/60">{item.desc}</p>
+                          <p className="text-xs font-medium text-foreground/80">{item.label}</p>
+                          <p className="text-xs text-muted-foreground/60">{item.desc}</p>
                         </div>
                         <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
                       </a>
@@ -1292,24 +1292,24 @@ export function DashboardView() {
           <div className="grid gap-5 lg:grid-cols-2">
             {/* Agents */}
             <div>
-              <h2 className="mb-3 flex items-center gap-2 text-mc-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Bot className="h-3.5 w-3.5" /> Agents
               </h2>
               <div className="space-y-2.5">
                 {live.agents.map((agent) => (
                   <div
                     key={agent.id}
-                    className="rounded-xl border border-foreground/[0.06] bg-card/90 p-4"
+                    className="rounded-xl border border-foreground/10 bg-card/90 p-4"
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-base">
                         {agent.id === "main" ? "🦞" : "💀"}
                       </div>
                       <div className="flex-1">
-                        <p className="text-mc-sub font-semibold text-foreground capitalize">
+                        <p className="text-xs font-semibold text-foreground capitalize">
                           {agent.id}
                         </p>
-                        <div className="flex items-center gap-3 text-mc-body-sm text-muted-foreground">
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
                           <span>{agent.sessionCount} session{agent.sessionCount !== 1 ? "s" : ""}</span>
                           <span>{formatTokens(agent.totalTokens)} tokens</span>
                           <span>Active {formatAgo(agent.lastActivity)}</span>
@@ -1326,7 +1326,7 @@ export function DashboardView() {
                     </div>
                     {/* Token usage bar */}
                     <div className="mt-3">
-                      <div className="flex justify-between text-mc-caption text-muted-foreground/60">
+                      <div className="flex justify-between text-xs text-muted-foreground/60">
                         <span>Token usage</span>
                         <span>{formatTokens(agent.totalTokens)}</span>
                       </div>
@@ -1346,14 +1346,14 @@ export function DashboardView() {
               {/* Models */}
               {system?.models && system.models.length > 0 && (
                 <div className="mt-4">
-                  <h3 className="mb-2 text-mc-caption font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
                     Model Aliases
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
                     {system.models.map((m) => (
                       <span
                         key={m.id}
-                        className="rounded-md border border-foreground/[0.04] bg-card/80 px-2 py-1 text-mc-caption text-muted-foreground"
+                        className="rounded-md border border-foreground/5 bg-card/80 px-2 py-1 text-xs text-muted-foreground"
                       >
                         {m.alias && (
                           <span className="mr-1 text-violet-400">/{m.alias}</span>
@@ -1368,7 +1368,7 @@ export function DashboardView() {
 
             {/* Cron countdowns */}
             <div>
-              <h2 className="mb-3 flex items-center gap-2 text-mc-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" /> Cron Schedules
               </h2>
               <div className="space-y-2.5">
@@ -1378,7 +1378,7 @@ export function DashboardView() {
                   return (
                     <div
                       key={job.id}
-                      className="rounded-xl border border-foreground/[0.06] bg-card/90 p-4"
+                      className="rounded-xl border border-foreground/10 bg-card/90 p-4"
                     >
                       <div className="flex items-center gap-2.5">
                         <div
@@ -1392,18 +1392,18 @@ export function DashboardView() {
                           )}
                         />
                         <div className="min-w-0 flex-1">
-                          <p className="text-mc-body font-medium text-foreground/90">
+                          <p className="text-sm font-medium text-foreground/90">
                             {job.name}
                           </p>
-                          <p className="text-mc-caption text-muted-foreground/60">
+                          <p className="text-xs text-muted-foreground/60">
                             {job.scheduleDisplay}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-mc-body font-mono font-medium text-foreground/70">
+                          <p className="text-sm font-mono font-medium text-foreground/70">
                             {countdown}
                           </p>
-                          <p className="text-mc-caption text-muted-foreground/60">
+                          <p className="text-xs text-muted-foreground/60">
                             ran {formatAgo(job.lastRunAtMs || 0)} ({formatDuration(job.lastDurationMs)})
                           </p>
                         </div>
@@ -1422,7 +1422,7 @@ export function DashboardView() {
                       </div>
                       {/* Error message */}
                       {job.lastError && (
-                        <p className="mt-2 flex items-center gap-1 text-mc-caption text-red-400">
+                        <p className="mt-2 flex items-center gap-1 text-xs text-red-400">
                           <AlertCircle className="h-3 w-3" />
                           {job.lastError}
                         </p>
@@ -1440,7 +1440,7 @@ export function DashboardView() {
           {/* ── Recent cron run results ─────────────── */}
           {live.cronRuns.length > 0 && (
             <div>
-              <h2 className="mb-3 flex items-center gap-2 text-mc-caption font-semibold uppercase tracking-wider text-muted-foreground">
+              <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Zap className="h-3.5 w-3.5" /> Recent Cron Results
               </h2>
               <div className="space-y-1.5">
@@ -1449,7 +1449,7 @@ export function DashboardView() {
                     type="button"
                     key={`${run.jobId}-${run.ts}-${i}`}
                     onClick={() => openCronJob(run.jobId)}
-                    className="w-full rounded-lg border border-foreground/[0.04] bg-card/70 px-4 py-2.5 text-left transition-colors hover:border-violet-500/25 hover:bg-violet-500/[0.04]"
+                    className="w-full rounded-lg border border-foreground/5 bg-card/70 px-4 py-2.5 text-left transition-colors hover:border-violet-500/25 hover:bg-violet-500/5"
                   >
                     <div className="flex items-center gap-2">
                       {run.status === "ok" ? (
@@ -1457,22 +1457,22 @@ export function DashboardView() {
                       ) : (
                         <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
                       )}
-                      <span className="text-mc-body-sm text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {formatAgo(run.ts)}
                       </span>
                       {run.durationMs && (
-                        <span className="text-mc-caption text-muted-foreground/60">
+                        <span className="text-xs text-muted-foreground/60">
                           {formatDuration(run.durationMs)}
                         </span>
                       )}
                     </div>
                     {run.summary && (
-                      <p className="mt-1 line-clamp-2 text-mc-body-sm leading-5 text-muted-foreground">
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
                         {run.summary.replace(/[*#|_]/g, "").substring(0, 200)}
                       </p>
                     )}
                     {run.error && (
-                      <p className="mt-1 text-mc-body-sm text-red-400">{run.error}</p>
+                      <p className="mt-1 text-xs text-red-400">{run.error}</p>
                     )}
                   </button>
                 ))}
@@ -1482,11 +1482,11 @@ export function DashboardView() {
 
           {/* ── Live activity log ───────────────────── */}
           <div>
-            <h2 className="mb-3 flex items-center gap-2 text-mc-caption font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Radio className="h-3.5 w-3.5" /> Gateway Log
             </h2>
-            <div className="rounded-xl border border-foreground/[0.06] bg-background/60 p-1">
-              <div className="max-h-[320px] overflow-y-auto font-mono text-mc-body-sm leading-5">
+            <div className="rounded-xl border border-foreground/10 bg-background/60 p-1">
+              <div className="max-h-80 overflow-y-auto font-mono text-xs leading-5">
                 {live.logEntries.map((entry, i) => {
                   const isError =
                     entry.message.toLowerCase().includes("error") ||
@@ -1503,7 +1503,7 @@ export function DashboardView() {
                         "flex gap-2 rounded px-2 py-0.5",
                         isError
                           ? "bg-red-500/5 text-red-400"
-                          : "hover:bg-foreground/[0.02]"
+                          : "hover:bg-foreground/5"
                       )}
                     >
                       <span className="shrink-0 text-muted-foreground/60">{time}</span>
@@ -1570,8 +1570,8 @@ function StatCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-foreground/[0.06] bg-card/90 p-3",
-        onClick && "cursor-pointer transition-colors hover:border-foreground/[0.12]"
+        "rounded-xl border border-foreground/10 bg-card/90 p-3",
+        onClick && "cursor-pointer transition-colors hover:border-foreground/15"
       )}
       onClick={onClick}
     >
@@ -1580,15 +1580,15 @@ function StatCard({
           <Icon className="h-4 w-4" />
         </div>
         <div>
-          <p className="text-mc-sub font-semibold text-foreground">{value}</p>
-          <p className="text-mc-caption text-muted-foreground">{label}</p>
+          <p className="text-xs font-semibold text-foreground">{value}</p>
+          <p className="text-xs text-muted-foreground">{label}</p>
         </div>
       </div>
       {alert && (
         alertHref ? (
           <a
             href={alertHref}
-            className="mt-1.5 flex items-center gap-1 text-mc-caption text-red-400 transition-colors hover:text-red-300 group"
+            className="mt-1.5 flex items-center gap-1 text-xs text-red-400 transition-colors hover:text-red-300 group"
             onClick={(e) => e.stopPropagation()}
           >
             <AlertCircle className="h-3 w-3" />
@@ -1596,7 +1596,7 @@ function StatCard({
             <span className="text-red-500/50 group-hover:text-red-400">&rarr;</span>
           </a>
         ) : (
-          <p className="mt-1.5 flex items-center gap-1 text-mc-caption text-red-400">
+          <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400">
             <AlertCircle className="h-3 w-3" />
             {alert}
           </p>

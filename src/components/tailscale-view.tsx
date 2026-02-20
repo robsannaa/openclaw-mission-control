@@ -449,7 +449,7 @@ export function TailscaleView() {
             </div>
 
             <div className="mt-3 space-y-2">
-              <p className="text-mc-body-sm text-muted-foreground">Advanced command (`tailscale &lt;args...&gt;`)</p>
+              <p className="text-xs text-muted-foreground">Advanced command (`tailscale &lt;args...&gt;`)</p>
               <div className="flex items-center gap-2">
                 <input
                   value={advancedCommand}
@@ -467,9 +467,9 @@ export function TailscaleView() {
                   Run
                 </button>
               </div>
-              <p className="text-mc-body-sm text-muted-foreground">Examples: <code>status --json</code>, <code>ip -4</code>, <code>ping host.tailnet.ts.net</code></p>
+              <p className="text-xs text-muted-foreground">Examples: <code>status --json</code>, <code>ip -4</code>, <code>ping host.tailnet.ts.net</code></p>
               {cliOutput && (
-                <pre className="max-h-48 overflow-auto rounded-md border border-border bg-background p-2 text-mc-body-sm text-muted-foreground">
+                <pre className="max-h-48 overflow-auto rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
                   {cliOutput}
                 </pre>
               )}

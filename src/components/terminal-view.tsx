@@ -260,10 +260,9 @@ function TerminalPane({
     <div
       ref={containerRef}
       className={cn(
-        "absolute inset-0",
+        "absolute inset-0 bg-zinc-950 p-1",
         visible ? "block" : "hidden"
       )}
-      style={{ backgroundColor: "#0c0c0c", padding: "4px" }}
     />
   );
 }
@@ -358,8 +357,8 @@ export function TerminalView() {
       <div className="flex items-center justify-between border-b border-border bg-card/50 px-4 py-2">
         <div className="flex items-center gap-2">
           <TerminalIcon className="h-5 w-5 text-violet-500" />
-          <h2 className="text-mc-sub font-semibold">Terminal</h2>
-          <span className="text-mc-caption text-muted-foreground rounded-full bg-muted px-2 py-0.5">
+          <h2 className="text-xs font-semibold">Terminal</h2>
+          <span className="text-xs text-muted-foreground rounded-full bg-muted px-2 py-0.5">
             {tabs.length} session{tabs.length !== 1 ? "s" : ""}
           </span>
         </div>
@@ -388,15 +387,15 @@ export function TerminalView() {
       </div>
 
       {/* ── Tab bar ── */}
-      <div className="flex items-center gap-0 border-b border-border bg-[#0c0c0c] overflow-x-auto">
+      <div className="flex items-center gap-0 border-b border-border bg-zinc-950 overflow-x-auto">
         {tabs.map((tab) => (
           <div
             key={tab.id}
             className={cn(
-              "group flex items-center gap-1.5 border-r border-zinc-800 px-3 py-1.5 text-mc-caption font-medium cursor-pointer transition-colors",
+              "group flex items-center gap-1.5 border-r border-zinc-800 px-3 py-1.5 text-xs font-medium cursor-pointer transition-colors",
               activeTab === tab.id
-                ? "bg-[#1a1a1a] text-zinc-200"
-                : "bg-[#0c0c0c] text-zinc-500 hover:text-zinc-300 hover:bg-[#151515]"
+                ? "bg-zinc-900 text-zinc-200"
+                : "bg-zinc-950 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
             )}
             onClick={() => setActiveTab(tab.id)}
           >
@@ -421,7 +420,7 @@ export function TerminalView() {
           type="button"
           onClick={createTab}
           disabled={creating}
-          className="flex items-center gap-1 px-3 py-1.5 text-mc-caption text-zinc-500 transition-colors hover:text-zinc-300 disabled:opacity-50"
+          className="flex items-center gap-1 px-3 py-1.5 text-xs text-zinc-500 transition-colors hover:text-zinc-300 disabled:opacity-50"
           title="New terminal"
         >
           <Plus className="h-3 w-3" />
@@ -429,17 +428,17 @@ export function TerminalView() {
       </div>
 
       {/* ── Terminal panes ── */}
-      <div className="flex-1 min-h-0 relative bg-[#0c0c0c]">
+      <div className="flex-1 min-h-0 relative bg-zinc-950">
         {tabs.length === 0 && (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
               <TerminalIcon className="mx-auto h-10 w-10 text-zinc-700 mb-3" />
-              <p className="text-mc-body text-zinc-500 mb-3">No active terminals</p>
+              <p className="text-sm text-zinc-500 mb-3">No active terminals</p>
               <button
                 type="button"
                 onClick={createTab}
                 disabled={creating}
-                className="rounded-lg bg-violet-600 px-4 py-2 text-mc-body font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
               >
                 {creating ? "Creating..." : "Open Terminal"}
               </button>

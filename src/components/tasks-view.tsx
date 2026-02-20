@@ -158,17 +158,17 @@ export function TasksView() {
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/10">
             <ListChecks className="h-7 w-7 text-red-400" />
           </div>
-          <h2 className="text-mc-sub font-semibold text-foreground/90">
+          <h2 className="text-xs font-semibold text-foreground/90">
             Could not load Kanban board
           </h2>
-          <p className="mt-2 text-mc-body leading-relaxed text-muted-foreground">
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
             Something went wrong while loading your tasks. This could be a
             temporary issue. Try refreshing the page.
           </p>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-4 rounded-lg bg-foreground/[0.06] px-4 py-2 text-mc-caption font-medium text-foreground/70 transition-colors hover:bg-foreground/[0.1]"
+            className="mt-4 rounded-lg bg-foreground/10 px-4 py-2 text-xs font-medium text-foreground/70 transition-colors hover:bg-foreground/10"
           >
             Refresh
           </button>
@@ -205,27 +205,27 @@ export function TasksView() {
       {/* Stats header */}
       <div className="shrink-0 space-y-3 px-4 md:px-6 pt-5 pb-4">
         <div className="flex items-center justify-between">
-          <div className="flex flex-wrap items-center gap-5 text-mc-body">
+          <div className="flex flex-wrap items-center gap-5 text-sm">
             <span>
-              <strong className="text-mc-heading font-semibold text-foreground">
+              <strong className="text-xs font-semibold text-foreground">
                 {totalTasks}
               </strong>{" "}
               <span className="text-muted-foreground">Total</span>
             </span>
             <span>
-              <strong className="text-mc-heading font-semibold text-foreground">
+              <strong className="text-xs font-semibold text-foreground">
                 {inProgress}
               </strong>{" "}
               <span className="text-muted-foreground">In progress</span>
             </span>
             <span>
-              <strong className="text-mc-heading font-semibold text-foreground">
+              <strong className="text-xs font-semibold text-foreground">
                 {doneTasks}
               </strong>{" "}
               <span className="text-muted-foreground">Done</span>
             </span>
             <span>
-              <strong className="text-mc-heading font-semibold text-foreground">
+              <strong className="text-xs font-semibold text-foreground">
                 {completionPct}%
               </strong>{" "}
               <span className="text-muted-foreground">Completion</span>
@@ -234,7 +234,7 @@ export function TasksView() {
           {saveStatus && (
             <span
               className={cn(
-                "text-mc-body-sm",
+                "text-xs",
                 saveStatus === "saving" ? "text-muted-foreground" : "text-emerald-500"
               )}
             >
@@ -242,7 +242,7 @@ export function TasksView() {
             </span>
           )}
         </div>
-        <p className="text-mc-body-sm text-muted-foreground/60">
+        <p className="text-xs text-muted-foreground/60">
           Source: workspace/kanban.json &bull; {totalTasks} tasks across{" "}
           {columns.length} columns
           <span className="ml-2 text-muted-foreground/40/60 italic select-none" title="You know it's true.">
@@ -260,8 +260,8 @@ export function TasksView() {
             <div
               key={col.id}
               className={cn(
-                "flex md:min-w-[280px] flex-1 flex-col rounded-xl p-1 -m-1 transition-colors",
-                isDragTarget && "bg-violet-500/[0.06] ring-1 ring-inset ring-violet-500/20"
+                "flex md:min-w-72 flex-1 flex-col rounded-xl p-1 -m-1 transition-colors",
+                isDragTarget && "bg-violet-500/10 ring-1 ring-inset ring-violet-500/20"
               )}
               onDragOver={(e) => {
                 e.preventDefault();
@@ -288,10 +288,10 @@ export function TasksView() {
                   className="h-2.5 w-2.5 rounded-full"
                   style={{ backgroundColor: col.color }}
                 />
-                <h3 className="text-mc-body font-semibold text-foreground/70">
+                <h3 className="text-sm font-semibold text-foreground/70">
                   {col.title}
                 </h3>
-                <span className="text-mc-caption text-muted-foreground/60">
+                <span className="text-xs text-muted-foreground/60">
                   {colTasks.length}
                 </span>
                 <div className="flex-1" />
@@ -324,10 +324,10 @@ export function TasksView() {
               <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto">
                 {colTasks.length === 0 && addingToColumn !== col.id ? (
                   <div className={cn(
-                    "flex items-center justify-center rounded-lg border border-dashed py-8 text-mc-caption transition-colors",
+                    "flex items-center justify-center rounded-lg border border-dashed py-8 text-xs transition-colors",
                     isDragTarget
-                      ? "border-violet-500/30 text-violet-400/60 bg-violet-500/[0.03]"
-                      : "border-foreground/[0.06] text-muted-foreground/60"
+                      ? "border-violet-500/30 text-violet-400/60 bg-violet-500/5"
+                      : "border-foreground/10 text-muted-foreground/60"
                   )}>
                     {isDragTarget ? "Drop here" : "No tasks"}
                   </div>
@@ -424,8 +424,8 @@ function TaskCard({
   return (
     <div
       className={cn(
-        "group rounded-lg border border-foreground/[0.06] bg-card p-3.5 transition-all hover:border-foreground/[0.12]",
-        isDragging && "opacity-40 scale-[0.97]",
+        "group rounded-lg border border-foreground/10 bg-card p-3.5 transition-all hover:border-foreground/15",
+        isDragging && "opacity-40 scale-95",
         !isRenaming && "cursor-grab active:cursor-grabbing"
       )}
       draggable={!isRenaming}
@@ -455,11 +455,11 @@ function TaskCard({
                 if (e.key === "Escape") onRename(task.title);
               }}
               onBlur={() => onRename(renameValue.trim() || task.title)}
-              className="w-full bg-transparent text-mc-body font-medium text-foreground/90 outline-none border-b border-violet-500/40 pb-0.5"
+              className="w-full bg-transparent text-sm font-medium text-foreground/90 outline-none border-b border-violet-500/40 pb-0.5"
             />
           ) : (
             <p
-              className="text-mc-body font-medium text-foreground/90"
+              className="text-sm font-medium text-foreground/90"
               onDoubleClick={(e) => {
                 e.preventDefault();
                 onStartRename();
@@ -470,11 +470,11 @@ function TaskCard({
             </p>
           )}
           {task.description && !isRenaming && (
-            <p className="mt-1 line-clamp-2 text-mc-caption leading-5 text-muted-foreground">
+            <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
               {task.description}
             </p>
           )}
-          <div className="mt-2 flex items-center gap-2 text-mc-body-sm">
+          <div className="mt-2 flex items-center gap-2 text-xs">
             <span
               className={cn(
                 "font-medium capitalize",
@@ -578,20 +578,20 @@ function AddTaskInline({
           if (e.key === "Escape") onCancel();
         }}
         placeholder="Task title..."
-        className="mb-2 w-full bg-transparent text-mc-body font-medium text-foreground/90 outline-none placeholder:text-muted-foreground/60"
+        className="mb-2 w-full bg-transparent text-sm font-medium text-foreground/90 outline-none placeholder:text-muted-foreground/60"
       />
       <textarea
         value={desc}
         onChange={(e) => setDesc(e.target.value)}
         placeholder="Description (optional)"
         rows={2}
-        className="mb-2 w-full resize-none bg-transparent text-mc-caption leading-5 text-muted-foreground outline-none placeholder:text-muted-foreground/60"
+        className="mb-2 w-full resize-none bg-transparent text-xs leading-5 text-muted-foreground outline-none placeholder:text-muted-foreground/60"
       />
       <div className="flex items-center gap-2">
         <select
           value={priority}
           onChange={(e) => setPriority(e.target.value)}
-          className="rounded border border-foreground/[0.08] bg-muted px-2 py-1 text-mc-body-sm text-muted-foreground outline-none"
+          className="rounded border border-foreground/10 bg-muted px-2 py-1 text-xs text-muted-foreground outline-none"
         >
           {PRIORITIES.map((p) => (
             <option key={p} value={p}>
@@ -603,7 +603,7 @@ function AddTaskInline({
           value={assignee}
           onChange={(e) => setAssignee(e.target.value)}
           placeholder="Assignee"
-          className="flex-1 rounded border border-foreground/[0.08] bg-muted px-2 py-1 text-mc-body-sm text-muted-foreground outline-none placeholder:text-muted-foreground/60"
+          className="flex-1 rounded border border-foreground/10 bg-muted px-2 py-1 text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/60"
         />
         <div className="flex-1" />
         <button
@@ -617,7 +617,7 @@ function AddTaskInline({
           type="button"
           onClick={submit}
           disabled={!title.trim()}
-          className="rounded bg-violet-600 px-2.5 py-1 text-mc-body-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+          className="rounded bg-violet-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
         >
           Add
         </button>
@@ -690,7 +690,7 @@ function BoardOnboarding({
         </div>
 
         <div className="text-center">
-          <h2 className="text-mc-heading font-semibold text-foreground">
+          <h2 className="text-xs font-semibold text-foreground">
             {initStep === 3 ? "You're all set!" : "Setting up your board..."}
           </h2>
           <div className="mt-5 space-y-3">
@@ -729,10 +729,10 @@ function BoardOnboarding({
               <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-500/10">
                 <ListChecks className="h-8 w-8 text-violet-400" />
               </div>
-              <h1 className="text-mc-title font-semibold text-foreground">
+              <h1 className="text-sm font-semibold text-foreground">
                 Task Board
               </h1>
-              <p className="mx-auto mt-3 max-w-md text-mc-sub leading-relaxed text-muted-foreground">
+              <p className="mx-auto mt-3 max-w-md text-xs leading-relaxed text-muted-foreground">
                 A Kanban board that both you and your agents can manage.
                 Add tasks here or just ask your agent &mdash; it all stays in sync.
               </p>
@@ -762,20 +762,20 @@ function BoardOnboarding({
 
             {/* Board preview */}
             <div className="mt-8">
-              <p className="mb-2.5 text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/60">
+              <p className="mb-2.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
                 Your board columns
               </p>
               <div className="flex gap-2">
                 {columns.map((col) => (
                   <div
                     key={col.id}
-                    className="flex flex-1 items-center gap-2 rounded-lg border border-foreground/[0.04] bg-foreground/[0.02] px-3 py-2.5"
+                    className="flex flex-1 items-center gap-2 rounded-lg border border-foreground/5 bg-foreground/5 px-3 py-2.5"
                   >
                     <div
                       className="h-2.5 w-2.5 rounded-full"
                       style={{ backgroundColor: col.color }}
                     />
-                    <span className="text-mc-caption font-medium text-foreground/70">
+                    <span className="text-xs font-medium text-foreground/70">
                       {col.title}
                     </span>
                   </div>
@@ -788,15 +788,15 @@ function BoardOnboarding({
               <button
                 type="button"
                 onClick={initBoard}
-                className="flex items-center gap-2.5 rounded-xl bg-violet-600 px-7 py-3.5 text-mc-sub font-medium text-white shadow-lg shadow-violet-500/20 transition-all hover:bg-violet-500 hover:shadow-violet-500/30 active:scale-[0.98]"
+                className="flex items-center gap-2.5 rounded-xl bg-violet-600 px-7 py-3.5 text-xs font-medium text-white shadow-lg shadow-violet-500/20 transition-all hover:bg-violet-500 hover:shadow-violet-500/30 active:scale-95"
               >
                 <Rocket className="h-4.5 w-4.5" />
                 Set Up Task Board
               </button>
-              <p className="max-w-xs text-center text-mc-body-sm leading-relaxed text-muted-foreground/60">
-                Creates <code className="rounded bg-foreground/[0.04] px-1 text-mc-caption">kanban.json</code>
+              <p className="max-w-xs text-center text-xs leading-relaxed text-muted-foreground/60">
+                Creates <code className="rounded bg-foreground/5 px-1 text-xs">kanban.json</code>
                 {" "}&amp;{" "}
-                <code className="rounded bg-foreground/[0.04] px-1 text-mc-caption">TASKS.md</code>
+                <code className="rounded bg-foreground/5 px-1 text-xs">TASKS.md</code>
                 {" "}in your workspace.{" "}
                 One click, zero config.
               </p>
@@ -816,10 +816,10 @@ function BoardOnboarding({
             <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10">
               <CheckCircle className="h-7 w-7 text-emerald-400" />
             </div>
-            <h1 className="text-mc-title font-semibold text-foreground">
+            <h1 className="text-sm font-semibold text-foreground">
               Board is clear
             </h1>
-            <p className="mx-auto mt-2 max-w-sm text-mc-body leading-relaxed text-muted-foreground">
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
               All tasks done! Add a new one or ask your agent to add tasks for you.
             </p>
           </div>
@@ -828,19 +828,19 @@ function BoardOnboarding({
             <button
               type="button"
               onClick={() => setAddingToColumn("backlog")}
-              className="flex items-center gap-2 rounded-xl bg-violet-600 px-6 py-3 text-mc-sub font-medium text-white shadow-lg shadow-violet-500/20 transition-all hover:bg-violet-500 hover:shadow-violet-500/30"
+              className="flex items-center gap-2 rounded-xl bg-violet-600 px-6 py-3 text-xs font-medium text-white shadow-lg shadow-violet-500/20 transition-all hover:bg-violet-500 hover:shadow-violet-500/30"
             >
               <Plus className="h-4.5 w-4.5" />
               Add a task
             </button>
-            <p className="text-mc-body-sm text-muted-foreground/60">
+            <p className="text-xs text-muted-foreground/60">
               Or tell your agent: &ldquo;Add a task to&hellip;&rdquo;
             </p>
           </div>
 
           {addingToColumn && (
             <div className="mx-auto mt-6 max-w-sm">
-              <p className="mb-2 text-mc-body-sm font-medium text-muted-foreground">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
                 Adding to: <span className="text-violet-400 capitalize">{addingToColumn}</span>
               </p>
               <AddTaskInline
@@ -873,13 +873,13 @@ function FeatureRow({
   desc: string;
 }) {
   return (
-    <div className="flex items-start gap-3.5 rounded-xl border border-foreground/[0.04] bg-foreground/[0.02] p-4">
-      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.04]">
+    <div className="flex items-start gap-3.5 rounded-xl border border-foreground/5 bg-foreground/5 p-4">
+      <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-foreground/5">
         <Icon className={cn("h-4 w-4", iconColor)} />
       </div>
       <div className="min-w-0">
-        <p className="text-mc-body font-medium text-foreground/90">{title}</p>
-        <p className="mt-0.5 text-mc-caption leading-relaxed text-muted-foreground">{desc}</p>
+        <p className="text-sm font-medium text-foreground/90">{title}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
       </div>
     </div>
   );
@@ -923,13 +923,13 @@ function StepIndicator({
       <div className="min-w-0">
         <p
           className={cn(
-            "text-mc-body font-medium",
+            "text-sm font-medium",
             isDone ? "text-emerald-300" : isActive ? "text-foreground/90" : "text-muted-foreground"
           )}
         >
           {label}
         </p>
-        <p className="text-mc-body-sm text-muted-foreground/60">{sublabel}</p>
+        <p className="text-xs text-muted-foreground/60">{sublabel}</p>
       </div>
     </div>
   );
@@ -976,7 +976,7 @@ function EditTaskInline({
           if (e.key === "Enter") save();
           if (e.key === "Escape") onCancel();
         }}
-        className="mb-2 w-full bg-transparent text-mc-body font-medium text-foreground/90 outline-none placeholder:text-muted-foreground/60"
+        className="mb-2 w-full bg-transparent text-sm font-medium text-foreground/90 outline-none placeholder:text-muted-foreground/60"
         autoFocus
       />
       <textarea
@@ -984,13 +984,13 @@ function EditTaskInline({
         onChange={(e) => setDesc(e.target.value)}
         placeholder="Description"
         rows={2}
-        className="mb-2 w-full resize-none bg-transparent text-mc-caption leading-5 text-muted-foreground outline-none placeholder:text-muted-foreground/60"
+        className="mb-2 w-full resize-none bg-transparent text-xs leading-5 text-muted-foreground outline-none placeholder:text-muted-foreground/60"
       />
       <div className="flex flex-wrap items-center gap-2">
         <select
           value={priority}
           onChange={(e) => setPriority(e.target.value)}
-          className="rounded border border-foreground/[0.08] bg-muted px-2 py-1 text-mc-body-sm text-muted-foreground outline-none"
+          className="rounded border border-foreground/10 bg-muted px-2 py-1 text-xs text-muted-foreground outline-none"
         >
           {PRIORITIES.map((p) => (
             <option key={p} value={p}>
@@ -1001,7 +1001,7 @@ function EditTaskInline({
         <select
           value={column}
           onChange={(e) => setColumn(e.target.value)}
-          className="rounded border border-foreground/[0.08] bg-muted px-2 py-1 text-mc-body-sm text-muted-foreground outline-none"
+          className="rounded border border-foreground/10 bg-muted px-2 py-1 text-xs text-muted-foreground outline-none"
         >
           {columns.map((c) => (
             <option key={c.id} value={c.id}>
@@ -1013,7 +1013,7 @@ function EditTaskInline({
           value={assignee}
           onChange={(e) => setAssignee(e.target.value)}
           placeholder="Assignee"
-          className="flex-1 rounded border border-foreground/[0.08] bg-muted px-2 py-1 text-mc-body-sm text-muted-foreground outline-none placeholder:text-muted-foreground/60"
+          className="flex-1 rounded border border-foreground/10 bg-muted px-2 py-1 text-xs text-muted-foreground outline-none placeholder:text-muted-foreground/60"
         />
       </div>
       <div className="mt-3 flex items-center gap-1.5">
@@ -1029,7 +1029,7 @@ function EditTaskInline({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded px-2.5 py-1 text-mc-body-sm text-muted-foreground hover:text-foreground/70"
+          className="rounded px-2.5 py-1 text-xs text-muted-foreground hover:text-foreground/70"
         >
           Cancel
         </button>
@@ -1037,7 +1037,7 @@ function EditTaskInline({
           type="button"
           onClick={save}
           disabled={!title.trim()}
-          className="flex items-center gap-1 rounded bg-violet-600 px-2.5 py-1 text-mc-body-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+          className="flex items-center gap-1 rounded bg-violet-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
         >
           <Check className="h-3 w-3" /> Save
         </button>

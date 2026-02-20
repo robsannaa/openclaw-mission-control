@@ -150,8 +150,8 @@ function statusPill(ok: boolean, label: string) {
     <span
       className={
         ok
-          ? "inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-mc-caption text-emerald-300"
-          : "inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-mc-caption text-red-300"
+          ? "inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-300"
+          : "inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-1 text-xs text-red-300"
       }
     >
       {ok ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldX className="h-3.5 w-3.5" />}
@@ -337,7 +337,7 @@ export function AccountsKeysView() {
             <button
               type="button"
               onClick={() => setRevealSecrets((prev) => !prev)}
-              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-mc-caption hover:bg-muted"
+              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
               disabled={!data}
             >
               {revealSecrets ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -346,7 +346,7 @@ export function AccountsKeysView() {
             <button
               type="button"
               onClick={() => void load()}
-              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-mc-caption hover:bg-muted"
+              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
               disabled={busy}
             >
               <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
@@ -358,12 +358,12 @@ export function AccountsKeysView() {
 
       <SectionBody width="narrow" className="space-y-4">
         {error && (
-          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-mc-body text-red-300">
+          <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-sm text-red-300">
             {error}
           </div>
         )}
         {notice && (
-          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-mc-body text-emerald-200">
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm text-emerald-200">
             {notice}
           </div>
         )}
@@ -385,52 +385,52 @@ export function AccountsKeysView() {
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-md border border-border/70 bg-muted/30 p-3">
-                  <p className="text-mc-caption text-muted-foreground">Agents</p>
-                  <p className="mt-1 text-mc-heading font-semibold">{data.summary.agents}</p>
+                  <p className="text-xs text-muted-foreground">Agents</p>
+                  <p className="mt-1 text-xs font-semibold">{data.summary.agents}</p>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/30 p-3">
-                  <p className="text-mc-caption text-muted-foreground">Channel Accounts Running</p>
-                  <p className="mt-1 text-mc-heading font-semibold">
+                  <p className="text-xs text-muted-foreground">Channel Accounts Running</p>
+                  <p className="mt-1 text-xs font-semibold">
                     {data.summary.channelAccountsRunning}/{data.summary.channelAccounts}
                   </p>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/30 p-3">
-                  <p className="text-mc-caption text-muted-foreground">Config Env Credentials</p>
-                  <p className="mt-1 text-mc-heading font-semibold">{data.summary.configEnvKeys}</p>
+                  <p className="text-xs text-muted-foreground">Config Env Credentials</p>
+                  <p className="mt-1 text-xs font-semibold">{data.summary.configEnvKeys}</p>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/30 p-3">
-                  <p className="text-mc-caption text-muted-foreground">Process Env Credentials</p>
-                  <p className="mt-1 text-mc-heading font-semibold">{data.summary.processEnvKeys}</p>
+                  <p className="text-xs text-muted-foreground">Process Env Credentials</p>
+                  <p className="mt-1 text-xs font-semibold">{data.summary.processEnvKeys}</p>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/30 p-3">
-                  <p className="text-mc-caption text-muted-foreground">Skill Credential Services</p>
-                  <p className="mt-1 text-mc-heading font-semibold">
+                  <p className="text-xs text-muted-foreground">Skill Credential Services</p>
+                  <p className="mt-1 text-xs font-semibold">
                     {data.summary.skillCredentialReady}/{data.summary.skillCredentialServices}
                   </p>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/30 p-3">
-                  <p className="text-mc-caption text-muted-foreground">Discovered External Credentials</p>
-                  <p className="mt-1 text-mc-heading font-semibold">
+                  <p className="text-xs text-muted-foreground">Discovered External Credentials</p>
+                  <p className="mt-1 text-xs font-semibold">
                     {data.summary.discoveredCredentials} ({data.summary.discoveredCredentialServices} services)
                   </p>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/30 p-3 sm:col-span-2">
-                  <p className="text-mc-caption text-muted-foreground">Discovered Config Secrets</p>
-                  <p className="mt-1 text-mc-heading font-semibold">{data.summary.configSecrets}</p>
+                  <p className="text-xs text-muted-foreground">Discovered Config Secrets</p>
+                  <p className="mt-1 text-xs font-semibold">{data.summary.configSecrets}</p>
                 </div>
               </div>
             </div>
 
             <div className="rounded-xl border border-border/70 bg-card p-4">
-              <h2 className="text-mc-sub font-semibold text-foreground">Channel Accounts</h2>
-              <p className="mt-1 text-mc-caption text-muted-foreground">
+              <h2 className="text-xs font-semibold text-foreground">Channel Accounts</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
                 Logged-in chat accounts, status, and auth source.
               </p>
               <div className="mt-3 space-y-2">
                 {data.channels.accounts.map((acct) => (
                   <div
                     key={`${acct.channel}:${acct.accountId}`}
-                    className="rounded-md border border-border/60 bg-muted/20 p-2 text-mc-caption"
+                    className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="font-medium text-foreground">
@@ -455,21 +455,21 @@ export function AccountsKeysView() {
             </div>
 
             <div className="rounded-xl border border-border/70 bg-card p-4">
-              <h2 className="text-mc-sub font-semibold text-foreground">Skill Credential Matrix</h2>
-              <p className="mt-1 text-mc-caption text-muted-foreground">
+              <h2 className="text-xs font-semibold text-foreground">Skill Credential Matrix</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
                 Skill-declared env requirements 
               </p>
-              <p className="mt-1 text-mc-caption text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 ready={data.skillCredentials.summary.ready}/{data.skillCredentials.summary.skills} · env keys resolved={data.skillCredentials.summary.resolvedEnvKeys}/{data.skillCredentials.summary.envKeys}
               </p>
               <div className="mt-3 space-y-2">
                 {data.skillCredentials.skills.length === 0 ? (
-                  <p className="text-mc-caption text-muted-foreground">No skill credential requirements discovered.</p>
+                  <p className="text-xs text-muted-foreground">No skill credential requirements discovered.</p>
                 ) : null}
                 {data.skillCredentials.skills.map((skill) => (
                   <div
                     key={skill.name}
-                    className="rounded-md border border-border/60 bg-muted/20 p-2 text-mc-caption"
+                    className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="font-medium text-foreground">{skill.name}</p>
@@ -506,21 +506,21 @@ export function AccountsKeysView() {
             </div>
 
             <div className="rounded-xl border border-border/70 bg-card p-4">
-              <h2 className="text-mc-sub font-semibold text-foreground">Discovered Credential Sources</h2>
-              <p className="mt-1 text-mc-caption text-muted-foreground">
+              <h2 className="text-xs font-semibold text-foreground">Discovered Credential Sources</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
                 Generic detection from accessible files/notes/state (not provider hardcoded).
               </p>
-              <p className="mt-1 text-mc-caption text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 entries={data.discoveredCredentials.summary.total} · services={data.discoveredCredentials.summary.services} · high-confidence={data.discoveredCredentials.summary.highConfidence}
               </p>
               <div className="mt-3 space-y-2">
                 {data.discoveredCredentials.entries.length === 0 ? (
-                  <p className="text-mc-caption text-muted-foreground">No additional credential entries discovered.</p>
+                  <p className="text-xs text-muted-foreground">No additional credential entries discovered.</p>
                 ) : null}
                 {data.discoveredCredentials.entries.map((entry, idx) => (
                   <div
                     key={`${entry.sourcePath}:${entry.key}:${entry.service || "unknown"}:${idx}`}
-                    className="rounded-md border border-border/60 bg-muted/20 p-2 text-mc-caption"
+                    className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <p className="font-medium text-foreground">
@@ -548,13 +548,13 @@ export function AccountsKeysView() {
 
             <div className="grid gap-4 lg:grid-cols-2">
               <div className="rounded-xl border border-border/70 bg-card p-4">
-                <h2 className="text-mc-sub font-semibold text-foreground">Config Env Credentials</h2>
-                <p className="mt-1 text-mc-caption text-muted-foreground">
+                <h2 className="text-xs font-semibold text-foreground">Config Env Credentials</h2>
+                <p className="mt-1 text-xs text-muted-foreground">
                   Vercel-style edit flow: current value plus double-entry confirmation. Includes skill-required env keys.
                 </p>
                 <div className="mt-3 space-y-2">
                   {editableConfigEnvRows.length === 0 ? (
-                    <p className="text-mc-caption text-muted-foreground">No env credential keys discovered.</p>
+                    <p className="text-xs text-muted-foreground">No env credential keys discovered.</p>
                   ) : null}
                   {editableConfigEnvRows.map((item) => {
                     const editor = getEnvEditor(item.key);
@@ -562,7 +562,7 @@ export function AccountsKeysView() {
                     return (
                       <div
                         key={item.key}
-                        className="rounded-md border border-border/60 bg-muted/20 p-2 text-mc-caption"
+                        className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs"
                       >
                         <div className="flex items-center justify-between gap-2">
                           <p className="font-medium text-foreground">{item.key}</p>
@@ -570,7 +570,7 @@ export function AccountsKeysView() {
                             <button
                               type="button"
                               onClick={() => patchEnvEditor(item.key, { show: !editor.show })}
-                              className="rounded border border-border px-2 py-1 text-mc-body-sm hover:bg-muted"
+                              className="rounded border border-border px-2 py-1 text-xs hover:bg-muted"
                             >
                               {editor.show ? "Hide" : "Show"}
                             </button>
@@ -578,7 +578,7 @@ export function AccountsKeysView() {
                               <button
                                 type="button"
                                 onClick={() => startEditEnvKey(item.key)}
-                                className="rounded border border-border px-2 py-1 text-mc-body-sm hover:bg-muted"
+                                className="rounded border border-border px-2 py-1 text-xs hover:bg-muted"
                               >
                                 {item.present ? "Edit" : "Set"}
                               </button>
@@ -587,7 +587,7 @@ export function AccountsKeysView() {
                               <button
                                 type="button"
                                 onClick={() => void saveEnvKey(item.key)}
-                                className="rounded border border-emerald-500/40 px-2 py-1 text-mc-body-sm text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-50"
+                                className="rounded border border-emerald-500/40 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-50"
                                 disabled={saving}
                               >
                                 {saving ? "Saving..." : "Save"}
@@ -595,7 +595,7 @@ export function AccountsKeysView() {
                               <button
                                 type="button"
                                 onClick={() => cancelEditEnvKey(item.key)}
-                                className="rounded border border-border px-2 py-1 text-mc-body-sm hover:bg-muted"
+                                className="rounded border border-border px-2 py-1 text-xs hover:bg-muted"
                               >
                                 Cancel
                               </button>
@@ -603,12 +603,12 @@ export function AccountsKeysView() {
                             )}
                           </div>
                         </div>
-                        <p className="mt-1 text-mc-body-sm text-muted-foreground">
+                        <p className="mt-1 text-xs text-muted-foreground">
                           source: {item.source}
                         </p>
                         <div className="mt-2 space-y-1">
                           <label className="block">
-                            <span className="text-mc-body-sm text-muted-foreground">Current value</span>
+                            <span className="text-xs text-muted-foreground">Current value</span>
                             <input
                               type={revealSecrets || editor.show ? "text" : "password"}
                               readOnly
@@ -622,31 +622,31 @@ export function AccountsKeysView() {
                                   : ""
                               }
                               placeholder={item.present ? "" : "Not set"}
-                              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-mc-body-sm text-muted-foreground"
+                              className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-xs text-muted-foreground"
                             />
                           </label>
                           {editor.editing && (
                             <>
                               <label className="block">
-                                <span className="text-mc-body-sm text-muted-foreground">New value</span>
+                                <span className="text-xs text-muted-foreground">New value</span>
                                 <input
                                   type={editor.show ? "text" : "password"}
                                   value={editor.nextValue}
                                   onChange={(e) =>
                                     patchEnvEditor(item.key, { nextValue: e.target.value })
                                   }
-                                  className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-mc-body-sm"
+                                  className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-xs"
                                 />
                               </label>
                               <label className="block">
-                                <span className="text-mc-body-sm text-muted-foreground">Confirm new value</span>
+                                <span className="text-xs text-muted-foreground">Confirm new value</span>
                                 <input
                                   type={editor.show ? "text" : "password"}
                                   value={editor.confirmValue}
                                   onChange={(e) =>
                                     patchEnvEditor(item.key, { confirmValue: e.target.value })
                                   }
-                                  className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-mc-body-sm"
+                                  className="mt-1 w-full rounded border border-border bg-background px-2 py-1.5 font-mono text-xs"
                                 />
                               </label>
                             </>
@@ -658,10 +658,10 @@ export function AccountsKeysView() {
                 </div>
               </div>
               <div className="rounded-xl border border-border/70 bg-card p-4">
-                <h2 className="text-mc-sub font-semibold text-foreground">Process Env Credentials</h2>
+                <h2 className="text-xs font-semibold text-foreground">Process Env Credentials</h2>
                 <div className="mt-3 space-y-1">
                   {data.envCredentials.process.map((item) => (
-                    <p key={item.key} className="break-all text-mc-caption text-muted-foreground">
+                    <p key={item.key} className="break-all text-xs text-muted-foreground">
                       <span className="text-foreground">{item.key}</span> ={" "}
                       <code>{renderSecret(item.value, revealSecrets, item.redacted)}</code>
                     </p>
@@ -671,13 +671,13 @@ export function AccountsKeysView() {
             </div>
 
             <div className="rounded-xl border border-border/70 bg-card p-4">
-              <h2 className="text-mc-sub font-semibold text-foreground">Config Secrets (Non-env)</h2>
-              <p className="mt-1 text-mc-caption text-muted-foreground">
+              <h2 className="text-xs font-semibold text-foreground">Config Secrets (Non-env)</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
                 Credential-like fields discovered in parsed config (excluding <code>env</code>).
               </p>
-              <div className="mt-3 max-h-[420px] space-y-1 overflow-y-auto">
+              <div className="mt-3 max-h-96 space-y-1 overflow-y-auto">
                 {data.configSecrets.map((secret) => (
-                  <p key={secret.path} className="break-all text-mc-caption text-muted-foreground">
+                  <p key={secret.path} className="break-all text-xs text-muted-foreground">
                     <span className="text-foreground">{secret.path}</span> ={" "}
                     <code>{renderSecret(secret.value, revealSecrets, secret.redacted)}</code>
                   </p>
@@ -686,7 +686,7 @@ export function AccountsKeysView() {
             </div>
 
             {data.warnings.length > 0 ? (
-              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-mc-caption text-amber-300">
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-300">
                 <div className="mb-2 inline-flex items-center gap-2 font-medium">
                   <AlertTriangle className="h-3.5 w-3.5" />
                   Partial data warnings

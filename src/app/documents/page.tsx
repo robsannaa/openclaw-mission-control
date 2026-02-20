@@ -30,17 +30,17 @@ export default async function DocumentsPage() {
   return (
     <div className="p-6 h-full">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-mc-title font-semibold">Documents</h1>
+        <h1 className="text-sm font-semibold">Documents</h1>
         <Badge variant="outline">{documentSections.length} files</Badge>
       </div>
 
-      <ScrollArea className="h-[calc(100vh-150px)]">
+      <ScrollArea className="h-full min-h-0">
         <div className="grid gap-4">
           {documentSections.map((section) => (
             <Card key={section.key}>
               <CardHeader className="py-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-mc-heading">{section.title}</CardTitle>
+                  <CardTitle className="text-xs">{section.title}</CardTitle>
                   <Badge variant="secondary" className="text-xs">{section.key}.md</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">{section.description}</p>
@@ -50,7 +50,7 @@ export default async function DocumentsPage() {
                   <div className="prose prose-sm max-w-none dark:prose-invert">
                     {files[section.key].split('\n').slice(0, 30).map((line: string, i: number) => {
                       if (line.startsWith('## ')) {
-                        return <h3 key={i} className="text-mc-sub font-semibold mt-4 mb-2">{line.replace('## ', '')}</h3>;
+                        return <h3 key={i} className="text-xs font-semibold mt-4 mb-2">{line.replace('## ', '')}</h3>;
                       }
                       if (line.startsWith('### ')) {
                         return <h4 key={i} className="text-sm font-semibold mt-3 mb-1">{line.replace('### ', '')}</h4>;

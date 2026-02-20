@@ -23,6 +23,7 @@ import { PermissionsView } from "@/components/permissions-view";
 import { TailscaleView } from "@/components/tailscale-view";
 import { BrowserRelayView } from "@/components/browser-relay-view";
 import { AccountsKeysView } from "@/components/accounts-keys-view";
+import { WebSearchView } from "@/components/web-search-view";
 import { setChatActive } from "@/lib/chat-store";
 
 function SectionContent({ section }: { section: string }) {
@@ -70,6 +71,8 @@ function SectionContent({ section }: { section: string }) {
       return <TailscaleView />;
     case "browser":
       return <BrowserRelayView />;
+    case "search":
+      return <WebSearchView />;
     default:
       return <DashboardView />;
   }
@@ -108,7 +111,7 @@ export default function Home() {
   return (
     <Suspense
       fallback={
-        <div className="flex flex-1 items-center justify-center text-mc-body text-muted-foreground/60">
+        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
           Loading...
         </div>
       }

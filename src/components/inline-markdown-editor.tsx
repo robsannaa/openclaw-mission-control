@@ -179,7 +179,19 @@ export function InlineMarkdownEditor({
       role="textbox"
       aria-label="Markdown editor"
       className={cn(
-        "md-editor min-h-[200px] rounded-lg px-4 py-3 outline-none transition-all",
+        "min-h-48 rounded-lg px-4 py-3 outline-none transition-all text-xs text-foreground",
+        "[&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-4 [&_h1]:mb-2 [&_h1]:first:mt-0",
+        "[&_h2]:text-xs [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1.5 [&_h2]:first:mt-0 [&_h2]:text-violet-600 dark:[&_h2]:text-violet-400",
+        "[&_h3]:text-xs [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h3]:first:mt-0",
+        "[&_h4]:text-xs [&_h4]:font-medium [&_h4]:mt-2 [&_h4]:mb-1 [&_h4]:first:mt-0 [&_h4]:text-muted-foreground",
+        "[&_p]:mb-2 [&_ul]:my-2 [&_ul]:pl-6 [&_ul]:list-disc [&_ol]:my-2 [&_ol]:pl-6 [&_ol]:list-decimal [&_li]:mb-0.5",
+        "[&_code]:bg-muted [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-xs",
+        "[&_pre]:my-3 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-muted [&_pre]:p-3 [&_pre]:text-xs",
+        "[&_a]:text-violet-600 [&_a]:dark:text-violet-400 [&_a:hover]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-violet-500/40 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:my-2",
+        "[&_table]:w-full [&_table]:border-collapse [&_table]:my-2 [&_table]:border [&_table]:border-border [&_th]:border [&_th]:border-border [&_th]:bg-muted [&_th]:p-2 [&_th]:text-left [&_td]:border [&_td]:border-border [&_td]:p-2",
+        "[&_hr]:my-4 [&_hr]:border-border",
+        "[&_.empty-placeholder]:text-muted-foreground [&_.empty-placeholder]:italic",
+        "caret-violet-500",
         isFocused
           ? "ring-1 ring-violet-500/20 bg-card/60"
           : "hover:bg-muted/30 cursor-text",

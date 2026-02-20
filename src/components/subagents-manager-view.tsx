@@ -453,7 +453,7 @@ export function SubagentsManagerView({
 
   return (
     <SectionBody width="content" padding="roomy" innerClassName="space-y-5">
-      <div className="rounded-xl border border-border/70 bg-card p-4 text-mc-body text-muted-foreground">
+      <div className="rounded-xl border border-border/70 bg-card p-4 text-sm text-muted-foreground">
         <div className="flex items-center gap-2 font-medium text-foreground">
           <Network className="h-4 w-4" /> Subagents Mission Control
         </div>
@@ -462,16 +462,16 @@ export function SubagentsManagerView({
           steer, send, kill, plus direct agent-send.
         </p>
         <a
-          className="mt-2 inline-block text-mc-caption text-violet-300 hover:text-violet-200"
+          className="mt-2 inline-block text-xs text-violet-300 hover:text-violet-200"
           href="https://docs.openclaw.ai/tools/subagents#sub-agents"
           target="_blank"
           rel="noreferrer"
         >
           Subagents docs
         </a>
-        <span className="mx-2 text-mc-caption text-muted-foreground/60">•</span>
+        <span className="mx-2 text-xs text-muted-foreground/60">•</span>
         <a
-          className="inline-block text-mc-caption text-violet-300 hover:text-violet-200"
+          className="inline-block text-xs text-violet-300 hover:text-violet-200"
           href="https://docs.openclaw.ai/tools/agent-send"
           target="_blank"
           rel="noreferrer"
@@ -493,7 +493,7 @@ export function SubagentsManagerView({
             ["runTimeoutSeconds", "Run timeout seconds"],
           ] as const).map(([key, label]) => (
             <label key={key} className="block">
-              <span className="text-mc-caption text-muted-foreground">{label}</span>
+              <span className="text-xs text-muted-foreground">{label}</span>
               <input
                 type="number"
                 min={1}
@@ -506,7 +506,7 @@ export function SubagentsManagerView({
             </label>
           ))}
           <label className="block">
-            <span className="text-mc-caption text-muted-foreground">Default model (optional)</span>
+            <span className="text-xs text-muted-foreground">Default model (optional)</span>
             <input
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
               value={defaults.model}
@@ -515,7 +515,7 @@ export function SubagentsManagerView({
             />
           </label>
           <label className="block">
-            <span className="text-mc-caption text-muted-foreground">Default thinking</span>
+            <span className="text-xs text-muted-foreground">Default thinking</span>
             <select
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
               value={defaults.thinking}
@@ -539,7 +539,7 @@ export function SubagentsManagerView({
               type="button"
               onClick={() => void saveDefaults()}
               disabled={loading || saving || !baseHash}
-              className="rounded-md bg-violet-600 px-3 py-1.5 text-mc-caption font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
             >
               Save Defaults
             </button>
@@ -584,7 +584,7 @@ export function SubagentsManagerView({
                   />
                   <span>
                     {a.emoji} {a.name}{" "}
-                    <span className="text-mc-caption text-muted-foreground">({a.id})</span>
+                    <span className="text-xs text-muted-foreground">({a.id})</span>
                   </span>
                 </label>
               ))}
@@ -594,7 +594,7 @@ export function SubagentsManagerView({
               type="button"
               onClick={() => void saveAgentAllowList()}
               disabled={saving || !editingAgentId}
-              className="rounded-md border border-border px-3 py-1.5 text-mc-caption hover:bg-muted disabled:opacity-50"
+              className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
             >
               Save allowAgents
             </button>
@@ -609,7 +609,7 @@ export function SubagentsManagerView({
 
         <div className="grid gap-2 md:grid-cols-4">
           <label className="md:col-span-1">
-            <span className="text-mc-caption text-muted-foreground">Control agent</span>
+            <span className="text-xs text-muted-foreground">Control agent</span>
             <select
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
               value={activeAgentId}
@@ -624,7 +624,7 @@ export function SubagentsManagerView({
           </label>
 
           <label className="md:col-span-1">
-            <span className="text-mc-caption text-muted-foreground">Action</span>
+            <span className="text-xs text-muted-foreground">Action</span>
             <select
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
               value={action}
@@ -643,7 +643,7 @@ export function SubagentsManagerView({
           </label>
 
           <label className="md:col-span-2">
-            <span className="text-mc-caption text-muted-foreground">Session key</span>
+            <span className="text-xs text-muted-foreground">Session key</span>
             <input
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
               value={sessionKey}
@@ -653,7 +653,7 @@ export function SubagentsManagerView({
               }}
               placeholder="agent:main:subagents:mission-control"
             />
-            <label className="mt-1 inline-flex items-center gap-1.5 text-mc-caption text-muted-foreground">
+            <label className="mt-1 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
               <input
                 type="checkbox"
                 checked={isolateSession}
@@ -669,7 +669,7 @@ export function SubagentsManagerView({
 
         {(action === "kill" || action === "info" || action === "log" || action === "send" || action === "steer") && (
           <label className="block">
-            <span className="text-mc-caption text-muted-foreground">Target subagent id / # / all</span>
+            <span className="text-xs text-muted-foreground">Target subagent id / # / all</span>
             <input
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
               value={target}
@@ -682,7 +682,7 @@ export function SubagentsManagerView({
         {action === "spawn" && (
           <div className="grid gap-2 md:grid-cols-2">
             <label>
-              <span className="text-mc-caption text-muted-foreground">Spawn agentId</span>
+              <span className="text-xs text-muted-foreground">Spawn agentId</span>
               <select
                 className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                 value={spawnAgentId}
@@ -698,7 +698,7 @@ export function SubagentsManagerView({
               </select>
             </label>
             <label>
-              <span className="text-mc-caption text-muted-foreground">Label (optional)</span>
+              <span className="text-xs text-muted-foreground">Label (optional)</span>
               <input
                 className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                 value={spawnLabel}
@@ -707,7 +707,7 @@ export function SubagentsManagerView({
               />
             </label>
             <label>
-              <span className="text-mc-caption text-muted-foreground">Model override (optional)</span>
+              <span className="text-xs text-muted-foreground">Model override (optional)</span>
               <input
                 className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                 value={spawnModel}
@@ -716,7 +716,7 @@ export function SubagentsManagerView({
               />
             </label>
             <label>
-              <span className="text-mc-caption text-muted-foreground">Thinking override</span>
+              <span className="text-xs text-muted-foreground">Thinking override</span>
               <select
                 className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
                 value={spawnThinking}
@@ -730,7 +730,7 @@ export function SubagentsManagerView({
               </select>
             </label>
             <label>
-              <span className="text-mc-caption text-muted-foreground">Run timeout seconds</span>
+              <span className="text-xs text-muted-foreground">Run timeout seconds</span>
               <input
                 type="number"
                 min={10}
@@ -750,7 +750,7 @@ export function SubagentsManagerView({
           </div>
         )}
         {action === "spawn" && spawnableAgentIds.length === 0 && (
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-mc-caption text-amber-200">
+          <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-200">
             Control agent <code>{activeAgentId}</code> has no allowed subagents. Configure
             <span className="mx-1 font-medium">allowAgents</span>
             above before spawning.
@@ -759,7 +759,7 @@ export function SubagentsManagerView({
 
         {(action === "send" || action === "steer" || action === "spawn" || action === "raw" || action === "agent-send") && (
           <label className="block">
-            <span className="text-mc-caption text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               {action === "spawn"
                 ? "Task"
                 : action === "raw"
@@ -785,9 +785,9 @@ export function SubagentsManagerView({
 
         {action === "agent-send" && (
           <label className="block">
-            <span className="text-mc-caption text-muted-foreground">Extra agent params (JSON)</span>
+            <span className="text-xs text-muted-foreground">Extra agent params (JSON)</span>
             <textarea
-              className="mt-1 min-h-20 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-mc-caption"
+              className="mt-1 min-h-20 w-full rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs"
               value={agentParamsJson}
               onChange={(e) => setAgentParamsJson(e.target.value)}
               placeholder='{"thinking":"minimal","lane":"subagents","extraSystemPrompt":"..."}'
@@ -798,7 +798,7 @@ export function SubagentsManagerView({
         {action === "log" && (
           <div className="grid gap-2 md:grid-cols-2">
             <label>
-              <span className="text-mc-caption text-muted-foreground">Log lines</span>
+              <span className="text-xs text-muted-foreground">Log lines</span>
               <input
                 type="number"
                 min={1}
@@ -820,7 +820,7 @@ export function SubagentsManagerView({
 
         <div className="grid gap-2 md:grid-cols-3">
           <label>
-            <span className="text-mc-caption text-muted-foreground">Parent thinking</span>
+            <span className="text-xs text-muted-foreground">Parent thinking</span>
             <select
               className="mt-1 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
               value={commandThinking}
@@ -834,7 +834,7 @@ export function SubagentsManagerView({
             </select>
           </label>
           <label>
-            <span className="text-mc-caption text-muted-foreground">Parent timeout seconds</span>
+            <span className="text-xs text-muted-foreground">Parent timeout seconds</span>
             <input
               type="number"
               min={10}
@@ -844,7 +844,7 @@ export function SubagentsManagerView({
             />
           </label>
           <label>
-            <span className="text-mc-caption text-muted-foreground">Wait timeout ms</span>
+            <span className="text-xs text-muted-foreground">Wait timeout ms</span>
             <input
               type="number"
               min={5000}
@@ -855,7 +855,7 @@ export function SubagentsManagerView({
           </label>
         </div>
 
-        <div className="rounded-md border border-border bg-background p-2 text-mc-caption text-muted-foreground">
+        <div className="rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
           <div className="font-medium text-foreground">Command preview</div>
           <code className="mt-1 block whitespace-pre-wrap">{commandPreview}</code>
         </div>
@@ -865,7 +865,7 @@ export function SubagentsManagerView({
             type="button"
             onClick={() => void executeCommand()}
             disabled={running}
-            className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-mc-caption font-medium text-white disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
           >
             {running ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -880,7 +880,7 @@ export function SubagentsManagerView({
             type="button"
             onClick={() => void runList()}
             disabled={running}
-            className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-mc-caption hover:bg-muted disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-50"
           >
             <RefreshCw className="h-3.5 w-3.5" /> List / refresh
           </button>
@@ -893,7 +893,7 @@ export function SubagentsManagerView({
               })
             }
             disabled={running}
-            className="inline-flex items-center gap-1 rounded-md border border-red-500/40 px-3 py-1.5 text-mc-caption text-red-300 hover:bg-red-500/10 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-red-500/40 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/10 disabled:opacity-50"
           >
             <Square className="h-3.5 w-3.5" /> Kill all
           </button>
@@ -904,13 +904,13 @@ export function SubagentsManagerView({
         <div className="flex items-center gap-2 font-medium text-foreground">
           <Activity className="h-4 w-4" /> Live Subagent Snapshot
         </div>
-        <div className="text-mc-caption text-muted-foreground">
+        <div className="text-xs text-muted-foreground">
           Active: <span className="text-foreground">{activeEntries.length}</span> • Recent:{" "}
           <span className="text-foreground">{recentEntries.length}</span>
         </div>
 
         {activeEntries.length === 0 && recentEntries.length === 0 ? (
-          <div className="rounded-md border border-border bg-background p-3 text-mc-caption text-muted-foreground">
+          <div className="rounded-md border border-border bg-background p-3 text-xs text-muted-foreground">
             No subagent entries in last response.
           </div>
         ) : (
@@ -918,7 +918,7 @@ export function SubagentsManagerView({
             {activeEntries.map((entry, idx) => {
               const id = getEntryId(entry, idx);
               return (
-                <div key={`a-${id}-${idx}`} className="rounded-md border border-border bg-background p-2 text-mc-caption">
+                <div key={`a-${id}-${idx}`} className="rounded-md border border-border bg-background p-2 text-xs">
                   <div className="flex items-center justify-between gap-2">
                     <div className="font-medium text-foreground">{id}</div>
                     <div className="flex gap-1">
@@ -945,7 +945,7 @@ export function SubagentsManagerView({
                       </button>
                     </div>
                   </div>
-                  <pre className="mt-1 whitespace-pre-wrap text-mc-body-sm text-muted-foreground">{shortJson(entry)}</pre>
+                  <pre className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{shortJson(entry)}</pre>
                 </div>
               );
             })}
@@ -953,9 +953,9 @@ export function SubagentsManagerView({
             {recentEntries.map((entry, idx) => {
               const id = getEntryId(entry, idx);
               return (
-                <div key={`r-${id}-${idx}`} className="rounded-md border border-border bg-background p-2 text-mc-caption opacity-90">
+                <div key={`r-${id}-${idx}`} className="rounded-md border border-border bg-background p-2 text-xs opacity-90">
                   <div className="font-medium text-foreground">recent: {id}</div>
-                  <pre className="mt-1 whitespace-pre-wrap text-mc-body-sm text-muted-foreground">{shortJson(entry)}</pre>
+                  <pre className="mt-1 whitespace-pre-wrap text-xs text-muted-foreground">{shortJson(entry)}</pre>
                 </div>
               );
             })}
@@ -968,7 +968,7 @@ export function SubagentsManagerView({
           <Send className="h-4 w-4" /> Last command output
         </div>
         {lastRun?.spawnAccepted?.childSessionKey && (
-          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-2 text-mc-caption text-emerald-200">
+          <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-2 text-xs text-emerald-200">
             <p className="font-medium text-emerald-100">Spawn accepted</p>
             <p>
               childSessionKey: <code>{lastRun.spawnAccepted.childSessionKey}</code>
@@ -978,7 +978,7 @@ export function SubagentsManagerView({
             </p>
           </div>
         )}
-        <div className="grid gap-1 text-mc-caption text-muted-foreground">
+        <div className="grid gap-1 text-xs text-muted-foreground">
           <p>
             session: <code>{lastRun?.sessionKey || sessionKey}</code>
           </p>
@@ -989,18 +989,18 @@ export function SubagentsManagerView({
             command: <code>{lastRun?.command || commandPreview}</code>
           </p>
         </div>
-        <pre className="max-h-96 overflow-auto rounded-md border border-border bg-background p-3 text-mc-caption text-muted-foreground whitespace-pre-wrap">
+        <pre className="max-h-96 overflow-auto rounded-md border border-border bg-background p-3 text-xs text-muted-foreground whitespace-pre-wrap">
           {output || "No output yet."}
         </pre>
       </div>
 
       {error && (
-        <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-mc-caption text-red-200">
+        <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
           {error}
         </div>
       )}
       {notice && (
-        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-mc-caption text-emerald-200">
+        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
           {notice}
         </div>
       )}

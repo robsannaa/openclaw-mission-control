@@ -73,7 +73,7 @@ export function ChatNotificationToast() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed right-2 top-14 z-[100] flex max-w-[calc(100vw-1rem)] flex-col gap-2 sm:right-4">
+    <div className="fixed right-2 top-14 z-50 flex max-w-full flex-col gap-2 sm:right-4">
       {toasts.map((toast) => (
         <div
           key={toast.id}
@@ -83,17 +83,17 @@ export function ChatNotificationToast() {
             <MessageCircle className="h-4 w-4 text-violet-400" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-mc-caption font-medium text-foreground/90">
+            <p className="text-xs font-medium text-foreground/90">
               {toast.agentName} responded
             </p>
-            <p className="text-mc-caption text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               New message in chat
             </p>
           </div>
           <button
             type="button"
             onClick={() => goToChat(toast.id)}
-            className="shrink-0 rounded-lg bg-violet-600/20 px-3 py-1.5 text-mc-body-sm font-medium text-violet-300 transition-colors hover:bg-violet-600/30 hover:text-violet-200"
+            className="shrink-0 rounded-lg bg-violet-600/20 px-3 py-1.5 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-600/30 hover:text-violet-200"
           >
             View
           </button>

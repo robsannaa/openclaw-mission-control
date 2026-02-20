@@ -52,7 +52,7 @@ function pathDisplay(path: string): { icon: string; label: string } {
 function highlightSnippet(text: string): string {
   return text
     .replace(/\*\*(.+?)\*\*/g, '<span class="text-foreground/90 font-semibold">$1</span>')
-    .replace(/`([^`]+)`/g, '<code class="rounded bg-muted px-1 py-0.5 text-mc-caption text-violet-300 font-mono">$1</code>');
+    .replace(/`([^`]+)`/g, '<code class="rounded bg-muted px-1 py-0.5 text-xs text-violet-300 font-mono">$1</code>');
 }
 
 /* ── component ───────────────────────────────────── */
@@ -153,10 +153,10 @@ export function SearchModal({ open, onClose }: Props) {
       />
 
       {/* Modal */}
-      <div className="fixed inset-x-0 top-[12%] z-50 mx-4 w-[calc(100vw-2rem)] max-w-2xl sm:mx-auto">
-        <div className="overflow-hidden rounded-2xl border border-foreground/[0.08] bg-card shadow-2xl shadow-black/50">
+      <div className="fixed inset-x-0 top-24 z-50 w-full max-w-2xl px-4 sm:left-1/2 sm:-translate-x-1/2 sm:px-0">
+        <div className="overflow-hidden rounded-2xl border border-foreground/10 bg-card shadow-2xl shadow-black/50">
           {/* Search input */}
-          <div className="flex min-w-0 items-center gap-3 border-b border-foreground/[0.06] px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3 border-b border-foreground/10 px-4 py-3 sm:px-6">
             {loading ? (
               <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-400" />
             ) : (
@@ -172,13 +172,13 @@ export function SearchModal({ open, onClose }: Props) {
               spellCheck={false}
               autoComplete="off"
             />
-            <kbd className="hidden rounded border border-foreground/[0.08] bg-muted/70 px-1.5 py-0.5 text-mc-caption text-muted-foreground/60 sm:inline">
+            <kbd className="hidden rounded border border-foreground/10 bg-muted/70 px-1.5 py-0.5 text-xs text-muted-foreground/60 sm:inline">
               ESC
             </kbd>
           </div>
 
           {/* Results */}
-          <div className="max-h-[60vh] overflow-x-hidden overflow-y-auto">
+          <div className="max-h-96 overflow-x-hidden overflow-y-auto">
             {/* Hint when empty */}
             {!searched && !loading && (
               <div className="flex flex-col items-center gap-3 px-4 py-10 text-center sm:px-6">
@@ -188,7 +188,7 @@ export function SearchModal({ open, onClose }: Props) {
                     Semantic Memory Search
                   </span>
                 </div>
-                <p className="max-w-sm text-mc-caption leading-5 text-muted-foreground/60">
+                <p className="max-w-sm text-xs leading-5 text-muted-foreground/60">
                   Uses OpenClaw&apos;s vector database to search across your
                   MEMORY.md and daily journal entries. Type at least 2
                   characters to search.
@@ -215,7 +215,7 @@ export function SearchModal({ open, onClose }: Props) {
             {results.length > 0 && (
               <div className="min-w-0 py-2">
                 <div className="px-4 pb-2 sm:px-6">
-                  <span className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/60">
+                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
                     {results.length} result{results.length !== 1 ? "s" : ""}
                   </span>
                 </div>
@@ -238,16 +238,16 @@ export function SearchModal({ open, onClose }: Props) {
                       {/* Header row */}
                       <div className="flex min-w-0 items-center gap-2">
                         <span className="shrink-0 text-sm">{icon}</span>
-                        <span className="min-w-0 truncate text-mc-caption font-medium text-foreground/70">
+                        <span className="min-w-0 truncate text-xs font-medium text-foreground/70">
                           {label}
                         </span>
-                        <span className="text-mc-caption text-muted-foreground/60">
+                        <span className="text-xs text-muted-foreground/60">
                           L{result.startLine}–{result.endLine}
                         </span>
                         <div className="flex-1" />
                         <span
                           className={cn(
-                            "text-mc-caption font-medium",
+                            "text-xs font-medium",
                             scoreColor(result.score)
                           )}
                         >
@@ -258,7 +258,7 @@ export function SearchModal({ open, onClose }: Props) {
 
                       {/* Snippet */}
                       <div
-                        className="line-clamp-4 break-words text-mc-caption leading-5 text-muted-foreground"
+                        className="line-clamp-4 break-words text-xs leading-5 text-muted-foreground"
                         dangerouslySetInnerHTML={{
                           __html: highlightSnippet(
                             result.snippet.substring(0, 400)
@@ -273,7 +273,7 @@ export function SearchModal({ open, onClose }: Props) {
           </div>
 
           {/* Footer */}
-          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-foreground/[0.06] px-4 py-2 text-mc-caption text-muted-foreground/60 sm:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-foreground/10 px-4 py-2 text-xs text-muted-foreground/60 sm:px-6">
             <span>
               Powered by{" "}
               <span className="font-medium text-muted-foreground">
@@ -283,19 +283,19 @@ export function SearchModal({ open, onClose }: Props) {
             </span>
             <div className="flex items-center gap-2">
               <span>
-                <kbd className="rounded border border-foreground/[0.06] bg-muted/60 px-1 py-0.5">
+                <kbd className="rounded border border-foreground/10 bg-muted/60 px-1 py-0.5">
                   ↑↓
                 </kbd>{" "}
                 navigate
               </span>
               <span>
-                <kbd className="rounded border border-foreground/[0.06] bg-muted/60 px-1 py-0.5">
+                <kbd className="rounded border border-foreground/10 bg-muted/60 px-1 py-0.5">
                   enter
                 </kbd>{" "}
                 open
               </span>
               <span>
-                <kbd className="rounded border border-foreground/[0.06] bg-muted/60 px-1 py-0.5">
+                <kbd className="rounded border border-foreground/10 bg-muted/60 px-1 py-0.5">
                   esc
                 </kbd>{" "}
                 close

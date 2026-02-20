@@ -3,6 +3,12 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, useCallback, useSyncExternalStore, useRef } from "react";
+import {
+  setAutoRestartOnChanges,
+  subscribeAutoRestartPreference,
+  getAutoRestartSnapshot,
+  getAutoRestartServerSnapshot,
+} from "@/lib/auto-restart-preference";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard,
@@ -32,6 +38,7 @@ import {
   Waypoints,
   Globe,
   KeyRound,
+  Search,
 } from "lucide-react";
 import { getChatUnreadCount, subscribeChatStore } from "@/lib/chat-store";
 import {
@@ -67,6 +74,7 @@ const navItems: {
   { section: "accounts", label: "Accounts & Keys", icon: KeyRound },
   { section: "audio", label: "Audio & Voice", icon: Volume2 },
   { section: "browser", label: "Browser Relay", icon: Globe },
+  { section: "search", label: "Web Search", icon: Search },
   { section: "tailscale", label: "Tailscale", icon: Waypoints },
   { section: "permissions", label: "Permissions", icon: Shield, dividerAfter: true },
   { section: "usage", label: "Usage", icon: BarChart3 },
@@ -114,7 +122,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
         const isDisabled = item.comingSoon;
         const linkClass = cn(
           "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
-          item.isSubItem && "ml-6 py-1 text-[11px]",
+          item.isSubItem && "ml-6 py-1 text-xs",
           isDisabled
             ? "cursor-not-allowed opacity-60 text-muted-foreground dark:text-zinc-500"
             : isActive
@@ -177,7 +185,7 @@ function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
                   <Icon className="h-3.5 w-3.5 shrink-0" />
                   <span className="flex-1">{item.label}</span>
                   {showBadge && (
-                    <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-violet-600 px-1.5 text-xs font-bold text-white">
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 px-1.5 text-xs font-bold text-white">
                       {chatUnread > 9 ? "9+" : chatUnread}
                     </span>
                   )}
@@ -221,6 +229,11 @@ function GatewayBadge() {
   const { status, restarting } = useGatewayStatusStore();
   const [showMenu, setShowMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const autoRestartOnChanges = useSyncExternalStore(
+    subscribeAutoRestartPreference,
+    getAutoRestartSnapshot,
+    getAutoRestartServerSnapshot,
+  );
 
   useEffect(() => {
     if (!showMenu) return;
@@ -291,11 +304,11 @@ function GatewayBadge() {
                 STATUS_RING[status]
               )}
             />
-            <span className="text-mc-body-sm font-medium text-muted-foreground dark:text-zinc-400">
+            <span className="text-xs font-medium text-muted-foreground dark:text-zinc-400">
               Gateway
             </span>
           </div>
-          <span className="text-mc-caption text-muted-foreground dark:text-zinc-600">
+          <span className="text-xs text-muted-foreground dark:text-zinc-600">
             {restarting ? "Restarting..." : STATUS_LABELS[status]}
           </span>
         </div>
@@ -307,7 +320,7 @@ function GatewayBadge() {
             type="button"
             onClick={handleRestart}
             disabled={restarting}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-mc-caption text-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
           >
             <RefreshCw
               className={cn(
@@ -320,16 +333,40 @@ function GatewayBadge() {
           <button
             type="button"
             onClick={handleStop}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-mc-caption text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
           >
             <Power className="h-3.5 w-3.5" />
             Stop Gateway
           </button>
           <div className="mx-2 my-1 h-px bg-border" />
+          <label className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left text-xs text-muted-foreground hover:text-foreground/80">
+            <span>Auto-restart on changes</span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={autoRestartOnChanges}
+              onClick={(e) => {
+                e.preventDefault();
+                setAutoRestartOnChanges(!autoRestartOnChanges);
+              }}
+              className={cn(
+                "relative h-5 w-9 shrink-0 rounded-full transition-colors",
+                autoRestartOnChanges ? "bg-violet-500" : "bg-muted"
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 block h-4 w-4 rounded-full bg-white shadow transition-transform",
+                  autoRestartOnChanges ? "left-4" : "left-0.5"
+                )}
+              />
+            </button>
+          </label>
+          <div className="mx-2 my-1 h-px bg-border" />
           <div className="px-3 py-1.5">
             <span
               className={cn(
-                "inline-flex items-center gap-1 text-mc-caption",
+                "inline-flex items-center gap-1 text-xs",
                 status === "online" ? "text-emerald-400" : status === "degraded" ? "text-amber-400" : "text-red-400"
               )}
             >
@@ -386,7 +423,7 @@ export function Sidebar() {
       {/* Sidebar — always visible on desktop, slide-in drawer on mobile */}
       <aside
         className={cn(
-          "flex h-full w-[200px] shrink-0 flex-col border-r border-border bg-sidebar transition-transform duration-200 ease-in-out",
+          "flex h-full w-48 shrink-0 flex-col border-r border-border bg-sidebar transition-transform duration-200 ease-in-out",
           // Desktop: always visible
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-xl",
           mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"

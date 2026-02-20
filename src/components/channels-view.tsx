@@ -310,8 +310,8 @@ export function ChannelsView() {
         <section>
           <div className="mb-4 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-mc-sub font-semibold text-foreground/90">Channels</h2>
-              <p className="mt-0.5 text-mc-body-sm text-muted-foreground/70">
+              <h2 className="text-xs font-semibold text-foreground/90">Channels</h2>
+              <p className="mt-0.5 text-xs text-muted-foreground/70">
                 Connect and manage Discord, Telegram, WhatsApp, Slack, and more.
               </p>
             </div>
@@ -323,7 +323,7 @@ export function ChannelsView() {
                   void fetchChannels();
                 }}
                 disabled={busy || channelsLoading}
-                className="flex items-center gap-1 rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-2.5 py-1.5 text-mc-body-sm text-muted-foreground transition-colors hover:bg-foreground/[0.06] disabled:opacity-40"
+                className="flex items-center gap-1 rounded-lg border border-foreground/10 bg-foreground/5 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 disabled:opacity-40"
               >
                 <RefreshCw className={cn("h-3 w-3", channelsLoading && "animate-spin")} />
                 Refresh
@@ -331,7 +331,7 @@ export function ChannelsView() {
               <button
                 type="button"
                 onClick={() => openWizard()}
-                className="inline-flex items-center gap-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-mc-body-sm font-medium text-violet-300 transition-colors hover:bg-violet-500/20"
+                className="inline-flex items-center gap-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-500/20"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add Channel
@@ -340,30 +340,30 @@ export function ChannelsView() {
           </div>
 
           {wizardOpen && (
-            <div className="mb-4 rounded-xl border border-violet-500/20 bg-violet-500/[0.04] p-4">
+            <div className="mb-4 rounded-xl border border-violet-500/20 bg-violet-500/5 p-4">
               <div className="mb-3 flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Rocket className="h-4 w-4 text-violet-300" />
-                  <h3 className="text-mc-body font-semibold text-foreground/90">Channel Setup Wizard</h3>
+                  <h3 className="text-sm font-semibold text-foreground/90">Channel Setup Wizard</h3>
                 </div>
                 <button
                   type="button"
                   onClick={() => setWizardOpen(false)}
-                  className="rounded-md px-2 py-1 text-mc-body-sm text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
+                  className="rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground/80"
                 >
                   Close
                 </button>
               </div>
 
-              <div className="mb-3 flex items-center gap-2 text-mc-body-sm">
+              <div className="mb-3 flex items-center gap-2 text-xs">
                 {[1, 2, 3].map((step) => (
                   <div key={step} className="flex items-center gap-2">
                     <span
                       className={cn(
-                        "flex h-5 w-5 items-center justify-center rounded-full border text-mc-caption font-semibold",
+                        "flex h-5 w-5 items-center justify-center rounded-full border text-xs font-semibold",
                         wizardStep >= step
                           ? "border-violet-400/40 bg-violet-500/20 text-violet-200"
-                          : "border-foreground/[0.1] bg-muted text-muted-foreground"
+                          : "border-foreground/10 bg-muted text-muted-foreground"
                       )}
                     >
                       {step}
@@ -378,7 +378,7 @@ export function ChannelsView() {
 
               {wizardStep === 1 && (
                 <div className="space-y-3">
-                  <p className="text-mc-caption text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Pick a channel to connect. The wizard will guide you through required steps.
                   </p>
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
@@ -391,14 +391,14 @@ export function ChannelsView() {
                           "flex items-center justify-between rounded-lg border px-3 py-2 text-left transition-colors",
                           wizardChannel === ch.channel
                             ? "border-violet-500/30 bg-violet-500/10"
-                            : "border-foreground/[0.08] bg-card/60 hover:bg-card"
+                            : "border-foreground/10 bg-card/60 hover:bg-card"
                         )}
                       >
                         <div className="flex min-w-0 items-center gap-2">
-                          <span className="text-mc-heading">{ch.icon}</span>
+                          <span className="text-xs">{ch.icon}</span>
                           <div className="min-w-0">
-                            <p className="truncate text-mc-caption font-medium text-foreground/90">{ch.label}</p>
-                            <p className="text-mc-caption text-muted-foreground">
+                            <p className="truncate text-xs font-medium text-foreground/90">{ch.label}</p>
+                            <p className="text-xs text-muted-foreground">
                               {ch.setupType === "token"
                                 ? "Token setup"
                                 : ch.setupType === "qr"
@@ -411,7 +411,7 @@ export function ChannelsView() {
                         </div>
                         <span
                           className={cn(
-                            "rounded-full px-2 py-0.5 text-mc-caption font-medium",
+                            "rounded-full px-2 py-0.5 text-xs font-medium",
                             ch.configured
                               ? "bg-emerald-500/15 text-emerald-300"
                               : "bg-amber-500/15 text-amber-300"
@@ -427,7 +427,7 @@ export function ChannelsView() {
                       type="button"
                       onClick={() => setWizardStep(2)}
                       disabled={!selectedWizardChannel}
-                      className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-mc-body-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
                     >
                       Next
                       <Play className="h-3 w-3" />
@@ -438,12 +438,12 @@ export function ChannelsView() {
 
               {wizardStep === 2 && selectedWizardChannel && (
                 <div className="space-y-3">
-                  <div className="rounded-lg border border-foreground/[0.08] bg-card/70 p-3">
+                  <div className="rounded-lg border border-foreground/10 bg-card/70 p-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <span className="text-mc-heading">{selectedWizardChannel.icon}</span>
+                        <span className="text-xs">{selectedWizardChannel.icon}</span>
                         <div>
-                          <p className="text-mc-caption font-semibold text-foreground/90">{selectedWizardChannel.label}</p>
+                          <p className="text-xs font-semibold text-foreground/90">{selectedWizardChannel.label}</p>
                         </div>
                       </div>
                       {selectedWizardChannel.docsUrl && (
@@ -451,25 +451,25 @@ export function ChannelsView() {
                           href={selectedWizardChannel.docsUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 rounded-md border border-foreground/[0.08] bg-card px-2 py-1 text-mc-caption text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground/80"
+                          className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-card px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground/80"
                         >
                           Docs
                           <ExternalLink className="h-3 w-3" />
                         </a>
                       )}
                     </div>
-                    <div className="mt-2 rounded-md border border-violet-500/25 bg-violet-500/[0.08] px-3 py-2.5">
-                      <p className="text-mc-body font-medium leading-relaxed text-foreground/95">
+                    <div className="mt-2 rounded-md border border-violet-500/25 bg-violet-500/10 px-3 py-2.5">
+                      <p className="text-sm font-medium leading-relaxed text-foreground/95">
                         <LinkifiedText text={selectedWizardChannel.setupHint} />
                       </p>
                     </div>
                     {selectedWizardChannel.setupCommand && (
-                      <div className="mt-2 rounded-md border border-foreground/[0.06] bg-muted/60 px-2 py-1.5 font-mono text-mc-caption text-muted-foreground">
+                      <div className="mt-2 rounded-md border border-foreground/10 bg-muted/60 px-2 py-1.5 font-mono text-xs text-muted-foreground">
                         {selectedWizardChannel.setupCommand}
                       </div>
                     )}
                     {selectedWizardChannel.configHint && (
-                      <p className="mt-2 text-mc-caption leading-relaxed text-muted-foreground/85">
+                      <p className="mt-2 text-xs leading-relaxed text-muted-foreground/90">
                         <LinkifiedText text={selectedWizardChannel.configHint} />
                       </p>
                     )}
@@ -478,7 +478,7 @@ export function ChannelsView() {
                   <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                     {needsToken && (
                       <label className="space-y-1 md:col-span-2">
-                        <span className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/70">
+                        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
                           {selectedWizardChannel.tokenLabel || "Token"}
                         </span>
                         <input
@@ -486,13 +486,13 @@ export function ChannelsView() {
                           onChange={(e) => setWizardToken(e.target.value)}
                           type="password"
                           placeholder={selectedWizardChannel.tokenPlaceholder || "Paste token"}
-                          className="w-full rounded-md border border-foreground/[0.08] bg-muted px-2.5 py-2 text-mc-caption text-foreground/85 outline-none focus:border-violet-500/30"
+                          className="w-full rounded-md border border-foreground/10 bg-muted px-2.5 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                         />
                       </label>
                     )}
                     {requiresAppToken && (
                       <label className="space-y-1 md:col-span-2">
-                        <span className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/70">
+                        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
                           App Token
                         </span>
                         <input
@@ -500,25 +500,25 @@ export function ChannelsView() {
                           onChange={(e) => setWizardAppToken(e.target.value)}
                           type="password"
                           placeholder="xapp-..."
-                          className="w-full rounded-md border border-foreground/[0.08] bg-muted px-2.5 py-2 text-mc-caption text-foreground/85 outline-none focus:border-violet-500/30"
+                          className="w-full rounded-md border border-foreground/10 bg-muted px-2.5 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                         />
                       </label>
                     )}
                     <label className="space-y-1 md:col-span-2">
-                      <span className="text-mc-caption font-medium uppercase tracking-wider text-muted-foreground/70">
+                      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
                         Account (optional)
                       </span>
                       <input
                         value={wizardAccount}
                         onChange={(e) => setWizardAccount(e.target.value)}
                         placeholder="default"
-                        className="w-full rounded-md border border-foreground/[0.08] bg-muted px-2.5 py-2 text-mc-caption text-foreground/85 outline-none focus:border-violet-500/30"
+                        className="w-full rounded-md border border-foreground/10 bg-muted px-2.5 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                       />
                     </label>
                   </div>
 
                   {wizardError && (
-                    <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-mc-body-sm text-red-300">
+                    <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
                       {wizardError}
                     </div>
                   )}
@@ -527,7 +527,7 @@ export function ChannelsView() {
                     <button
                       type="button"
                       onClick={() => setWizardStep(1)}
-                      className="rounded-lg border border-foreground/[0.08] px-3 py-1.5 text-mc-body-sm text-muted-foreground transition-colors hover:bg-foreground/[0.04]"
+                      className="rounded-lg border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/5"
                     >
                       Back
                     </button>
@@ -535,7 +535,7 @@ export function ChannelsView() {
                       type="button"
                       onClick={() => void runWizardSetup()}
                       disabled={!canRunWizard || wizardRunning}
-                      className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-mc-body-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
                     >
                       {wizardRunning ? (
                         <>
@@ -555,15 +555,15 @@ export function ChannelsView() {
 
               {wizardStep === 3 && selectedWizardChannel && (
                 <div className="space-y-3">
-                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/[0.08] px-3 py-2 text-mc-body-sm text-emerald-200">
+                  <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">
                     Setup run completed for <span className="font-semibold">{selectedWizardChannel.label}</span>.
                     {selectedWizardChannel.setupType === "qr" && " If interactive login is required, continue in Terminal."}
                   </div>
-                  <div className="rounded-lg border border-foreground/[0.08] bg-card/70 px-3 py-2.5">
-                    <p className="text-mc-body-sm font-semibold text-foreground/90">
+                  <div className="rounded-lg border border-foreground/10 bg-card/70 px-3 py-2.5">
+                    <p className="text-xs font-semibold text-foreground/90">
                       What to do now
                     </p>
-                    <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-mc-body-sm text-muted-foreground">
+                    <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-xs text-muted-foreground">
                       {getPostSetupChecklist(selectedWizardChannel.channel).map((step, idx) => (
                         <li key={`${selectedWizardChannel.channel}-post-step-${idx}`}>
                           <span>
@@ -577,7 +577,7 @@ export function ChannelsView() {
                         href={selectedWizardChannel.docsUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-2 inline-flex items-center gap-1 text-mc-body-sm text-violet-300 transition-colors hover:text-violet-200"
+                        className="mt-2 inline-flex items-center gap-1 text-xs text-violet-300 transition-colors hover:text-violet-200"
                       >
                         Open channel docs
                         <ExternalLink className="h-3 w-3" />
@@ -585,7 +585,7 @@ export function ChannelsView() {
                     )}
                   </div>
                   {wizardOutput && (
-                    <pre className="max-h-40 overflow-auto rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-mc-caption text-muted-foreground whitespace-pre-wrap">
+                    <pre className="max-h-40 overflow-auto rounded-lg border border-foreground/10 bg-card px-3 py-2 text-xs text-muted-foreground whitespace-pre-wrap">
                       {wizardOutput}
                     </pre>
                   )}
@@ -593,7 +593,7 @@ export function ChannelsView() {
                     <button
                       type="button"
                       onClick={() => setWizardStep(2)}
-                      className="rounded-lg border border-foreground/[0.08] px-3 py-1.5 text-mc-body-sm text-muted-foreground transition-colors hover:bg-foreground/[0.04]"
+                      className="rounded-lg border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/5"
                     >
                       Reconfigure
                     </button>
@@ -601,13 +601,13 @@ export function ChannelsView() {
                       <button
                         type="button"
                         onClick={() => openWizard()}
-                        className="rounded-lg border border-foreground/[0.08] px-3 py-1.5 text-mc-body-sm text-muted-foreground transition-colors hover:bg-foreground/[0.04]"
+                        className="rounded-lg border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/5"
                       >
                         Setup Another
                       </button>
                       <Link
                         href="/?section=terminal"
-                        className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-mc-body-sm font-medium text-white transition-colors hover:bg-violet-500"
+                        className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500"
                       >
                         Open Terminal
                       </Link>
@@ -622,13 +622,13 @@ export function ChannelsView() {
             {channels.map((ch) => (
               <div
                 key={ch.channel}
-                className="rounded-xl border border-foreground/[0.06] bg-card/90 p-4"
+                className="rounded-xl border border-foreground/10 bg-card/90 p-4"
               >
                 <div className="flex items-center gap-3">
-                  <span className="text-mc-heading">{ch.icon}</span>
+                  <span className="text-xs">{ch.icon}</span>
                   <div>
-                    <p className="text-mc-sub font-semibold text-foreground">{ch.label}</p>
-                    <div className="flex items-center gap-3 text-mc-body-sm text-muted-foreground">
+                    <p className="text-xs font-semibold text-foreground">{ch.label}</p>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         {ch.enabled ? (
                           <Check className="h-3 w-3 text-emerald-400" />
@@ -647,7 +647,7 @@ export function ChannelsView() {
                         href={ch.docsUrl}
                         target="_blank"
                         rel="noreferrer"
-                        className="inline-flex items-center gap-1 rounded-lg border border-foreground/[0.08] bg-foreground/[0.02] px-2.5 py-1.5 text-mc-body-sm text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground/80"
+                        className="inline-flex items-center gap-1 rounded-lg border border-foreground/10 bg-foreground/5 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground/80"
                       >
                         Docs
                         <ExternalLink className="h-3 w-3" />
@@ -656,7 +656,7 @@ export function ChannelsView() {
                     <button
                       type="button"
                       onClick={() => openWizard(ch.channel)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-mc-body-sm text-violet-300 transition-colors hover:bg-violet-500/20"
+                      className="inline-flex items-center gap-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-xs text-violet-300 transition-colors hover:bg-violet-500/20"
                     >
                       {ch.configured ? "Reconfigure" : "Setup"}
                     </button>
@@ -670,7 +670,7 @@ export function ChannelsView() {
                           )
                         }
                         disabled={busy}
-                        className="rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-2.5 py-1.5 text-mc-body-sm text-muted-foreground transition-colors hover:bg-foreground/[0.06] disabled:opacity-40"
+                        className="rounded-lg border border-foreground/10 bg-foreground/5 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 disabled:opacity-40"
                       >
                         {ch.enabled ? "Disable" : "Enable"}
                       </button>
@@ -682,13 +682,13 @@ export function ChannelsView() {
                   {ch.accounts.map((acc) => (
                     <span
                       key={acc}
-                      className="rounded-md border border-foreground/[0.06] bg-muted/70 px-2.5 py-1 text-mc-body-sm text-muted-foreground"
+                      className="rounded-md border border-foreground/10 bg-muted/70 px-2.5 py-1 text-xs text-muted-foreground"
                     >
                       {acc}
                     </span>
                   ))}
                   {ch.accounts.length === 0 && (
-                    <span className="rounded-md border border-foreground/[0.06] bg-muted/60 px-2.5 py-1 text-mc-body-sm text-muted-foreground/70">
+                    <span className="rounded-md border border-foreground/10 bg-muted/60 px-2.5 py-1 text-xs text-muted-foreground/70">
                       No accounts connected yet
                     </span>
                   )}
@@ -700,7 +700,7 @@ export function ChannelsView() {
                       <span
                         key={`${status.channel}:${status.account}:${status.status}`}
                         className={cn(
-                          "rounded-full border border-foreground/[0.08] bg-foreground/[0.02] px-2 py-0.5 text-mc-caption",
+                          "rounded-full border border-foreground/10 bg-foreground/5 px-2 py-0.5 text-xs",
                           statusTone(status.status)
                         )}
                         title={status.error || status.status}
@@ -712,7 +712,7 @@ export function ChannelsView() {
                 )}
 
                 {ch.setupHint && (
-                  <p className="mt-2 text-mc-caption text-muted-foreground/65">
+                  <p className="mt-2 text-xs text-muted-foreground/70">
                     <LinkifiedText text={ch.setupHint} />
                   </p>
                 )}
@@ -720,7 +720,7 @@ export function ChannelsView() {
             ))}
 
             {channels.length === 0 && (
-              <p className="text-mc-body text-muted-foreground/60">No channels found</p>
+              <p className="text-sm text-muted-foreground/60">No channels found</p>
             )}
           </div>
         </section>
@@ -728,7 +728,7 @@ export function ChannelsView() {
       {toast && (
         <div
           className={cn(
-            "fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg border px-4 py-2.5 text-mc-caption shadow-xl backdrop-blur-sm",
+            "fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg border px-4 py-2.5 text-xs shadow-xl backdrop-blur-sm",
             toast.type === "success"
               ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
               : "border-red-500/20 bg-red-500/10 text-red-300"

@@ -266,12 +266,12 @@ function JsonViewer({
     <div className="flex h-full flex-col">
       {/* Toolbar */}
       <div className="mb-3 flex items-center gap-2">
-        <div className="flex rounded-lg border border-foreground/[0.06] bg-card">
+        <div className="flex rounded-lg border border-foreground/10 bg-card">
           <button
             type="button"
             onClick={() => setMode("view")}
             className={cn(
-              "flex items-center gap-1.5 rounded-l-lg px-3 py-1.5 text-mc-body-sm font-medium transition",
+              "flex items-center gap-1.5 rounded-l-lg px-3 py-1.5 text-xs font-medium transition",
               mode === "view"
                 ? "bg-violet-500/15 text-violet-400"
                 : "text-muted-foreground hover:text-foreground/70"
@@ -284,7 +284,7 @@ function JsonViewer({
             type="button"
             onClick={() => setMode("edit")}
             className={cn(
-              "flex items-center gap-1.5 rounded-r-lg px-3 py-1.5 text-mc-body-sm font-medium transition",
+              "flex items-center gap-1.5 rounded-r-lg px-3 py-1.5 text-xs font-medium transition",
               mode === "edit"
                 ? "bg-violet-500/15 text-violet-400"
                 : "text-muted-foreground hover:text-foreground/70"
@@ -297,7 +297,7 @@ function JsonViewer({
         <button
           type="button"
           onClick={handleCopy}
-          className="flex items-center gap-1.5 rounded-lg border border-foreground/[0.06] bg-card px-3 py-1.5 text-mc-body-sm text-muted-foreground transition-colors hover:text-foreground/70"
+          className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground/70"
         >
           {copied ? (
             <CheckCircle className="h-3 w-3 text-emerald-400" />
@@ -307,12 +307,12 @@ function JsonViewer({
           {copied ? "Copied" : "Copy"}
         </button>
         {!valid && (
-          <span className="text-mc-body-sm text-amber-400">
+          <span className="text-xs text-amber-400">
             Invalid JSON — showing raw text
           </span>
         )}
         {valid && mode === "view" && (
-          <span className="text-mc-caption text-muted-foreground/40">
+          <span className="text-xs text-muted-foreground/40">
             {lineCount} lines
           </span>
         )}
@@ -326,23 +326,23 @@ function JsonViewer({
           onChange={handleEditChange}
           onKeyDown={handleEditKeyDown}
           spellCheck={false}
-          className="flex-1 resize-none rounded-lg border border-foreground/[0.06] bg-foreground/[0.02] p-4 font-mono text-mc-body leading-6 text-foreground/80 outline-none focus:border-violet-500/30"
+          className="flex-1 resize-none rounded-lg border border-foreground/10 bg-foreground/5 p-4 font-mono text-sm leading-6 text-foreground/80 outline-none focus:border-violet-500/30"
         />
       ) : (
-        <div className="flex flex-1 overflow-auto rounded-lg border border-foreground/[0.06] bg-foreground/[0.02]">
+        <div className="flex flex-1 overflow-auto rounded-lg border border-foreground/10 bg-foreground/5">
           {/* Line numbers */}
-          <div className="shrink-0 select-none border-r border-foreground/[0.04] py-4 pr-1 text-right">
+          <div className="shrink-0 select-none border-r border-foreground/5 py-4 pr-1 text-right">
             {Array.from({ length: lineCount }, (_, i) => (
               <div
                 key={i}
-                className="px-3 font-mono text-mc-caption leading-6 text-muted-foreground/25"
+                className="px-3 font-mono text-xs leading-6 text-muted-foreground/25"
               >
                 {i + 1}
               </div>
             ))}
           </div>
           {/* Highlighted JSON */}
-          <pre className="flex-1 overflow-x-auto whitespace-pre p-4 font-mono text-mc-body leading-6">
+          <pre className="flex-1 overflow-x-auto whitespace-pre p-4 font-mono text-sm leading-6">
             {highlighted ?? (
               <span className="text-foreground/70">{prettyJson}</span>
             )}
@@ -663,16 +663,16 @@ export function DocsView() {
     <SectionLayout>
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
       {/* Left panel */}
-      <div className="flex max-h-[45vh] w-full shrink-0 flex-col overflow-hidden border-b border-foreground/[0.06] bg-card/60 md:max-h-none md:w-[360px] md:border-b-0 md:border-r">
+      <div className="flex max-h-96 w-full shrink-0 flex-col overflow-hidden border-b border-foreground/10 bg-card/60 md:max-h-none md:w-80 md:border-b-0 md:border-r">
         <div className="shrink-0 space-y-3 p-3">
           {/* Search */}
-          <div className="flex items-center gap-2 rounded-lg border border-foreground/[0.08] bg-card px-3 py-2 text-mc-body text-muted-foreground">
+          <div className="flex items-center gap-2 rounded-lg border border-foreground/10 bg-card px-3 py-2 text-sm text-muted-foreground">
             <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
             <input
               placeholder="Search documents..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 bg-transparent text-mc-body outline-none placeholder:text-muted-foreground/60"
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
             />
           </div>
 
@@ -684,10 +684,10 @@ export function DocsView() {
                 type="button"
                 onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
                 className={cn(
-                  "rounded-md border px-2 py-1 text-mc-body-sm font-medium transition-colors",
+                  "rounded-md border px-2 py-1 text-xs font-medium transition-colors",
                   tagFilter === tag
                     ? TAG_COLORS[tag] || TAG_COLORS.Other
-                    : "border-foreground/[0.06] bg-muted/70 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
+                    : "border-foreground/10 bg-muted/70 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
                 )}
               >
                 {tag}
@@ -704,10 +704,10 @@ export function DocsView() {
                 type="button"
                 onClick={() => setExtFilter(extFilter === ext ? null : ext)}
                 className={cn(
-"rounded border px-2 py-0.5 text-[0.5rem] font-mono transition-colors",
+"rounded border px-2 py-0.5 text-xs font-mono transition-colors",
                   extFilter === ext
                     ? "border-violet-500/30 bg-violet-500/15 text-violet-300"
-                    : "border-foreground/[0.06] bg-muted/60 text-muted-foreground hover:text-muted-foreground"
+                    : "border-foreground/10 bg-muted/60 text-muted-foreground hover:text-muted-foreground"
               )}
             >
                 {ext}
@@ -719,9 +719,9 @@ export function DocsView() {
         {/* Document list grouped by workspace -> type */}
         <div className="flex-1 overflow-y-auto px-2 pb-3">
           {loading ? (
-            <LoadingState label="Loading documents..." className="px-3 py-4 justify-start text-mc-body" />
+            <LoadingState label="Loading documents..." className="px-3 py-4 justify-start text-sm" />
           ) : workspaceGroups.length === 0 ? (
-            <p className="px-3 py-4 text-mc-body text-muted-foreground/60">
+            <p className="px-3 py-4 text-sm text-muted-foreground/60">
               No documents found
             </p>
           ) : (
@@ -743,11 +743,11 @@ export function DocsView() {
                       ) : (
                         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
-                      <span className="text-mc-heading">{icon}</span>
-                      <span className="text-mc-caption font-semibold text-foreground/70">
+                      <span className="text-xs">{icon}</span>
+                      <span className="text-xs font-semibold text-foreground/70">
                         {ws.label}
                       </span>
-                      <span className="text-mc-body-sm text-muted-foreground/60">
+                      <span className="text-xs text-muted-foreground/60">
                         {wsCount}
                       </span>
                     </button>
@@ -772,13 +772,13 @@ export function DocsView() {
                                 )}
                                 <span
                                   className={cn(
-                                    "rounded border px-1.5 py-0.5 text-mc-micro font-medium",
+                                    "rounded border px-1.5 py-0.5 text-xs font-medium",
                                     TAG_COLORS[typeGroup.key] || TAG_COLORS.Other
                                   )}
                                 >
                                   {typeGroup.label}
                                 </span>
-                                <span className="text-mc-caption text-muted-foreground/60">
+                                <span className="text-xs text-muted-foreground/60">
                                   {typeGroup.docs.length}
                                 </span>
                               </button>
@@ -802,20 +802,20 @@ export function DocsView() {
                                           className="flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2.5"
                                         >
                                           <Trash2 className="h-3.5 w-3.5 shrink-0 text-red-400" />
-                                          <span className="flex-1 truncate text-mc-caption text-red-300">
+                                          <span className="flex-1 truncate text-xs text-red-300">
                                             Delete {doc.name}?
                                           </span>
                                           <button
                                             type="button"
                                             onClick={() => deleteDoc(doc)}
-                                            className="rounded bg-red-600 px-2 py-0.5 text-mc-caption font-medium text-white hover:bg-red-500"
+                                            className="rounded bg-red-600 px-2 py-0.5 text-xs font-medium text-white hover:bg-red-500"
                                           >
                                             Delete
                                           </button>
                                           <button
                                             type="button"
                                             onClick={() => setConfirmDelete(null)}
-                                            className="text-mc-caption text-muted-foreground hover:text-foreground/70"
+                                            className="text-xs text-muted-foreground hover:text-foreground/70"
                                           >
                                             Cancel
                                           </button>
@@ -844,7 +844,7 @@ export function DocsView() {
                                             onBlur={() =>
                                               renameDoc(doc, renameValue)
                                             }
-                                            className="flex-1 bg-transparent text-mc-body text-foreground/90 outline-none"
+                                            className="flex-1 bg-transparent text-sm text-foreground/90 outline-none"
                                             autoFocus
                                           />
                                         </div>
@@ -862,7 +862,7 @@ export function DocsView() {
                                         className={cn(
                                           "flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors",
                                           isSelected
-                                            ? "bg-muted ring-1 ring-white/[0.06]"
+                                            ? "bg-muted ring-1 ring-white/10"
                                             : "hover:bg-muted/60"
                                         )}
                                       >
@@ -870,7 +870,7 @@ export function DocsView() {
                                         <div className="min-w-0 flex-1">
                                           <span
                                             className={cn(
-                                              "block truncate text-mc-body font-medium",
+                                              "block truncate text-sm font-medium",
                                               isSelected
                                                 ? "text-foreground"
                                                 : "text-foreground/70"
@@ -879,15 +879,15 @@ export function DocsView() {
                                             {doc.name}
                                           </span>
                                           {showSubpath && (
-                                            <span className="block truncate text-mc-caption text-muted-foreground/60">
+                                            <span className="block truncate text-xs text-muted-foreground/60">
                                               {relPath}
                                             </span>
                                           )}
                                           <div className="mt-1 flex items-center gap-2">
-                                            <span className="rounded border border-foreground/[0.08] px-1.5 py-0.5 text-[0.5rem] font-mono text-muted-foreground/80">
+                                            <span className="rounded border border-foreground/10 px-1.5 py-0.5 text-xs font-mono text-muted-foreground/80">
                                               {doc.ext}
                                             </span>
-                                            <span className="text-mc-caption text-muted-foreground/60">
+                                            <span className="text-xs text-muted-foreground/60">
                                               {formatAgo(doc.mtime)}
                                             </span>
                                           </div>
@@ -915,39 +915,39 @@ export function DocsView() {
         {selected ? (
           <>
             {/* Header */}
-            <div className="shrink-0 border-b border-foreground/[0.06] px-4 py-4 md:px-6">
+            <div className="shrink-0 border-b border-foreground/10 px-4 py-4 md:px-6">
               <div className="flex items-center gap-3">
-                <span className="text-mc-heading">
+                <span className="text-xs">
                   {WORKSPACE_ICONS[selected.workspace] || "📁"}
                 </span>
-                <h2 className="text-mc-sub font-semibold text-foreground">
+                <h2 className="text-xs font-semibold text-foreground">
                   {selected.name}
                 </h2>
                 <span
                   className={cn(
-                    "rounded border px-2 py-0.5 text-mc-body-sm font-medium",
+                    "rounded border px-2 py-0.5 text-xs font-medium",
                     TAG_COLORS[selected.tag] || TAG_COLORS.Other
                   )}
                 >
                   {selected.tag}
                 </span>
                 {saveStatus === "saving" && (
-                  <span className="text-mc-body-sm text-muted-foreground">Saving...</span>
+                  <span className="text-xs text-muted-foreground">Saving...</span>
                 )}
                 {saveStatus === "saved" && (
-                  <span className="text-mc-body-sm text-emerald-500">Saved</span>
+                  <span className="text-xs text-emerald-500">Saved</span>
                 )}
                 {saveStatus === "unsaved" && (
-                  <span className="text-mc-body-sm text-amber-500">Unsaved</span>
+                  <span className="text-xs text-amber-500">Unsaved</span>
                 )}
               </div>
-              <p className="mt-1 flex items-center gap-2 text-mc-caption text-muted-foreground/60">
-                <span className="rounded bg-muted/70 px-1.5 py-0.5 text-mc-caption text-muted-foreground">
+              <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground/60">
+                <span className="rounded bg-muted/70 px-1.5 py-0.5 text-xs text-muted-foreground">
                   {workspaceLabel(selected.workspace)}
                 </span>
                 {formatBytes(selected.size)} &bull; {words} words &bull;
                 Modified {formatAgo(selected.mtime)} &bull;
-                <kbd className="rounded bg-muted px-1 py-0.5 text-mc-micro font-mono text-muted-foreground">
+                <kbd className="rounded bg-muted px-1 py-0.5 text-xs font-mono text-muted-foreground">
                   &#8984;S
                 </kbd>{" "}
                 to save
@@ -981,8 +981,8 @@ export function DocsView() {
         ) : (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 text-muted-foreground/60">
             <FolderOpen className="h-8 w-8 text-muted-foreground/40" />
-            <p className="text-mc-body">Select a document</p>
-            <p className="text-mc-body-sm text-muted-foreground/40">
+            <p className="text-sm">Select a document</p>
+            <p className="text-xs text-muted-foreground/40">
               Documents are grouped by agent and type
             </p>
           </div>
@@ -994,7 +994,7 @@ export function DocsView() {
       {ctxMenu && (
         <div
           ref={ctxRef}
-          className="fixed z-50 min-w-[180px] overflow-hidden rounded-lg border border-foreground/[0.08] bg-card/95 py-1 shadow-xl backdrop-blur-sm"
+          className="fixed z-50 min-w-44 overflow-hidden rounded-lg border border-foreground/10 bg-card/95 py-1 shadow-xl backdrop-blur-sm"
           style={{
             left: Math.min(ctxMenu.x, window.innerWidth - 200),
             top: Math.min(ctxMenu.y, window.innerHeight - 260),
@@ -1002,7 +1002,7 @@ export function DocsView() {
         >
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               loadDoc(ctxMenu.doc);
               setCtxMenu(null);
@@ -1011,10 +1011,10 @@ export function DocsView() {
             <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
             Open
           </button>
-          <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
+          <div className="mx-2 my-1 h-px bg-foreground/10" />
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               setRenaming(ctxMenu.doc);
               setRenameValue(ctxMenu.doc.name);
@@ -1026,7 +1026,7 @@ export function DocsView() {
           </button>
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               duplicateDoc(ctxMenu.doc);
               setCtxMenu(null);
@@ -1037,7 +1037,7 @@ export function DocsView() {
           </button>
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
             onClick={() => {
               copyPath(ctxMenu.doc);
               setCtxMenu(null);
@@ -1046,10 +1046,10 @@ export function DocsView() {
             <ClipboardCopy className="h-3.5 w-3.5 text-muted-foreground" />
             Copy Path
           </button>
-          <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
+          <div className="mx-2 my-1 h-px bg-foreground/10" />
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-mc-body text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
             onClick={() => {
               setConfirmDelete(ctxMenu.doc);
               setCtxMenu(null);
@@ -1065,7 +1065,7 @@ export function DocsView() {
       {actionMsg && (
         <div
           className={cn(
-            "fixed bottom-4 right-4 z-50 rounded-lg border px-4 py-2.5 text-mc-body shadow-lg backdrop-blur-sm transition-all",
+            "fixed bottom-4 right-4 z-50 rounded-lg border px-4 py-2.5 text-sm shadow-lg backdrop-blur-sm transition-all",
             actionMsg.ok
               ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
               : "border-red-500/30 bg-red-500/10 text-red-300"
