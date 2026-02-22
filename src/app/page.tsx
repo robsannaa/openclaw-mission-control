@@ -23,7 +23,6 @@ import { PermissionsView } from "@/components/permissions-view";
 import { TailscaleView } from "@/components/tailscale-view";
 import { BrowserRelayView } from "@/components/browser-relay-view";
 import { AccountsKeysView } from "@/components/accounts-keys-view";
-import { CalendarView } from "@/components/calendar-view";
 import { WebSearchView } from "@/components/web-search-view";
 import { OpenClawUpdateBanner } from "@/components/openclaw-update-banner";
 import { setChatActive } from "@/lib/chat-store";
@@ -74,7 +73,12 @@ function SectionContent({ section }: { section: string }) {
     case "browser":
       return <BrowserRelayView />;
     case "calendar":
-      return <CalendarView />;
+      return (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
+          <p className="text-sm font-medium">Calendar</p>
+          <p className="text-xs">Coming soon</p>
+        </div>
+      );
     case "search":
       return <WebSearchView />;
     default:

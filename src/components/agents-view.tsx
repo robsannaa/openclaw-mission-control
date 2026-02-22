@@ -2155,21 +2155,102 @@ function ChannelBindingPicker({
   );
 }
 
+/* ── Fallback models (for create-agent wizard) ── */
+
+function FallbackModelsField({
+  primary,
+  fallbacks,
+  onAdd,
+  onRemove,
+  disabled,
+}: {
+  primary: string;
+  fallbacks: string[];
+  onAdd: (key: string) => void;
+  onRemove: (key: string) => void;
+  disabled: boolean;
+}) {
+  const [models, setModels] = useState<{ key: string; name: string }[]>([]);
+  useEffect(() => {
+    fetch("/api/models?scope=status")
+      .then((r) => r.json())
+      .then((d) => setModels((d.models || []).map((m: { key: string; name?: string }) => ({ key: m.key, name: m.name || m.key }))));
+  }, []);
+  const addable = models.filter((m) => m.key !== primary && !fallbacks.includes(m.key));
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-semibold text-foreground/70">
+        Fallback models
+        <span className="ml-1 text-xs font-normal text-muted-foreground/40">optional</span>
+      </label>
+      <p className="mb-1.5 text-[11px] text-muted-foreground/50">
+        Used when the primary model is unavailable (failover).
+      </p>
+      {fallbacks.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {fallbacks.map((key) => (
+            <span
+              key={key}
+              className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-foreground/5 px-2 py-1 text-xs text-foreground/80"
+            >
+              {key.split("/").pop() || key}
+              <button
+                type="button"
+                onClick={() => onRemove(key)}
+                disabled={disabled}
+                className="rounded p-0.5 text-muted-foreground/60 hover:text-red-400 disabled:opacity-40"
+                aria-label="Remove"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {addable.length > 0 && (
+        <select
+          value=""
+          onChange={(e) => {
+            const v = e.target.value;
+            if (v) onAdd(v);
+            e.target.value = "";
+          }}
+          disabled={disabled}
+          className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/80 focus:border-violet-500/30 focus:outline-none disabled:opacity-40"
+        >
+          <option value="">Add fallback model...</option>
+          {addable.map((m) => (
+            <option key={m.key} value={m.key}>
+              {m.name || m.key}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
+
 function AddAgentModal({
   onClose,
   onCreated,
   onChannelsChanged,
   defaultModel,
+  existingAgents = [],
 }: {
   onClose: () => void;
   onCreated: () => void;
   onChannelsChanged?: () => void;
   defaultModel: string;
+  existingAgents?: { id: string; name?: string }[];
 }) {
   const [name, setName] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [model, setModel] = useState("");
+  const [fallbacks, setFallbacks] = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [workspace, setWorkspace] = useState("");
+  const [setAsDefault, setSetAsDefault] = useState(false);
+  const [subagents, setSubagents] = useState<string[]>([]);
   const [bindings, setBindings] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -2213,7 +2294,11 @@ function AddAgentModal({
         body: JSON.stringify({
           action: "create",
           name: name.trim(),
+          displayName: displayName.trim() || undefined,
           model: model || undefined,
+          fallbacks: fallbacks.length > 0 ? fallbacks : undefined,
+          default: setAsDefault || undefined,
+          subagents: subagents.length > 0 ? subagents : undefined,
           workspace: workspace.trim() || undefined,
           bindings: bindings.length > 0 ? bindings : undefined,
         }),
@@ -2234,13 +2319,13 @@ function AddAgentModal({
       setError(String(err));
     }
     setBusy(false);
-  }, [name, model, workspace, bindings, onCreated, onClose]);
+  }, [name, displayName, model, fallbacks, setAsDefault, subagents, workspace, bindings, onCreated, onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 sm:pt-24">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { if (!busy) onClose(); }} />
 
-      <div className="relative z-10 mx-3 flex max-h-screen w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-card/95 shadow-2xl sm:mx-4">
+      <div className="relative z-10 flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-card/95 shadow-2xl">
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-foreground/10 px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -2258,80 +2343,163 @@ function AddAgentModal({
         </div>
 
         {/* Scrollable form */}
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
-          {/* ── 1. Name (required) ── */}
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-foreground/70">
-              Agent Name <span className="text-red-400">*</span>
-            </label>
-            <input
-              ref={nameRef}
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
-              placeholder="e.g. work, research, creative"
-              className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-sm text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
-              disabled={busy}
-            />
-            <p className="mt-1 text-xs text-muted-foreground/50">
-              Unique ID used throughout OpenClaw — auto-formatted to lowercase
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+          {/* Step 1 — Identity */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              1. Identity
             </p>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-foreground/70">
+                Agent ID <span className="text-red-400">*</span>
+              </label>
+              <input
+                ref={nameRef}
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+                placeholder="e.g. work, research, creative"
+                className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-sm text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                disabled={busy}
+              />
+              <p className="mt-1 text-xs text-muted-foreground/50">
+                Unique ID used throughout OpenClaw — auto-formatted to lowercase
+              </p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-foreground/70">
+                Display name
+                <span className="ml-1 text-xs font-normal text-muted-foreground/40">optional</span>
+              </label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder={name ? `e.g. ${name.charAt(0).toUpperCase() + name.slice(1)}` : "Friendly name in UI"}
+                className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-sm text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                disabled={busy}
+              />
+            </div>
           </div>
 
-          {/* ── 2. Model (picker) ── */}
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-foreground/70">
-              Model
-            </label>
-            <ModelPicker
-              value={model}
-              onChange={setModel}
-              defaultModel={defaultModel}
+          {/* Step 2 — Model */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              2. Model
+            </p>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-foreground/70">
+                Primary model
+              </label>
+              <ModelPicker
+                value={model}
+                onChange={setModel}
+                defaultModel={defaultModel}
+                disabled={busy}
+              />
+            </div>
+            <FallbackModelsField
+              primary={model}
+              fallbacks={fallbacks}
+              onAdd={(key) => setFallbacks((prev) => (prev.includes(key) ? prev : [...prev, key]))}
+              onRemove={(key) => setFallbacks((prev) => prev.filter((k) => k !== key))}
               disabled={busy}
             />
           </div>
 
-          {/* ── 3. Channel Bindings (live) ── */}
-          <div>
-            <label className="mb-1.5 block text-xs font-semibold text-foreground/70">
-              Channel Bindings
-              <span className="ml-1 text-xs font-normal text-muted-foreground/40">optional</span>
-            </label>
-            <ChannelBindingPicker
-              bindings={bindings}
-              onAdd={addBinding}
-              onRemove={removeBinding}
-              onChannelsChanged={onChannelsChanged}
-              disabled={busy}
-            />
+          {/* Step 3 — Channels */}
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              3. Channel bindings
+            </p>
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold text-foreground/70">
+                Route channels to this agent
+                <span className="ml-1 text-xs font-normal text-muted-foreground/40">optional</span>
+              </label>
+              <ChannelBindingPicker
+                bindings={bindings}
+                onAdd={addBinding}
+                onRemove={removeBinding}
+                onChannelsChanged={onChannelsChanged}
+                disabled={busy}
+              />
+            </div>
           </div>
 
-          {/* ── 4. Advanced (collapsible) ── */}
-          <div>
+          {/* Step 4 — Advanced */}
+          <div className="space-y-3">
             <button
               type="button"
               onClick={() => setShowAdvanced(!showAdvanced)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground/50 transition-colors hover:text-foreground/60"
+              className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 transition-colors hover:text-foreground/60"
             >
               <ChevronDown className={cn("h-3 w-3 transition-transform", showAdvanced && "rotate-180")} />
-              Advanced options
+              4. Advanced options
             </button>
             {showAdvanced && (
-              <div className="mt-2.5">
-                <label className="mb-1 block text-xs font-medium text-muted-foreground/60">
-                  Custom Workspace Path
+              <div className="space-y-4 rounded-lg border border-foreground/10 bg-foreground/[0.02] p-3">
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground/70">
+                    Custom workspace path
+                  </label>
+                  <input
+                    type="text"
+                    value={workspace}
+                    onChange={(e) => setWorkspace(e.target.value)}
+                    placeholder={`~/.openclaw/workspace-${name || "<name>"}`}
+                    className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs font-mono text-foreground/80 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                    disabled={busy}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground/40">
+                    Defaults to <code>~/.openclaw/workspace-{name || "<name>"}</code>
+                  </p>
+                </div>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={setAsDefault}
+                    onChange={(e) => setSetAsDefault(e.target.checked)}
+                    disabled={busy}
+                    className="h-3.5 w-3.5 rounded border-foreground/20 text-violet-600 focus:ring-violet-500/30"
+                  />
+                  <span className="text-xs text-foreground/80">Set as default agent</span>
                 </label>
-                <input
-                  type="text"
-                  value={workspace}
-                  onChange={(e) => setWorkspace(e.target.value)}
-                  placeholder={`~/.openclaw/workspace-${name || "<name>"}`}
-                  className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs font-mono text-foreground/80 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
-                  disabled={busy}
-                />
-                <p className="mt-1 text-xs text-muted-foreground/40">
-                  Defaults to <code>~/.openclaw/workspace-{name || "<name>"}</code>
-                </p>
+                {existingAgents.length > 0 && (
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground/70">
+                      Subagents (can delegate to)
+                    </label>
+                    <p className="mb-1.5 text-[11px] text-muted-foreground/50">
+                      Allow this agent to spawn sessions with these agents via sessions_spawn.
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {existingAgents.map((a) => (
+                        <label
+                          key={a.id}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors",
+                            subagents.includes(a.id)
+                              ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                              : "border-foreground/10 bg-foreground/5 text-muted-foreground hover:bg-foreground/10"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={subagents.includes(a.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) setSubagents((prev) => [...prev, a.id]);
+                              else setSubagents((prev) => prev.filter((id) => id !== a.id));
+                            }}
+                            disabled={busy}
+                            className="sr-only"
+                          />
+                          {a.name || a.id}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -2557,7 +2725,7 @@ function EditAgentModal({
   const otherAgents = allAgents.filter((a) => a.id !== agent.id);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 sm:pt-24">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={() => {
@@ -2565,7 +2733,7 @@ function EditAgentModal({
         }}
       />
 
-      <div className="relative z-10 mx-3 flex max-h-screen w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-card/95 shadow-2xl sm:mx-4">
+      <div className="relative z-10 flex h-full max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-card/95 shadow-2xl">
         {/* ── Header ── */}
         <div className="flex shrink-0 items-center justify-between border-b border-foreground/10 px-5 py-4">
           <div className="flex items-center gap-3">
@@ -2614,7 +2782,7 @@ function EditAgentModal({
         </div>
 
         {/* ── Scrollable form ── */}
-        <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
           {/* 1. Primary Model */}
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
@@ -2935,13 +3103,13 @@ function WorkspaceFilesModal({
   }, [files, search]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 sm:pt-24">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
       />
 
-      <div className="relative z-10 mx-3 flex max-h-screen w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-card/95 shadow-2xl sm:mx-4">
+      <div className="relative z-10 flex max-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-card/95 shadow-2xl">
         <div className="flex shrink-0 items-center justify-between border-b border-foreground/10 px-5 py-4">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -2983,7 +3151,7 @@ function WorkspaceFilesModal({
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-5 py-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
           {loading ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -3325,6 +3493,7 @@ export function AgentsView() {
             void fetchAgents();
           }}
           defaultModel={data.defaultModel}
+          existingAgents={data?.agents ?? []}
         />
       )}
 

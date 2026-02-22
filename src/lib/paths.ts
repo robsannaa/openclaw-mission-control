@@ -200,6 +200,24 @@ export async function getGogBin(): Promise<string> {
   return _gogBin;
 }
 
+// ── gog keyring directory (so app and CLI use the same tokens) ──
+
+/**
+ * Resolve gog keyring directory. Override with GOG_KEYRING_DIR.
+ * Pass this as env when running gog from the app so it sees the same keyring as the CLI.
+ */
+export function getGogKeyringDir(): string {
+  if (process.env.GOG_KEYRING_DIR) return process.env.GOG_KEYRING_DIR;
+  const home = homedir();
+  if (process.platform === "darwin") {
+    return join(home, "Library", "Application Support", "gogcli", "keyring");
+  }
+  if (process.platform === "win32") {
+    return join(process.env.APPDATA || home, "gogcli", "keyring");
+  }
+  return join(home, ".config", "gogcli", "keyring");
+}
+
 // ── Gateway URL ─────────────────────────────────
 
 let _gatewayUrl: string | null = null;

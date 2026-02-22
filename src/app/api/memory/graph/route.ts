@@ -3,7 +3,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from "fs/promises";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { basename, join } from "path";
-import { getDefaultWorkspaceSync } from "@/lib/paths";
+import { getDefaultWorkspaceSync, getOpenClawHome } from "@/lib/paths";
 import { gatewayCall, runCli, runCliJson } from "@/lib/openclaw-cli";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +61,7 @@ type GraphEdge = {
   relation: string;
   weight: number;
   evidence: string;
+  fact?: string;
 };
 
 type KnowledgeGraph = {
@@ -228,14 +229,18 @@ function normalizeGraph(input: unknown): KnowledgeGraph {
     let suffix = 2;
     while (edgeIdSet.has(id)) id = `${id}-${suffix++}`;
     edgeIdSet.add(id);
-    edges.push({
+    const edgeEntry: GraphEdge = {
       id,
       source,
       target,
       relation: sanitizeText(e.relation, "related_to"),
       weight: clamp01(e.weight, 0.7),
       evidence: sanitizeText(e.evidence),
-    });
+    };
+    if (typeof (e as Partial<GraphEdge>).fact === "string") {
+      edgeEntry.fact = sanitizeText((e as Partial<GraphEdge>).fact!).slice(0, 300) || undefined;
+    }
+    edges.push(edgeEntry);
   }
 
   return {
@@ -251,13 +256,7 @@ function normalizeGraph(input: unknown): KnowledgeGraph {
   };
 }
 
-type ExtractedFact = {
-  topic: string;
-  text: string;
-  label: string;
-  kind: "fact" | "profile" | "task" | "project" | "person";
-  relation: string;
-};
+// ── Markdown parsing helpers (used by extractEvidenceFromMarkdown / telemetry) ─
 
 function cleanMarkdownInline(input: string): string {
   return sanitizeText(input)
@@ -270,78 +269,6 @@ function cleanMarkdownInline(input: string): string {
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function titleCaseWords(words: string[]): string {
-  return words
-    .map((w) => (w.length <= 3 ? w.toLowerCase() : w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()))
-    .join(" ");
-}
-
-function toConceptLabel(raw: string): string {
-  const cleaned = cleanMarkdownInline(raw)
-    .replace(/^[-*]\s+/, "")
-    .replace(/^\d+[.)]\s+/, "");
-  if (!cleaned) return "Concept";
-
-  const keyValue = cleaned.match(/^([^:]{2,48}):\s+(.+)$/);
-  if (keyValue?.[1]) {
-    return keyValue[1].slice(0, 56);
-  }
-
-  const phrase = cleaned
-    .split(/[.!?;]+/)
-    .map((s) => s.trim())
-    .find(Boolean) || cleaned;
-  const words = phrase.split(/\s+/).filter(Boolean);
-  const compact = titleCaseWords(words.slice(0, 7));
-  const label = compact || phrase;
-  return label.length > 56 ? `${label.slice(0, 53)}...` : label;
-}
-
-function inferConceptKind(
-  text: string,
-  topic: string
-): { kind: ExtractedFact["kind"]; relation: string } {
-  const blob = `${topic} ${text}`.toLowerCase();
-  if (
-    blob.includes("preference") ||
-    blob.includes("prefer ") ||
-    blob.includes("tone") ||
-    blob.includes("style") ||
-    blob.includes("rule") ||
-    blob.includes("never ")
-  ) {
-    return { kind: "profile", relation: "captures_preference" };
-  }
-  if (
-    blob.includes("follow-up") ||
-    blob.includes("todo") ||
-    blob.includes("to do") ||
-    blob.includes("next step") ||
-    blob.includes("optionally ") ||
-    blob.includes("need to ")
-  ) {
-    return { kind: "task", relation: "action_item" };
-  }
-  if (
-    blob.includes("project") ||
-    blob.includes("setup") ||
-    blob.includes("config") ||
-    blob.includes("dashboard") ||
-    blob.includes("integration")
-  ) {
-    return { kind: "project", relation: "project_signal" };
-  }
-  if (
-    blob.includes("@") ||
-    blob.includes("name") ||
-    blob.includes("human") ||
-    blob.includes("assistant")
-  ) {
-    return { kind: "person", relation: "about_entity" };
-  }
-  return { kind: "fact", relation: "supports" };
 }
 
 function normalizeTopic(raw: string): string {
@@ -360,96 +287,149 @@ function canonicalizeFact(text: string): string {
     .slice(0, 120);
 }
 
-function parseMarkdownFacts(markdown: string, maxFacts = 40): {
-  topics: string[];
-  facts: ExtractedFact[];
-} {
-  const topics: string[] = [];
-  const facts: ExtractedFact[] = [];
-  const factSet = new Set<string>();
-  let currentTopic = "General";
+// ── LLM Knowledge Extraction ─────────────────────────────────────────────────
 
-  const addTopic = (topic: string) => {
-    const t = normalizeTopic(topic);
-    if (t && !topics.includes(t)) topics.push(t);
-    currentTopic = t || "General";
-  };
+type LLMEntity = { name: string; type: string; summary: string };
+type LLMRelation = {
+  subject: string;
+  predicate: string;
+  object: string;
+  fact: string;
+  confidence: number;
+};
+type LLMExtractionResult = { entities: LLMEntity[]; relations: LLMRelation[] };
 
-  const addFact = (topic: string, text: string) => {
-    if (facts.length >= maxFacts) return;
-    const clean = cleanMarkdownInline(text);
-    if (!clean) return;
-    const dedupeKey = `${topic.toLowerCase()}::${clean.toLowerCase()}`;
-    if (factSet.has(dedupeKey)) return;
-    factSet.add(dedupeKey);
-    const label = toConceptLabel(clean);
-    const inferred = inferConceptKind(clean, topic);
-    facts.push({
-      topic,
-      text: clean.length > 220 ? `${clean.slice(0, 217)}...` : clean,
-      label,
-      kind: inferred.kind,
-      relation: inferred.relation,
-    });
-  };
+const VALID_ENTITY_TYPES = new Set(["person", "project", "tool", "concept", "preference"]);
 
-  for (const line of markdown.split(/\r?\n/)) {
-    const heading = line.match(/^#{1,4}\s+(.+)/);
-    if (heading) {
-      addTopic(heading[1]);
-      continue;
-    }
-    const bullet = line.match(/^\s*(?:[-*]|\d+[.)])\s+(.+)/);
-    if (bullet?.[1]) {
-      addFact(currentTopic, bullet[1]);
-      if (facts.length >= maxFacts) break;
-      continue;
-    }
-    const kv = line.match(/^\s*([A-Za-z][^:]{1,36}):\s+(.+)/);
-    if (kv?.[1] && kv?.[2]) {
-      addFact(currentTopic, `${kv[1]}: ${kv[2]}`);
-      if (facts.length >= maxFacts) break;
-    }
-  }
-
-  return { topics, facts };
+const EXTRACTION_SYSTEM_PROMPT = `Extract a rich knowledge graph from text. Return ONLY a JSON object with this exact schema:
+{
+  "entities": [{"name": "string", "type": "person|project|tool|concept|preference", "summary": "string"}],
+  "relations": [{"subject": "string", "predicate": "string", "object": "string", "fact": "string", "confidence": 0.0}]
 }
 
-function bootstrapGraph(memoryMd: string, journalFiles: BootstrapFile[], agents: CliAgentRow[] = []): KnowledgeGraph {
-  const inputFiles: BootstrapFile[] = [
-    ...(memoryMd.trim()
-      ? [{ name: "MEMORY.md", content: memoryMd, source: "filesystem" as const }]
-      : []),
-    ...journalFiles,
-  ];
+Rules:
+- Extract ALL meaningful named entities — be thorough, not just the most obvious ones
+- subject and object must be entity names from your entities list
+- Skip bare markdown formatting artifacts and meaningless placeholders
+- person: named humans, roles, contacts (use "User" for the person writing these notes)
+- project: software projects, apps, products, stores, businesses, brands, repositories
+- tool: libraries, frameworks, CLIs, APIs, databases, services, platforms, skills, integrations
+- concept: ideas, patterns, methodologies, markets, locations, business domains, strategies
+- preference: explicit rules, constraints, or strong preferences ("always use X", "never do Y")
+- predicates should be short action verbs: uses, prefers, owns, maintains, built_with, integrates, targets, sells_to, located_in, depends_on, manages
 
+Example input: "User prefers TypeScript. The second-brain project uses Next.js and SQLite."
+Example output: {"entities":[{"name":"User","type":"person","summary":"The developer"},{"name":"second-brain","type":"project","summary":"Next.js knowledge management app"},{"name":"TypeScript","type":"tool","summary":"Programming language"},{"name":"Next.js","type":"tool","summary":"React framework"},{"name":"SQLite","type":"tool","summary":"Embedded database"}],"relations":[{"subject":"User","predicate":"prefers","object":"TypeScript","fact":"User prefers TypeScript","confidence":0.95},{"subject":"second-brain","predicate":"uses","object":"Next.js","fact":"second-brain uses Next.js","confidence":0.9},{"subject":"second-brain","predicate":"uses","object":"SQLite","fact":"second-brain uses SQLite","confidence":0.9}]}`;
+
+function validateExtractionResult(data: unknown): LLMExtractionResult {
+  if (!data || typeof data !== "object") return { entities: [], relations: [] };
+  const d = data as Record<string, unknown>;
+
+  const entities: LLMEntity[] = Array.isArray(d.entities)
+    ? (d.entities as unknown[])
+        .filter((e): e is Record<string, unknown> => !!e && typeof e === "object")
+        .filter((e) => typeof e.name === "string" && e.name.length > 0)
+        .map((e) => ({
+          name: String(e.name).trim(),
+          type: VALID_ENTITY_TYPES.has(String(e.type)) ? String(e.type) : "concept",
+          summary: typeof e.summary === "string" ? e.summary.trim().slice(0, 200) : "",
+        }))
+    : [];
+
+  const relations: LLMRelation[] = Array.isArray(d.relations)
+    ? (d.relations as unknown[])
+        .filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
+        .filter(
+          (r) =>
+            typeof r.subject === "string" && r.subject.length > 0 &&
+            typeof r.predicate === "string" && r.predicate.length > 0 &&
+            typeof r.object === "string" && r.object.length > 0
+        )
+        .map((r) => ({
+          subject: String(r.subject).trim(),
+          predicate: String(r.predicate).trim(),
+          object: String(r.object).trim(),
+          fact:
+            typeof r.fact === "string" && r.fact.trim()
+              ? r.fact.trim().slice(0, 300)
+              : `${r.subject} ${r.predicate} ${r.object}`,
+          confidence:
+            typeof r.confidence === "number"
+              ? Math.min(1, Math.max(0, r.confidence))
+              : 0.75,
+        }))
+    : [];
+
+  return { entities, relations };
+}
+
+async function resolveOpenAiKey(): Promise<string | undefined> {
+  if (process.env.OPENAI_API_KEY) return process.env.OPENAI_API_KEY;
+  try {
+    const envPath = join(getOpenClawHome(), ".env");
+    const raw = await readFile(envPath, "utf-8");
+    const match = raw.match(/^OPENAI_API_KEY=(.+)$/m);
+    return match?.[1]?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function extractEntitiesFromFile(
+  content: string,
+  _sourceFile: string
+): Promise<LLMExtractionResult> {
+  const apiKey = await resolveOpenAiKey();
+  if (!apiKey) return { entities: [], relations: [] };
+
+  const truncated = content.slice(0, 8000);
+  try {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
+          { role: "user", content: truncated },
+        ],
+        response_format: { type: "json_object" },
+        temperature: 0,
+        max_tokens: 4000,
+      }),
+      signal: AbortSignal.timeout(25000),
+    });
+    if (!response.ok) return { entities: [], relations: [] };
+    const data = (await response.json()) as {
+      choices?: Array<{ message?: { content?: string } }>;
+    };
+    const raw = data.choices?.[0]?.message?.content;
+    if (!raw) return { entities: [], relations: [] };
+    return validateExtractionResult(JSON.parse(raw) as unknown);
+  } catch {
+    return { entities: [], relations: [] };
+  }
+}
+
+function canonicalEntityName(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function buildLlmGraph(
+  files: BootstrapFile[],
+  agents: CliAgentRow[]
+): Promise<KnowledgeGraph & { extractionError?: string }> {
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
   const ids = new Set<string>();
   const edgeIds = new Set<string>();
-  const globalTopicMap = new Map<string, string>();
-  const emittedFacts = new Set<string>();
-
-  const root = buildGraphNode(
-    {
-      id: "memory-core",
-      label: "OpenClaw Memory Core",
-      kind: "system",
-      summary: "High-signal long-term memory distilled from MEMORY.md and recent journals.",
-      confidence: 1,
-      source: "bootstrap",
-      x: 40,
-      y: 80,
-      tags: ["memory", "core"],
-    },
-    0,
-    ids
-  );
-  nodes.push(root);
-
-  let factCounter = 0;
-  let topicCounter = 0;
-  let fileCounter = 0;
 
   const pushEdge = (partial: Omit<GraphEdge, "id">, hint: string) => {
     let id = hint;
@@ -459,124 +439,96 @@ function bootstrapGraph(memoryMd: string, journalFiles: BootstrapFile[], agents:
     edges.push({ id, ...partial });
   };
 
-  for (const file of inputFiles.slice(0, 14)) {
-    const fileNode = buildGraphNode(
+  // Root node
+  const root = buildGraphNode(
+    {
+      id: "memory-core",
+      label: "OpenClaw Memory Core",
+      kind: "system",
+      summary: "Knowledge graph extracted from memory files via LLM.",
+      confidence: 1,
+      source: "bootstrap",
+      tags: ["memory", "core"],
+      x: 40,
+      y: 80,
+    },
+    0,
+    ids
+  );
+  nodes.push(root);
+
+  const openAiKey = await resolveOpenAiKey();
+  const hasApiKey = Boolean(openAiKey);
+  let extractionError: string | undefined;
+  if (!hasApiKey) {
+    extractionError =
+      "OPENAI_API_KEY not configured. Set it to enable LLM knowledge extraction.";
+  }
+
+  // Entity dedup map: canonicalName → nodeId
+  const entityMap = new Map<string, string>();
+
+  const ensureEntity = (
+    name: string,
+    type: string,
+    summary: string,
+    sourceFile: string
+  ): string | null => {
+    if (!name) return null;
+    const canon = canonicalEntityName(name);
+    if (!canon) return null;
+    if (entityMap.has(canon)) return entityMap.get(canon)!;
+
+    const entityNode = buildGraphNode(
       {
-        id: `file-${slug(file.name)}`,
-        label: file.name,
-        kind: "project",
-        summary:
-          file.source === "indexed"
-            ? "Derived from vector-indexed memory chunks."
-            : "Derived from memory markdown content.",
-        confidence: file.source === "indexed" ? 0.96 : 0.8,
-        source: file.source,
-        x: 300,
-        y: 70 + fileCounter * 135,
-        tags: ["memory-file", file.source],
+        id: `entity-${slug(name)}`,
+        label: name,
+        kind: type,
+        summary: summary.slice(0, 200),
+        confidence: 0.85,
+        source: sourceFile,
+        tags: [type],
+        x: 400 + (nodes.length % 5) * 240,
+        y: 80 + Math.floor(nodes.length / 5) * 120,
       },
       nodes.length,
       ids
     );
-    fileCounter++;
-    nodes.push(fileNode);
-    pushEdge(
-      {
-        source: root.id,
-        target: fileNode.id,
-        relation: "contains_file",
-        weight: 0.86,
-        evidence: file.name,
-      },
-      `edge-${root.id}-${fileNode.id}`
-    );
+    nodes.push(entityNode);
+    entityMap.set(canon, entityNode.id);
+    return entityNode.id;
+  };
 
-    const { topics, facts } = parseMarkdownFacts(file.content, 22);
-    const localTopicMap = new Map<string, string>();
+  // Process files
+  if (hasApiKey) {
+    for (const file of files) {
+      const result = await extractEntitiesFromFile(file.content, file.name);
 
-    topics.slice(0, 10).forEach((topic) => {
-      const key = topic.toLowerCase();
-      let topicId = globalTopicMap.get(key);
-      if (!topicId) {
-        const topicNode = buildGraphNode(
-          {
-            id: `topic-${slug(topic)}`,
-            label: topic,
-            kind: "topic",
-            summary: "",
-            confidence: 0.88,
-            source: "bootstrap",
-            x: 620,
-            y: 60 + topicCounter * 110,
-          },
-          nodes.length,
-          ids
-        );
-        topicCounter++;
-        nodes.push(topicNode);
-        topicId = topicNode.id;
-        globalTopicMap.set(key, topicId);
+      for (const entity of result.entities) {
+        ensureEntity(entity.name, entity.type, entity.summary, file.name);
+      }
+
+      for (const rel of result.relations) {
+        const sourceId = entityMap.get(canonicalEntityName(rel.subject));
+        const targetId = entityMap.get(canonicalEntityName(rel.object));
+        if (!sourceId || !targetId || sourceId === targetId) continue;
+
         pushEdge(
           {
-            source: root.id,
-            target: topicId,
-            relation: "contains_topic",
-            weight: 0.82,
-            evidence: topic,
+            source: sourceId,
+            target: targetId,
+            relation: rel.predicate,
+            weight: clamp01(rel.confidence, 0.75),
+            evidence: file.name,
+            fact: rel.fact,
           },
-          `edge-${root.id}-${topicId}`
+          `edge-${slug(rel.subject)}-${slug(rel.predicate)}-${slug(rel.object)}`
         );
       }
-      localTopicMap.set(topic, topicId);
-      pushEdge(
-        {
-          source: fileNode.id,
-          target: topicId,
-          relation: "mentions_topic",
-          weight: 0.7,
-          evidence: file.name,
-        },
-        `edge-${fileNode.id}-${topicId}`
-      );
-    });
-
-    facts.slice(0, 28).forEach((fact) => {
-      const factText = sanitizeText(fact.text);
-      const dedupeKey = `${fact.topic.toLowerCase()}::${factText.toLowerCase()}`;
-      if (emittedFacts.has(dedupeKey)) return;
-      emittedFacts.add(dedupeKey);
-
-      const node = buildGraphNode(
-        {
-          id: `fact-${slug(file.name)}-${slug(factText)}-${factCounter + 1}`,
-          label: fact.label,
-          kind: fact.kind,
-          summary: factText,
-          confidence: file.source === "indexed" ? 0.86 : 0.72,
-          source: file.name,
-          x: 940 + (factCounter % 2) * 240,
-          y: 60 + Math.floor(factCounter / 2) * 82,
-          tags: [`file:${file.name}`],
-        },
-        nodes.length,
-        ids
-      );
-      factCounter++;
-      nodes.push(node);
-      pushEdge(
-        {
-          source: localTopicMap.get(fact.topic) || fileNode.id,
-          target: node.id,
-          relation: fact.relation,
-          weight: file.source === "indexed" ? 0.8 : 0.7,
-          evidence: file.name,
-        },
-        `edge-fact-${node.id}`
-      );
-    });
+    }
   }
 
-  // Agent nodes — one per configured agent, connected to root
+  // Agent nodes
   agents.forEach((agent, agentIdx) => {
     const agentId = String(agent.id || `agent-${agentIdx}`);
     const agentLabel = safeAgentName(agent);
@@ -589,32 +541,27 @@ function bootstrapGraph(memoryMd: string, journalFiles: BootstrapFile[], agents:
         summary: isDefault ? "Default OpenClaw agent." : `OpenClaw agent: ${agentId}`,
         confidence: 0.95,
         source: "agents",
+        tags: ["agent", ...(isDefault ? ["default"] : [])],
         x: 40,
         y: 260 + agentIdx * 120,
-        tags: ["agent", ...(isDefault ? ["default"] : [])],
       },
       nodes.length,
       ids
     );
     nodes.push(agentNode);
     pushEdge(
-      {
-        source: root.id,
-        target: agentNode.id,
-        relation: "managed_by",
-        weight: 0.9,
-        evidence: agentId,
-      },
+      { source: root.id, target: agentNode.id, relation: "managed_by", weight: 0.9, evidence: agentId },
       `edge-${root.id}-${agentNode.id}`
     );
   });
 
-  if (nodes.length <= 1) {
+  // Template if nothing was extracted
+  if (nodes.length <= 1 + agents.length) {
     const sampleA = buildGraphNode(
       {
         id: "entity-user-preferences",
         label: "User Preferences",
-        kind: "profile",
+        kind: "preference",
         summary: "Store stable preferences, style, constraints, and important context.",
         source: "template",
         confidence: 0.9,
@@ -640,26 +587,13 @@ function bootstrapGraph(memoryMd: string, journalFiles: BootstrapFile[], agents:
     );
     nodes.push(sampleA, sampleB);
     edges.push(
-      {
-        id: "edge-root-sample-a",
-        source: root.id,
-        target: sampleA.id,
-        relation: "tracks",
-        weight: 0.8,
-        evidence: "",
-      },
-      {
-        id: "edge-root-sample-b",
-        source: root.id,
-        target: sampleB.id,
-        relation: "tracks",
-        weight: 0.8,
-        evidence: "",
-      }
+      { id: "edge-root-sample-a", source: root.id, target: sampleA.id, relation: "tracks", weight: 0.8, evidence: "" },
+      { id: "edge-root-sample-b", source: root.id, target: sampleB.id, relation: "tracks", weight: 0.8, evidence: "" }
     );
   }
 
-  return normalizeGraph({ nodes, edges });
+  const graph = normalizeGraph({ nodes, edges });
+  return extractionError ? { ...graph, extractionError } : graph;
 }
 
 function graphToMarkdown(graph: KnowledgeGraph): string {
@@ -1093,62 +1027,61 @@ export async function GET(request: NextRequest) {
     // Fire-and-forget: ensure workspace root files are in the vector index
     void runCli(["memory", "index"], 45000).catch(() => {});
 
+    let extractionError: string | undefined;
+
     if (raw && !forceBootstrap) {
       graph = normalizeGraph(JSON.parse(raw));
-      // Inject any workspace files / agents that are missing from the saved graph
+      // Inject any agents that are missing from the saved graph
       const existingIds = new Set(graph.nodes.map((n) => n.id));
       const existingEdgeIds = new Set(graph.edges.map((e) => e.id));
       const rootId = graph.nodes.find((n) => n.id === "memory-core")?.id ?? "memory-core";
-      const inject: { nodes: GraphNode[]; edges: GraphEdge[] } = { nodes: [], edges: [] };
-
-      workspaceRootFiles.forEach((file, idx) => {
-        const nodeId = `file-${slug(file.name)}`;
-        if (existingIds.has(nodeId)) return;
-        existingIds.add(nodeId);
-        inject.nodes.push({
-          id: nodeId, label: file.name, kind: "project",
-          summary: "Workspace reference file.", confidence: 0.9, source: "filesystem",
-          tags: ["workspace-file"], x: 280, y: 320 + idx * 110,
-        });
-        const edgeId = `edge-root-ws-${nodeId}`;
-        if (!existingEdgeIds.has(edgeId)) {
-          inject.edges.push({ id: edgeId, source: rootId, target: nodeId, relation: "contains_file", weight: 0.85, evidence: file.name });
-        }
-      });
+      const injectNodes: GraphNode[] = [];
+      const injectEdges: GraphEdge[] = [];
 
       agents.forEach((agent, idx) => {
         const nodeId = `agent-${slug(String(agent.id || idx))}`;
         if (existingIds.has(nodeId)) return;
         existingIds.add(nodeId);
-        inject.nodes.push({
+        injectNodes.push({
           id: nodeId, label: safeAgentName(agent), kind: "agent",
           summary: "OpenClaw agent.", confidence: 0.95, source: "agents",
           tags: ["agent"], x: 40, y: 280 + idx * 120,
         });
         const edgeId = `edge-root-agent-${nodeId}`;
         if (!existingEdgeIds.has(edgeId)) {
-          inject.edges.push({ id: edgeId, source: rootId, target: nodeId, relation: "managed_by", weight: 0.9, evidence: String(agent.id || "") });
+          injectEdges.push({ id: edgeId, source: rootId, target: nodeId, relation: "managed_by", weight: 0.9, evidence: String(agent.id || "") });
         }
       });
 
-      if (inject.nodes.length > 0) {
-        graph = normalizeGraph({ ...graph, nodes: [...graph.nodes, ...inject.nodes], edges: [...graph.edges, ...inject.edges] });
+      if (injectNodes.length > 0) {
+        graph = normalizeGraph({ ...graph, nodes: [...graph.nodes, ...injectNodes], edges: [...graph.edges, ...injectEdges] });
       }
     } else {
       const memoryMd = (await readOptional(MEMORY_MD_PATH)) || "";
-      const indexed = await readIndexedMemoryFiles(12);
+      const indexed = await readIndexedMemoryFiles(30);
       const fallbackFiles = indexed.length ? [] : await readRecentJournalFiles(10);
       const indexedOrFallback = indexed.length ? indexed : fallbackFiles;
-      // Merge: indexed/fallback files + workspace root files (deduplicated by name)
-      const indexedNames = new Set(indexedOrFallback.map((f) => f.name));
+      // Include MEMORY.md as seed if not already indexed
+      const seedFiles: BootstrapFile[] = [];
+      if (memoryMd.trim()) {
+        seedFiles.push({ name: "MEMORY.md", content: memoryMd, source: "filesystem" });
+      }
+      const indexedNames = new Set(seedFiles.map((f) => f.name));
+      for (const f of indexedOrFallback) {
+        if (!indexedNames.has(f.name)) { seedFiles.push(f); indexedNames.add(f.name); }
+      }
       const extraWorkspace = workspaceRootFiles.filter((f) => !indexedNames.has(f.name));
-      const seedFiles = [...indexedOrFallback, ...extraWorkspace];
-      graph = bootstrapGraph(memoryMd, seedFiles, agents);
+      for (const f of extraWorkspace) seedFiles.push(f);
+
+      const llmResult = await buildLlmGraph(seedFiles, agents);
+      extractionError = llmResult.extractionError;
+      graph = llmResult;
       bootstrapInfo = {
         source: indexed.length ? "indexed" : "filesystem",
         files: seedFiles.map((f) => f.name),
       };
     }
+
     const telemetry: GraphTelemetry = {
       generatedAt: new Date().toISOString(),
       sourceDocuments: await readSourceDocumentsForGraph(graph, 24),
@@ -1157,7 +1090,9 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       graph,
-      bootstrap: bootstrapInfo,
+      bootstrap: bootstrapInfo
+        ? { ...bootstrapInfo, ...(extractionError ? { error: extractionError } : {}) }
+        : undefined,
       telemetry,
       workspace: WORKSPACE,
       paths: {

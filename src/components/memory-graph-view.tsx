@@ -114,6 +114,7 @@ type GraphEdgePayload = {
   relation: string;
   weight: number;
   evidence: string;
+  fact?: string;
 };
 
 type GraphPayload = {
@@ -186,6 +187,7 @@ type AggregatedEdge = {
   maxConfidence: number;
   evidence: string[];
   lastSeenMs: number;
+  fact?: string;
 };
 
 type NodeInsight = {
@@ -336,23 +338,39 @@ function timeRangeMs(range: TimeRange): number {
 
 function nodeKindColor(kind: string, isDark: boolean): string {
   const normalized = String(kind || "").toLowerCase();
+  // New LLM-extracted entity types
+  if (normalized === "concept") return isDark ? "rgba(56,189,248,0.32)" : "rgba(56,189,248,0.18)";
+  if (normalized === "preference") return isDark ? "rgba(168,85,247,0.30)" : "rgba(168,85,247,0.16)";
+  if (normalized === "tool") return isDark ? "rgba(249,115,22,0.32)" : "rgba(249,115,22,0.17)";
+  if (normalized === "organization") return isDark ? "rgba(245,158,11,0.30)" : "rgba(245,158,11,0.16)";
+  if (normalized === "event") return isDark ? "rgba(20,184,166,0.30)" : "rgba(20,184,166,0.16)";
+  // Unchanged entity types
+  if (normalized === "person") return isDark ? "rgba(34,197,94,0.30)" : "rgba(34,197,94,0.16)";
+  if (normalized === "project") return isDark ? "rgba(236,72,153,0.28)" : "rgba(236,72,153,0.14)";
+  // Legacy types (backward compat with saved graphs)
   if (normalized === "topic") return isDark ? "rgba(56,189,248,0.32)" : "rgba(56,189,248,0.18)";
   if (normalized === "fact") return isDark ? "rgba(99,102,241,0.28)" : "rgba(99,102,241,0.16)";
   if (normalized === "profile") return isDark ? "rgba(168,85,247,0.30)" : "rgba(168,85,247,0.16)";
-  if (normalized === "person") return isDark ? "rgba(34,197,94,0.30)" : "rgba(34,197,94,0.16)";
   if (normalized === "task") return isDark ? "rgba(251,146,60,0.30)" : "rgba(251,146,60,0.17)";
-  if (normalized === "project") return isDark ? "rgba(236,72,153,0.28)" : "rgba(236,72,153,0.14)";
   return isDark ? "rgba(148,163,184,0.26)" : "rgba(148,163,184,0.12)";
 }
 
 function kindLabel(kind: string): string {
   const k = String(kind || "").toLowerCase();
+  // New types
+  if (k === "concept") return "Concept";
+  if (k === "preference") return "Preference";
+  if (k === "tool") return "Tool";
+  if (k === "organization") return "Organization";
+  if (k === "event") return "Event";
+  // Unchanged
+  if (k === "person") return "Person";
+  if (k === "project") return "Project";
+  // Legacy
   if (k === "topic") return "Topic";
   if (k === "fact") return "Fact";
-  if (k === "project") return "Project";
   if (k === "task") return "Task";
   if (k === "profile") return "Profile";
-  if (k === "person") return "Person";
   return kind || "Node";
 }
 
@@ -436,14 +454,14 @@ function shortestPath(
 
 function withinLens(node: GraphNodePayload, lens: LensMode, conflictCount: number): boolean {
   const kind = String(node.kind || "fact").toLowerCase();
-  if (lens === "topic") return ["topic", "fact", "task", "profile", "project", "system"].includes(kind);
-  if (lens === "entity") return ["person", "profile", "project", "topic", "system"].includes(kind);
+  if (lens === "topic") return ["concept", "preference", "tool", "topic", "fact", "task", "profile", "project", "system"].includes(kind);
+  if (lens === "entity") return ["person", "organization", "tool", "profile", "project", "topic", "system"].includes(kind);
   if (lens === "decision") {
-    if (["task", "profile", "fact", "project"].includes(kind)) return true;
+    if (["preference", "concept", "task", "profile", "fact", "project"].includes(kind)) return true;
     return conflictCount > 0;
   }
   if (kind === "project" && node.label.toLowerCase().endsWith(".md")) return true;
-  return ["project", "topic", "system"].includes(kind);
+  return ["concept", "project", "tool", "topic", "system"].includes(kind);
 }
 
 function cmpNumberDesc(a: number, b: number): number {
@@ -624,6 +642,7 @@ export function MemoryGraphView() {
       relation: string;
       confidence: number;
       evidence: string;
+      fact?: string;
     }> = [];
 
     for (const edge of rawEdges) {
@@ -634,6 +653,7 @@ export function MemoryGraphView() {
         relation: normalizeRelation(edge.relation),
         confidence: clamp01(Number(edge.weight || 0.7)),
         evidence: String(edge.evidence || "").trim(),
+        fact: edge.fact,
       });
     }
 
@@ -698,6 +718,7 @@ export function MemoryGraphView() {
           maxConfidence: edge.confidence,
           evidence: edge.evidence ? [edge.evidence] : [],
           lastSeenMs: recency,
+          fact: edge.fact,
         });
       } else {
         existing.count += 1;
@@ -705,6 +726,7 @@ export function MemoryGraphView() {
         existing.maxConfidence = Math.max(existing.maxConfidence, edge.confidence);
         if (edge.evidence) existing.evidence.push(edge.evidence);
         if (recency > existing.lastSeenMs) existing.lastSeenMs = recency;
+        if (edge.fact && !existing.fact) existing.fact = edge.fact;
       }
     }
 
@@ -897,8 +919,9 @@ export function MemoryGraphView() {
       const kind = node.kind.toLowerCase();
       if (kind === "task") taskRelevance = 1;
       else if (kind === "project") taskRelevance = 0.84;
-      else if (kind === "profile") taskRelevance = 0.76;
+      else if (kind === "preference" || kind === "profile") taskRelevance = 0.76;
       else if (edges.some((edge) => edge.relation === "action_item")) taskRelevance = 0.88;
+      else if (kind === "concept" || kind === "tool") taskRelevance = 0.65;
       else if (kind === "fact") taskRelevance = 0.62;
       else if (kind === "topic") taskRelevance = 0.58;
 
@@ -970,7 +993,7 @@ export function MemoryGraphView() {
   }, [collapsed.edges, collapsed.nodes, diagnostics.conflicts, telemetry.recentChatMessages, telemetry.sourceDocuments, usedInLastNChats]);
 
   const topicRows = useMemo(() => {
-    const topicNodes = collapsed.nodes.filter((node) => node.kind.toLowerCase() === "topic");
+    const topicNodes = collapsed.nodes.filter((node) => ["topic", "concept"].includes(node.kind.toLowerCase()));
     const edgesByNode = new Map<string, AggregatedEdge[]>();
     for (const edge of collapsed.edges) {
       if (!edgesByNode.has(edge.source)) edgesByNode.set(edge.source, []);
@@ -984,7 +1007,7 @@ export function MemoryGraphView() {
       const neighborIds = incident.map((edge) => (edge.source === topic.id ? edge.target : edge.source));
       const factNeighbors = neighborIds.filter((id) => {
         const node = collapsed.nodeById.get(id);
-        return node ? ["fact", "profile", "task", "project"].includes(node.kind.toLowerCase()) : false;
+        return node ? ["fact", "profile", "task", "project", "tool", "preference", "person"].includes(node.kind.toLowerCase()) : false;
       });
 
       let usageCount = 0;
@@ -1048,14 +1071,14 @@ export function MemoryGraphView() {
   }, [collapsed.nodes, selectedNodeId]);
 
   useEffect(() => {
-    if (selectedNode && selectedNode.kind.toLowerCase() === "topic") {
+    if (selectedNode && ["topic", "concept"].includes(selectedNode.kind.toLowerCase())) {
       setSelectedTopicId(selectedNode.id);
     }
   }, [selectedNode]);
 
   const selectedTopic = useMemo(() => {
     const explicit = selectedTopicId ? collapsed.nodeById.get(selectedTopicId) : null;
-    if (explicit && explicit.kind.toLowerCase() === "topic") return explicit;
+    if (explicit && ["topic", "concept"].includes(explicit.kind.toLowerCase())) return explicit;
     const fallbackId = topicRows[0]?.topicId;
     return fallbackId ? collapsed.nodeById.get(fallbackId) || null : null;
   }, [collapsed.nodeById, selectedTopicId, topicRows]);
@@ -1074,7 +1097,7 @@ export function MemoryGraphView() {
       if (layer === "overview") {
         return new Set(
           collapsed.nodes
-            .filter((node) => node.kind.toLowerCase() === "topic" || node.kind.toLowerCase() === "system")
+            .filter((node) => ["topic", "concept", "system"].includes(node.kind.toLowerCase()))
             .map((node) => node.id)
         );
       }
@@ -1605,7 +1628,7 @@ export function MemoryGraphView() {
     setSelectedNodeId(node.id);
     if (layer === "overview") setShowTopicTable(false);
     const selected = collapsed.nodeById.get(node.id);
-    if (selected?.kind.toLowerCase() === "topic") {
+    if (selected && ["topic", "concept"].includes(selected.kind.toLowerCase())) {
       setSelectedTopicId(node.id);
       if (layer === "overview") setLayer("topic");
     }
@@ -1905,7 +1928,11 @@ export function MemoryGraphView() {
                           className="w-full rounded border border-foreground/10 bg-card px-2 py-1 text-left text-foreground/90 hover:bg-muted"
                         >
                           <p className="truncate">{other?.label || otherId}</p>
-                          <p className="truncate text-muted-foreground">{relationLabel(edge.relation)} · conf {Math.round(edge.confidence * 100)}% · {formatAgo(edge.lastSeenMs)}</p>
+                          {edge.fact ? (
+                            <p className="truncate text-muted-foreground italic">{edge.fact}</p>
+                          ) : (
+                            <p className="truncate text-muted-foreground">{relationLabel(edge.relation)} · conf {Math.round(edge.confidence * 100)}% · {formatAgo(edge.lastSeenMs)}</p>
+                          )}
                         </button>
                       );
                     })}

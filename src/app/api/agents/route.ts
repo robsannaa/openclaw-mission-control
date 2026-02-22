@@ -477,6 +477,48 @@ export async function POST(request: NextRequest) {
           result = { raw: output };
         }
 
+        // Patch the new agent in config: displayName, model+fallbacks, default, subagents (per OpenClaw config reference)
+        const configPath = join(OPENCLAW_HOME, "openclaw.json");
+        try {
+          let config: Record<string, unknown> = {};
+          try {
+            config = JSON.parse(await readFile(configPath, "utf-8"));
+          } catch {
+            return NextResponse.json({ ok: true, action, name, workspace, ...result });
+          }
+          const agentsSection = config.agents as Record<string, unknown> | undefined;
+          const list = Array.isArray(agentsSection?.list) ? (agentsSection.list as Record<string, unknown>[]) : [];
+          const idx = list.findIndex((a) => (a.id as string) === name);
+          if (idx >= 0) {
+            const entry = { ...list[idx] };
+            const displayName = (body.displayName as string)?.trim();
+            if (displayName) entry.name = displayName;
+            const fallbacks = (body.fallbacks || []) as string[];
+            if (body.model && fallbacks.length > 0) {
+              entry.model = { primary: body.model, fallbacks };
+            } else if (body.model) {
+              entry.model = body.model;
+            }
+            if (body.default === true) {
+              entry.default = true;
+              for (let i = 0; i < list.length; i++) {
+                if (i !== idx) (list[i] as Record<string, unknown>).default = false;
+              }
+            }
+            const subagentsList = (body.subagents || []) as string[];
+            if (subagentsList.length > 0) {
+              entry.subagents = { ...((entry.subagents as Record<string, unknown>) || {}), allowAgents: subagentsList };
+            }
+            list[idx] = entry;
+            if (config.agents && typeof config.agents === "object") {
+              (config.agents as Record<string, unknown>).list = list;
+              await writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+            }
+          }
+        } catch (patchErr) {
+          console.warn("Agent create: config patch failed", patchErr);
+        }
+
         return NextResponse.json({ ok: true, action, name, workspace, ...result });
       }
 
@@ -500,19 +542,20 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const agentsSection = config.agents as Record<string, unknown>;
-        const agentsList = (agentsSection?.list || []) as Record<
-          string,
-          unknown
-        >[];
-        const agentIdx = agentsList.findIndex((a) => a.id === id);
-        if (agentIdx === -1) {
-          return NextResponse.json(
-            { error: `Agent "${id}" not found in config` },
-            { status: 404 }
-          );
+        if (!config.agents || typeof config.agents !== "object") {
+          config.agents = {};
         }
-
+        const agentsSection = config.agents as Record<string, unknown>;
+        if (!Array.isArray(agentsSection.list)) {
+          agentsSection.list = [];
+        }
+        const agentsList = agentsSection.list as Record<string, unknown>[];
+        let agentIdx = agentsList.findIndex((a) => a.id === id);
+        // If agent exists only at runtime (e.g. default "main") but not in config, upsert an entry
+        if (agentIdx === -1) {
+          agentIdx = agentsList.length;
+          agentsList.push({ id });
+        }
         const agent = { ...agentsList[agentIdx] };
 
         // Update model

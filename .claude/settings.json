@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:help.getzep.com)",
+      "Bash(sqlite3:*)"
+    ]
+  }
+}

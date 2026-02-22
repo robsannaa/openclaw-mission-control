@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  getAccessToken,
-  fetchCalendarEvents,
-  isOAuthConfigured,
-  getAuthUrl,
-  getRedirectUri,
-} from "@/lib/google-calendar";
+  fetchCalendarEventsViaGog,
+  GogCalendarError,
+} from "@/lib/gog-calendar";
 
 export const dynamic = "force-dynamic";
 
 const CACHE_TTL_MS = 90_000;
 
-let calendarCache: { key: number; data: CalendarResponse; expiresAt: number } | null = null;
+let calendarCache: {
+  key: string;
+  data: CalendarResponse;
+  expiresAt: number;
+} | null = null;
 
 export type CalendarEvent = {
   id: string;
@@ -29,23 +30,48 @@ export type CalendarResponse = {
   events: CalendarEvent[];
   sources: { google: boolean };
   errors: { google?: string };
-  /** When true, UI should show "Connect Google Calendar" linking to authUrl */
+  /** Verbose debug info when gog command fails (command, exitCode, stderr, stdout). */
+  errorDebug?: { command: string; exitCode: number | null; stderr: string; stdout: string };
+  /** Raw stdout from the last gog calendar events command (for debugging). */
+  rawOutput?: string;
+  /** When true, UI should show gog setup instructions (run gog auth add ...). */
   needsAuth?: boolean;
-  /** URL to start OAuth (only when needsAuth and OAuth is configured) */
-  authUrl?: string;
+  /** When true, gog needs GOG_KEYRING_PASSWORD in env to read tokens (no TTY). */
+  needsKeyringPassphrase?: boolean;
 };
 
-function toCalendarEvent(e: { id: string; title: string; startMs: number; endMs: number; allDay: boolean; calendarName: string; location?: string; notes?: string }): CalendarEvent {
+function toCalendarEvent(
+  e: {
+    id: string;
+    title: string;
+    startMs: number;
+    endMs: number;
+    allDay: boolean;
+    calendarName: string;
+    location?: string;
+    notes?: string;
+  }
+): CalendarEvent {
   return { ...e, source: "google" };
 }
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const days = Math.min(Math.max(parseInt(searchParams.get("days") || "14", 10), 1), 60);
+  const days = Math.min(
+    Math.max(parseInt(searchParams.get("days") || "14", 10), 1),
+    60
+  );
+  const account = searchParams.get("account")?.trim() || undefined;
   const skipCache = searchParams.get("refresh") === "1";
+  const cacheKey = `${days}:${account ?? ""}`;
 
   const now = Date.now();
-  if (!skipCache && calendarCache && calendarCache.key === days && calendarCache.expiresAt > now) {
+  if (
+    !skipCache &&
+    calendarCache &&
+    calendarCache.key === cacheKey &&
+    calendarCache.expiresAt > now
+  ) {
     return NextResponse.json(calendarCache.data);
   }
 
@@ -55,38 +81,32 @@ export async function GET(request: NextRequest) {
     errors: {},
   };
 
-  const origin =
-    request.headers.get("origin") ||
-    (typeof request.url === "string" ? new URL(request.url).origin : "") ||
-    "";
-  const redirectUri = getRedirectUri(origin);
-
-  if (!isOAuthConfigured()) {
-    result.errors.google = "Google Calendar OAuth not configured. Set GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET in .env.";
-    return NextResponse.json(result);
-  }
-
-  const accessToken = await getAccessToken();
-  if (!accessToken) {
-    result.needsAuth = true;
-    result.authUrl = getAuthUrl(redirectUri) ?? undefined;
-    calendarCache = { key: days, data: result, expiresAt: now + CACHE_TTL_MS };
-    return NextResponse.json(result);
-  }
-
   try {
-    const events = await fetchCalendarEvents(accessToken, days);
+    const { events, rawStdout } = await fetchCalendarEventsViaGog(days, account);
     result.events = events.map(toCalendarEvent);
     result.sources.google = true;
+    result.rawOutput = rawStdout;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors.google = msg;
-    if (msg.includes("401") || msg.includes("invalid_grant") || msg.includes("Token has been expired")) {
-      result.needsAuth = true;
-      result.authUrl = getAuthUrl(redirectUri) ?? undefined;
+    if (err instanceof GogCalendarError) {
+      if (err.code === "needs_auth") result.needsAuth = true;
+      if (err.debugInfo) {
+        result.errorDebug = err.debugInfo;
+        result.rawOutput = err.debugInfo.stdout || err.debugInfo.stderr;
+      }
+    }
+    if (
+      msg.includes("GOG_KEYRING_PASSWORD") ||
+      msg.includes("no TTY available for keyring")
+    ) {
+      result.needsKeyringPassphrase = true;
     }
   }
 
-  calendarCache = { key: days, data: result, expiresAt: now + CACHE_TTL_MS };
+  // Only cache successful responses so Refresh after fixing auth re-runs gog
+  if (!result.errors.google) {
+    calendarCache = { key: cacheKey, data: result, expiresAt: now + CACHE_TTL_MS };
+  }
   return NextResponse.json(result);
 }

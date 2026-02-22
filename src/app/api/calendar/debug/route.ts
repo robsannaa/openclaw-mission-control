@@ -1,45 +1,53 @@
 import { NextResponse } from "next/server";
-import {
-  isOAuthConfigured,
-  getStoredTokens,
-  getAccessToken,
-  getTokenPath,
-} from "@/lib/google-calendar";
-import { getOpenClawHome } from "@/lib/paths";
+import { getGogBin } from "@/lib/paths";
+import { fetchCalendarEventsViaGog, GogCalendarError } from "@/lib/gog-calendar";
 
 export const dynamic = "force-dynamic";
 
 /**
  * GET /api/calendar/debug
- * Shows whether Google Calendar OAuth is configured and if we have tokens.
+ * Shows whether gog is available and if calendar auth works.
  */
 export async function GET() {
-  const hasClientId = Boolean(process.env.GOOGLE_CALENDAR_CLIENT_ID?.trim());
-  const hasClientSecret = Boolean(process.env.GOOGLE_CALENDAR_CLIENT_SECRET?.trim());
-  const tokens = await getStoredTokens();
-  let accessTokenOk = false;
-  if (tokens) {
-    try {
-      const at = await getAccessToken();
-      accessTokenOk = Boolean(at);
-    } catch {
-      accessTokenOk = false;
+  let gogPath: string;
+  try {
+    gogPath = await getGogBin();
+  } catch {
+    return NextResponse.json({
+      gogAvailable: false,
+      hint: "Install gog: brew install steipete/tap/gogcli",
+    });
+  }
+
+  let calendarWorks = false;
+  let errorMessage: string | null = null;
+  let needsAuth = false;
+
+  try {
+    await fetchCalendarEventsViaGog(7);
+    calendarWorks = true;
+  } catch (err) {
+    if (err instanceof GogCalendarError) {
+      errorMessage = err.message;
+      needsAuth = err.code === "needs_auth";
+    } else {
+      errorMessage = err instanceof Error ? err.message : String(err);
     }
   }
+
+  const hint = !calendarWorks
+    ? needsAuth || (errorMessage && (errorMessage.includes("account") || errorMessage.includes("No auth")))
+      ? "Run in terminal: gog auth add you@email.com --services calendar. Then set default account via gog auth manage or set GOG_ACCOUNT."
+      : "Check that gog is installed and in PATH. See https://clawhub.ai/steipete/gog"
+    : null;
+
   return NextResponse.json({
-    oauthConfigured: isOAuthConfigured(),
-    hasClientId,
-    hasClientSecret,
-    tokenPath: getTokenPath(),
-    openclawHome: getOpenClawHome(),
-    hasStoredTokens: Boolean(tokens?.refresh_token),
-    accessTokenWorks: accessTokenOk,
-    hint: !hasClientId || !hasClientSecret
-      ? "Set GOOGLE_CALENDAR_CLIENT_ID and GOOGLE_CALENDAR_CLIENT_SECRET in .env (from Google Cloud Console OAuth 2.0 credentials)."
-      : !tokens
-        ? "No tokens yet. Click 'Connect Google Calendar' on the Calendar view."
-        : !accessTokenOk
-          ? "Tokens exist but refresh failed. Try reconnecting from the Calendar view."
-          : null,
+    gogAvailable: true,
+    gogPath,
+    calendarWorks,
+    errorMessage,
+    needsAuth,
+    hint,
+    gogAccount: process.env.GOG_ACCOUNT ?? undefined,
   });
 }
