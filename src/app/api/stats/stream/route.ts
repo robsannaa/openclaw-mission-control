@@ -8,11 +8,16 @@ import { gatewayCall } from "@/lib/openclaw-cli";
 
 export const dynamic = "force-dynamic";
 const exec = promisify(execFile);
+const STREAM_INTERVAL_MS = 5000;
+const SNAPSHOT_TTL_MS = 4000;
 
 /* ── TTL Cache ───────────────────────────────────── */
 
 type CacheEntry<T> = { value: T; expiresAt: number };
 const cache = new Map<string, CacheEntry<unknown>>();
+let latestSnapshot: Awaited<ReturnType<typeof buildSnapshot>> | null = null;
+let latestSnapshotAt = 0;
+let snapshotInFlight: Promise<Awaited<ReturnType<typeof buildSnapshot>>> | null = null;
 
 async function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   const existing = cache.get(key) as CacheEntry<T> | undefined;
@@ -482,6 +487,29 @@ async function buildSnapshot(home: string) {
   };
 }
 
+async function getLatestSnapshot(home: string): Promise<Awaited<ReturnType<typeof buildSnapshot>>> {
+  const now = Date.now();
+  if (latestSnapshot && now - latestSnapshotAt < SNAPSHOT_TTL_MS) {
+    return latestSnapshot;
+  }
+  if (snapshotInFlight) {
+    return snapshotInFlight;
+  }
+
+  snapshotInFlight = (async () => {
+    const snapshot = await buildSnapshot(home);
+    latestSnapshot = snapshot;
+    latestSnapshotAt = Date.now();
+    return snapshot;
+  })();
+
+  try {
+    return await snapshotInFlight;
+  } finally {
+    snapshotInFlight = null;
+  }
+}
+
 /* ── SSE endpoint ─────────────────────────────────── */
 
 export async function GET() {
@@ -503,7 +531,7 @@ export async function GET() {
 
       // Send initial snapshot immediately
       try {
-        const snapshot = await buildSnapshot(home);
+        const snapshot = await getLatestSnapshot(home);
         send(snapshot);
       } catch (err) {
         send({ error: String(err) });
@@ -516,12 +544,12 @@ export async function GET() {
           return;
         }
         try {
-          const snapshot = await buildSnapshot(home);
+          const snapshot = await getLatestSnapshot(home);
           send(snapshot);
         } catch {
           // skip this tick
         }
-      }, 5000);
+      }, STREAM_INTERVAL_MS);
 
       // Cleanup when client disconnects
       // The controller.close() or an error will set closed = true

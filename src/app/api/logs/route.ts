@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stat } from "fs/promises";
+import { open, readFile, stat } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
 
@@ -151,85 +151,91 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    const fileResults = await Promise.all(
+      files.map(async (file) => {
+        try {
+          const s = await stat(file.path);
+
+          // Read last portion of file (max 500KB to keep response fast)
+          const maxBytes = 512 * 1024;
+          let content: string;
+          if (s.size > maxBytes) {
+            const fh = await open(file.path, "r");
+            try {
+              const buf = Buffer.alloc(maxBytes);
+              await fh.read(buf, 0, maxBytes, s.size - maxBytes);
+              content = buf.toString("utf-8");
+            } finally {
+              await fh.close();
+            }
+            // Drop first partial line
+            const firstNewline = content.indexOf("\n");
+            if (firstNewline !== -1) {
+              content = content.slice(firstNewline + 1);
+            }
+          } else {
+            content = await readFile(file.path, "utf-8");
+          }
+
+          const lines = content.split("\n");
+          return {
+            path: file.path,
+            size: s.size,
+            entries: parseLines(lines, file.level),
+          };
+        } catch {
+          return {
+            path: file.path,
+            size: 0,
+            entries: [] as LogEntry[],
+          };
+        }
+      })
+    );
+
     const allEntries: LogEntry[] = [];
     const fileSizes: Record<string, number> = {};
-
-    for (const file of files) {
-      try {
-        const s = await stat(file.path);
-        fileSizes[file.path] = s.size;
-
-        // Read last portion of file (max 500KB to keep response fast)
-        const maxBytes = 512 * 1024;
-        let content: string;
-        if (s.size > maxBytes) {
-          const { open } = await import("fs/promises");
-          const fh = await open(file.path, "r");
-          try {
-            const buf = Buffer.alloc(maxBytes);
-            await fh.read(buf, 0, maxBytes, s.size - maxBytes);
-            content = buf.toString("utf-8");
-          } finally {
-            await fh.close();
-          }
-          // Drop first partial line
-          const firstNewline = content.indexOf("\n");
-          if (firstNewline !== -1) {
-            content = content.slice(firstNewline + 1);
-          }
-        } else {
-          const { readFile } = await import("fs/promises");
-          content = await readFile(file.path, "utf-8");
-        }
-
-        const lines = content.split("\n");
-        const parsed = parseLines(lines, file.level);
-        allEntries.push(...parsed);
-      } catch {
-        // File may not exist
+    const sourceSet = new Set<string>();
+    const stats = { info: 0, warn: 0, error: 0 };
+    for (const result of fileResults) {
+      if (result.size > 0) {
+        fileSizes[result.path] = result.size;
+      }
+      for (const entry of result.entries) {
+        allEntries.push(entry);
+        if (entry.source) sourceSet.add(entry.source);
+        stats[entry.level] += 1;
       }
     }
 
     // Sort by UTC time descending (newest first)
     allEntries.sort((a, b) => b.timeMs - a.timeMs);
 
-    // Apply filters
-    let filtered = allEntries;
-
-    if (searchFilter) {
-      filtered = filtered.filter(
-        (e) =>
-          e.message.toLowerCase().includes(searchFilter) ||
-          e.source.toLowerCase().includes(searchFilter) ||
-          e.raw.toLowerCase().includes(searchFilter)
-      );
-    }
-
-    if (sourceFilter) {
-      filtered = filtered.filter((e) =>
-        e.source.toLowerCase().includes(sourceFilter)
-      );
-    }
-
-    if (levelFilter) {
-      filtered = filtered.filter((e) => e.level === levelFilter);
-    }
+    const hasFilters = Boolean(searchFilter || sourceFilter || levelFilter);
+    const filtered = hasFilters
+      ? allEntries.filter((e) => {
+        if (searchFilter) {
+          const searchHit =
+            e.message.toLowerCase().includes(searchFilter) ||
+            e.source.toLowerCase().includes(searchFilter) ||
+            e.raw.toLowerCase().includes(searchFilter);
+          if (!searchHit) return false;
+        }
+        if (sourceFilter && !e.source.toLowerCase().includes(sourceFilter)) return false;
+        if (levelFilter && e.level !== levelFilter) return false;
+        return true;
+      })
+      : allEntries;
 
     // Collect unique sources for the filter UI
-    const sources = Array.from(
-      new Set(allEntries.map((e) => e.source).filter(Boolean))
-    ).sort();
+    const sources = Array.from(sourceSet).sort();
 
     return NextResponse.json({
       entries: filtered.slice(0, limit),
       total: filtered.length,
       sources,
       fileSizes,
-      stats: {
-        info: allEntries.filter((e) => e.level === "info").length,
-        warn: allEntries.filter((e) => e.level === "warn").length,
-        error: allEntries.filter((e) => e.level === "error").length,
-      },
+      stats,
     });
   } catch (err) {
     console.error("Logs API error:", err);

@@ -180,15 +180,24 @@ function GogSetupPanel({
 
   useEffect(() => {
     if (!isMultipleAccounts) return;
-    setAccountsLoading(true);
-    fetch("/api/calendar/accounts", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((body: { accounts?: string[] }) => {
-        const list = body.accounts ?? [];
-        setAccounts(list);
-        if (list.length > 0) setSelected(list[0]);
-      })
-      .finally(() => setAccountsLoading(false));
+    let cancelled = false;
+    queueMicrotask(() => {
+      setAccountsLoading(true);
+      fetch("/api/calendar/accounts", { cache: "no-store" })
+        .then((r) => r.json())
+        .then((body: { accounts?: string[] }) => {
+          if (cancelled) return;
+          const list = body.accounts ?? [];
+          setAccounts(list);
+          if (list.length > 0) setSelected(list[0]);
+        })
+        .finally(() => {
+          if (!cancelled) setAccountsLoading(false);
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [isMultipleAccounts]);
 
   const handleUseAccount = () => {
@@ -754,7 +763,11 @@ export function CalendarView() {
   useEffect(() => {
     setLoading(true);
     void load();
-    intervalRef.current = setInterval(() => void load(), 5 * 60 * 1000);
+    intervalRef.current = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void load();
+      }
+    }, 5 * 60 * 1000);
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };

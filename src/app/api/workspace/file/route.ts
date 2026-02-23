@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
         "Cache-Control": "private, max-age=60",
       },
     });
-  } catch (err) {
+  } catch {
     return NextResponse.json(
       { error: "File not found or not readable" },
       { status: 404 }

@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ApiWarningBadge } from "@/components/ui/api-warning-badge";
 
 type PermissionSnapshot = {
   ts: number;
@@ -146,6 +147,8 @@ export function PermissionsView() {
   const [deviceMutating, setDeviceMutating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [apiWarning, setApiWarning] = useState<string | null>(null);
+  const [apiDegraded, setApiDegraded] = useState(false);
 
   const loadDevices = useCallback(async () => {
     setDevicesLoading(true);
@@ -153,10 +156,22 @@ export function PermissionsView() {
       const res = await fetch("/api/devices", { cache: "no-store" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
+      const warningText =
+        typeof data.warning === "string" && data.warning.trim()
+          ? data.warning.trim()
+          : null;
+      if (warningText) {
+        setApiWarning((prev) => prev || warningText);
+      }
+      if (data.degraded === true) {
+        setApiDegraded(true);
+      }
       setPairedDevices(Array.isArray(data.paired) ? (data.paired as PairedDevice[]) : []);
       setPendingDevices(Array.isArray(data.pending) ? (data.pending as PendingDeviceRequest[]) : []);
     } catch (err) {
       setError((prev) => prev || (err instanceof Error ? err.message : String(err)));
+      setApiWarning((prev) => prev || (err instanceof Error ? err.message : String(err)));
+      setApiDegraded(true);
     } finally {
       setDevicesLoading(false);
     }
@@ -164,16 +179,24 @@ export function PermissionsView() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setApiWarning(null);
+    setApiDegraded(false);
     try {
       const [permRes, agentsRes] = await Promise.all([
         fetch("/api/permissions", { cache: "no-store" }),
         fetch("/api/agents", { cache: "no-store" }).catch(() => null),
       ]);
-      await loadDevices();
       if (!permRes.ok) throw new Error(`HTTP ${permRes.status}`);
       const perm = (await permRes.json()) as PermissionSnapshot;
+      const permWarning =
+        perm && "warning" in perm && typeof perm.warning === "string" && perm.warning.trim()
+          ? perm.warning.trim()
+          : null;
+      if (permWarning) setApiWarning(permWarning);
+      if (perm && "degraded" in perm && perm.degraded === true) setApiDegraded(true);
       setSnapshot(perm);
       setError(null);
+      await loadDevices();
 
       if (agentsRes?.ok) {
         const data = await agentsRes.json();
@@ -330,7 +353,7 @@ export function PermissionsView() {
       setEditAsk(defaultsScope.ask || "on-miss");
       setEditAskFallback(defaultsScope.askFallback || "deny");
     }
-  }, [snapshot?.ts, defaultsScope?.security, defaultsScope?.ask, defaultsScope?.askFallback]);
+  }, [snapshot?.ts, defaultsScope, defaultsScope?.security, defaultsScope?.ask, defaultsScope?.askFallback]);
   const saveApprovalsDefaults = useCallback(() => {
     void mutate(
       {
@@ -372,15 +395,18 @@ export function PermissionsView() {
           </>
         }
         actions={
-          <button
-            type="button"
-            onClick={() => void load()}
-            disabled={loading || mutating}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/80 disabled:opacity-60"
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", (loading || mutating) && "animate-spin")} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <ApiWarningBadge warning={apiWarning} degraded={apiDegraded} />
+            <button
+              type="button"
+              onClick={() => void load()}
+              disabled={loading || mutating}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/80 disabled:opacity-60"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", (loading || mutating) && "animate-spin")} />
+              Refresh
+            </button>
+          </div>
         }
         className="bg-card/60"
       />

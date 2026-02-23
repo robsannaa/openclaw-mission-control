@@ -122,6 +122,29 @@ const MIME_TYPES: Record<string, string> = {
   ".aac": "audio/aac",
 };
 
+function emptyAudioPayload(warning: string) {
+  return {
+    status: {
+      enabled: false,
+      auto: "off",
+      provider: "",
+    },
+    providers: {
+      providers: [],
+      active: "",
+    },
+    config: {
+      tts: { resolved: {}, parsed: null },
+      talk: { resolved: {}, parsed: null },
+      audioUnderstanding: { resolved: {}, parsed: null },
+    },
+    prefs: null,
+    configHash: null,
+    warning,
+    degraded: true,
+  };
+}
+
 /**
  * GET /api/audio - Returns TTS status, providers, and config.
  *
@@ -229,7 +252,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error("Audio API GET error:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
+    return NextResponse.json(emptyAudioPayload(String(err)));
   }
 }
 
@@ -269,7 +292,7 @@ export async function POST(request: NextRequest) {
             15000
           );
           return NextResponse.json({ ok: true, action, mode });
-        } catch (_err) {
+        } catch {
           return NextResponse.json(
             { ok: false, error: "Could not update auto-TTS mode. Is the gateway running?" },
             { status: 502 }

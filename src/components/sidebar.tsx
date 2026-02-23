@@ -42,6 +42,7 @@ import {
   Globe,
   KeyRound,
   Search,
+  Heart,
 } from "lucide-react";
 import { getChatUnreadCount, subscribeChatStore } from "@/lib/chat-store";
 import {
@@ -60,42 +61,86 @@ const navItems: {
   dividerAfter?: boolean;
   comingSoon?: boolean;
 }[] = [
-  { section: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { section: "chat", label: "Chat", icon: MessageCircle },
-  { section: "channels", label: "Channels", icon: Radio },
-  { section: "agents", label: "Agents", icon: Users },
-  { section: "agents", label: "Subagents", icon: Users2, href: "/?section=agents&tab=subagents", tab: "subagents", isSubItem: true, dividerAfter: true },
-  { section: "tasks", label: "Tasks", icon: ListChecks },
-  { section: "sessions", label: "Sessions", icon: MessageSquare },
-  { section: "cron", label: "Cron Jobs", icon: Clock },
-  { section: "calendar", label: "Calendar", icon: CalendarDays, comingSoon: true },
-  { section: "memory", label: "Memory", icon: Brain },
-  { section: "docs", label: "Docs", icon: FolderOpen },
-  { section: "vectors", label: "Vector DB", icon: Database, dividerAfter: true },
-  { section: "skills", label: "Skills", icon: Wrench },
-  { section: "skills", label: "ClawHub", icon: Package, href: "/?section=skills&tab=clawhub", tab: "clawhub", isSubItem: true },
-  { section: "models", label: "Models", icon: Cpu },
-  { section: "accounts", label: "Accounts & Keys", icon: KeyRound },
-  { section: "audio", label: "Audio & Voice", icon: Volume2 },
-  { section: "browser", label: "Browser Relay", icon: Globe },
-  { section: "search", label: "Web Search", icon: Search },
-  { section: "tailscale", label: "Tailscale", icon: Waypoints },
-  { section: "permissions", label: "Permissions", icon: Shield, dividerAfter: true },
-  { section: "usage", label: "Usage", icon: BarChart3 },
-  { section: "terminal", label: "Terminal", icon: SquareTerminal },
-  { section: "logs", label: "Logs", icon: Terminal },
-  { section: "config", label: "Config", icon: Settings },
+  { section: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  { section: "chat", label: "Chat", icon: MessageCircle, href: "/chat" },
+  { section: "channels", label: "Channels", icon: Radio, href: "/channels" },
+  { section: "agents", label: "Agents", icon: Users, href: "/agents" },
+  { section: "agents", label: "Subagents", icon: Users2, href: "/agents?tab=subagents", tab: "subagents", isSubItem: true, dividerAfter: true },
+  { section: "tasks", label: "Tasks", icon: ListChecks, href: "/tasks" },
+  { section: "sessions", label: "Sessions", icon: MessageSquare, href: "/sessions" },
+  { section: "cron", label: "Cron Jobs", icon: Clock, href: "/cron" },
+  { section: "heartbeat", label: "Heartbeat", icon: Heart, href: "/heartbeat", isSubItem: true },
+  { section: "calendar", label: "Calendar", icon: CalendarDays, comingSoon: true, href: "/calendar" },
+  { section: "memory", label: "Memory", icon: Brain, href: "/memory" },
+  { section: "docs", label: "Docs", icon: FolderOpen, href: "/docs" },
+  { section: "vectors", label: "Vector DB", icon: Database, dividerAfter: true, href: "/vectors" },
+  { section: "skills", label: "Skills", icon: Wrench, href: "/skills" },
+  { section: "skills", label: "ClawHub", icon: Package, href: "/skills?tab=clawhub", tab: "clawhub", isSubItem: true },
+  { section: "models", label: "Models", icon: Cpu, href: "/models" },
+  { section: "accounts", label: "Accounts & Keys", icon: KeyRound, href: "/accounts" },
+  { section: "audio", label: "Audio & Voice", icon: Volume2, href: "/audio" },
+  { section: "browser", label: "Browser Relay", icon: Globe, href: "/browser" },
+  { section: "search", label: "Web Search", icon: Search, href: "/search" },
+  { section: "tailscale", label: "Tailscale", icon: Waypoints, href: "/tailscale" },
+  { section: "permissions", label: "Permissions", icon: Shield, dividerAfter: true, href: "/permissions" },
+  { section: "usage", label: "Usage", icon: BarChart3, href: "/usage" },
+  { section: "terminal", label: "Terminal", icon: SquareTerminal, href: "/terminal" },
+  { section: "logs", label: "Logs", icon: Terminal, href: "/logs" },
+  { section: "config", label: "Config", icon: Settings, href: "/config" },
 ];
 
 const SIDEBAR_COLLAPSED_KEY = "sidebar_collapsed";
 
+function deriveSectionFromPath(pathname: string): string | null {
+  if (!pathname || pathname === "/") return null;
+  if (pathname.startsWith("/skills/")) return "skills";
+  const first = pathname.split("/").filter(Boolean)[0] || "";
+  const aliases: Record<string, string> = {
+    system: "channels",
+    documents: "docs",
+    memories: "memory",
+    settings: "config",
+  };
+  if (aliases[first]) return aliases[first];
+  const known = new Set([
+    "dashboard",
+    "chat",
+    "agents",
+    "tasks",
+    "sessions",
+    "cron",
+    "heartbeat",
+    "channels",
+    "memory",
+    "docs",
+    "vectors",
+    "skills",
+    "models",
+    "accounts",
+    "audio",
+    "browser",
+    "search",
+    "tailscale",
+    "permissions",
+    "usage",
+    "terminal",
+    "logs",
+    "config",
+    "calendar",
+  ]);
+  return known.has(first) ? first : null;
+}
+
 function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const sectionFromPath = deriveSectionFromPath(pathname);
   const sectionFromQuery = searchParams.get("section") || "dashboard";
   const tabFromQuery = (searchParams.get("tab") || "").toLowerCase();
   const isSkillDetailRoute = pathname.startsWith("/skills/");
-  const section = isSkillDetailRoute ? "skills" : sectionFromQuery;
+  const section = isSkillDetailRoute
+    ? "skills"
+    : sectionFromPath || sectionFromQuery;
   const tab = isSkillDetailRoute ? "skills" : tabFromQuery;
   const [skillsExpanded, setSkillsExpanded] = useState(true);
   const [agentsExpanded, setAgentsExpanded] = useState(true);
@@ -155,7 +200,7 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
               (isSkillsParent || isAgentsParent) && !collapsed ? (
                 <div className={linkClass}>
                   <Link
-                    href={item.href || `/?section=${item.section}`}
+                    href={item.href || `/${item.section}`}
                     onClick={onNavigate}
                     className="flex min-w-0 flex-1 items-center gap-3"
                   >
@@ -190,7 +235,7 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                 </div>
               ) : (
                 <Link
-                  href={item.href || `/?section=${item.section}`}
+                  href={item.href || `/${item.section}`}
                   onClick={onNavigate}
                   className={linkClass}
                   title={collapsed ? item.label : undefined}

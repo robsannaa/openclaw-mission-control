@@ -443,12 +443,6 @@ export function UsageView() {
 
   const activeBucket = useMemo(() => (data ? data.buckets[period] : null), [data, period]);
 
-  const activitySeries = useMemo(() => {
-    if (!data) return [];
-    const source = data.activitySeries || fallbackSeriesFromBuckets(data.buckets);
-    return source[period] || [];
-  }, [data, period]);
-
   /** Token Flow chart series: all or filtered by selected model */
   const tokenFlowSeries = useMemo(() => {
     if (!data) return [];

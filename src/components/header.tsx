@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Suspense,
   useState,
   useEffect,
   useCallback,
@@ -730,7 +731,9 @@ export function Header() {
         </div>
       </header>
 
-      <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      <Suspense fallback={null}>
+        <SearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+      </Suspense>
     </>
   );
 }

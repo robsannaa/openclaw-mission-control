@@ -606,7 +606,7 @@ export function ChannelsView() {
                         Setup Another
                       </button>
                       <Link
-                        href="/?section=terminal"
+                        href="/terminal"
                         className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500"
                       >
                         Open Terminal

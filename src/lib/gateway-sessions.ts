@@ -3,6 +3,7 @@ import { gatewayCall } from "@/lib/openclaw-cli";
 export type GatewaySession = {
   key?: string | null;
   kind?: string | null;
+  agentId?: string | null;
   sessionId?: string | null;
   updatedAt?: number | string | null;
   ageMs?: number | string | null;
@@ -78,12 +79,21 @@ function normalizeGatewaySession(
   now: number
 ): NormalizedGatewaySession {
   const key = String(session.key || "");
+  const explicitAgentId =
+    typeof session.agentId === "string" && session.agentId.trim().length > 0
+      ? session.agentId.trim()
+      : null;
   const updatedAt = toEpochMs(session.updatedAt);
   const rawAgeMs = toNonNegativeNumber(session.ageMs);
   const ageMs = rawAgeMs > 0 ? rawAgeMs : updatedAt > 0 ? Math.max(0, now - updatedAt) : 0;
   const sessionId = String(session.sessionId || key || "");
   const modelProvider = session.modelProvider ? String(session.modelProvider) : undefined;
   const model = String(session.model || "unknown");
+  const inputTokens = toNonNegativeNumber(session.inputTokens);
+  const outputTokens = toNonNegativeNumber(session.outputTokens);
+  const totalTokensRaw = toNonNegativeNumber(session.totalTokens);
+  // sessions.list may omit totalTokens while still exposing input/output.
+  const totalTokens = totalTokensRaw > 0 ? totalTokensRaw : inputTokens + outputTokens;
   const fullModel = model.includes("/")
     ? model
     : modelProvider
@@ -92,13 +102,13 @@ function normalizeGatewaySession(
   return {
     key,
     kind: String(session.kind || "direct"),
-    agentId: inferAgentIdFromSessionKey(key),
+    agentId: explicitAgentId || inferAgentIdFromSessionKey(key),
     sessionId,
     updatedAt,
     ageMs,
-    inputTokens: toNonNegativeNumber(session.inputTokens),
-    outputTokens: toNonNegativeNumber(session.outputTokens),
-    totalTokens: toNonNegativeNumber(session.totalTokens),
+    inputTokens,
+    outputTokens,
+    totalTokens,
     totalTokensFresh: Boolean(session.totalTokensFresh),
     contextTokens: toNonNegativeNumber(session.contextTokens),
     modelProvider,

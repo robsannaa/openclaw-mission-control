@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
 import { requestRestart } from "@/lib/restart-store";
@@ -359,14 +359,11 @@ function StringField({
   disabled?: boolean;
 }) {
   const [show, setShow] = useState(!sensitive);
-  // Sync with global "Secrets" toggle: when parent reveals/hides secrets, update visibility
-  useEffect(() => {
-    setShow(!sensitive);
-  }, [sensitive]);
+  const inputType = sensitive ? (show ? "text" : "password") : "text";
   return (
     <div className="flex items-center gap-1">
       <input
-        type={show ? "text" : "password"}
+        type={inputType}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
@@ -590,7 +587,10 @@ function ModelPrimaryFallbacksEditor({
   disabled: boolean;
 }) {
   const primary = typeof value.primary === "string" ? value.primary : "";
-  const fallbacks = Array.isArray(value.fallbacks) ? value.fallbacks.map((f) => String(f)) : [];
+  const fallbacks = useMemo(
+    () => (Array.isArray(value.fallbacks) ? value.fallbacks.map((f) => String(f)) : []),
+    [value.fallbacks]
+  );
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   const update = useCallback(
@@ -1196,6 +1196,7 @@ function renderField(
     case "string":
       return (
         <StringField
+          key={sensitive ? "masked" : "plain"}
           value={String(value ?? "")}
           onChange={onChange}
           sensitive={sensitive}
@@ -1480,7 +1481,7 @@ export function ConfigEditor() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [showSensitive, setShowSensitive] = useState(false);
   const [search, setSearch] = useState("");
-  const [pendingChanges, setPendingChanges] = useState<
+  const [, setPendingChanges] = useState<
     Record<string, unknown>
   >({});
   const [showRestart, setShowRestart] = useState(false);
@@ -1758,7 +1759,9 @@ export function ConfigEditor() {
         )}
         <button
           type="button"
-          onClick={fetchConfig}
+          onClick={() => {
+            void fetchConfig();
+          }}
           className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-muted/50 px-3 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-muted/80"
         >
           <RefreshCw className="h-3.5 w-3.5" />
@@ -1829,7 +1832,9 @@ export function ConfigEditor() {
 
             <button
               type="button"
-              onClick={fetchConfig}
+              onClick={() => {
+                void fetchConfig();
+              }}
               className="rounded-lg border border-foreground/10 p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground/70"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -1933,7 +1938,7 @@ export function ConfigEditor() {
                       folding: true,
                       semanticHighlighting: { enabled: true },
                       readOnly: !showSensitive,
-                    }}
+                    } as unknown as NonNullable<React.ComponentProps<typeof MonacoEditor>["options"]>}
                   />
                 </div>
               </div>

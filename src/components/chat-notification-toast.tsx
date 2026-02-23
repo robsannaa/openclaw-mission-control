@@ -65,7 +65,7 @@ export function ChatNotificationToast() {
   const goToChat = useCallback(
     (id: string) => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
-      router.push("/?section=chat");
+      router.push("/chat");
     },
     [router]
   );

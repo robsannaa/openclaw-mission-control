@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @next/next/no-img-element */
 
 import {
   useEffect,
@@ -245,19 +246,20 @@ function ChatPanel({
   agentModel,
   isSelected,
   isVisible,
+  availableModels,
 }: {
   agentId: string;
   agentName: string;
   agentModel: string;
   isSelected: boolean;
   isVisible: boolean;
+  availableModels: Array<{ key: string; name: string }>;
 }) {
   const [inputValue, setInputValue] = useState("");
   const [modelOverride, setModelOverride] = useState<string | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
-  const [availableModels, setAvailableModels] = useState<Array<{ key: string; name: string }>>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -291,22 +293,6 @@ function ChatPanel({
     const files = e.dataTransfer.files;
     if (files?.length) addFiles(files);
   }, [addFiles]);
-
-  // Fetch available models for dropdown
-  useEffect(() => {
-    fetch("/api/models?scope=configured", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data) => {
-        const list = Array.isArray(data.models) ? data.models : [];
-        setAvailableModels(
-          list.map((m: { key?: string; name?: string }) => ({
-            key: String(m.key ?? ""),
-            name: String(m.name ?? m.key ?? ""),
-          })).filter((m: { key: string }) => m.key)
-        );
-      })
-      .catch(() => {});
-  }, []);
 
   // Close model menu on click outside
   useEffect(() => {
@@ -469,18 +455,23 @@ function ChatPanel({
           <div className="mx-auto max-w-3xl px-4 py-6">
             {messages.map((message) => {
               const isUser = message.role === "user";
+              const parts = message.parts ?? [];
               const text =
-                message.parts
-                  ?.filter(
-                    (p): p is { type: "text"; text: string } =>
+                parts
+                  .filter(
+                    (
+                      p
+                    ): p is Extract<(typeof parts)[number], { type: "text" }> =>
                       p.type === "text"
                   )
                   .map((p) => p.text)
                   .join("") || "";
-              const fileParts = (message.parts?.filter(
-                (p): p is { type: "file"; url?: string; filename?: string; mediaType?: string } =>
+              const fileParts = parts.filter(
+                (
+                  p
+                ): p is Extract<(typeof parts)[number], { type: "file" }> =>
                   p.type === "file"
-              ) ?? []) as Array<{ type: "file"; url?: string; filename?: string; mediaType?: string }>;
+              );
               const imageParts = fileParts.filter(
                 (p) => p.url && /^image\//i.test(p.mediaType ?? "")
               );
@@ -794,6 +785,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>("main");
   const [agentsLoading, setAgentsLoading] = useState(true);
+  const [availableModels, setAvailableModels] = useState<Array<{ key: string; name: string }>>([]);
   const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -828,15 +820,45 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   }, [selectedAgent]);
 
   useEffect(() => {
-    queueMicrotask(() => fetchAgents());
-    const interval = setInterval(fetchAgents, 30000);
+    queueMicrotask(() => {
+      if (isVisible) void fetchAgents();
+    });
+    const interval = setInterval(() => {
+      if (isVisible && document.visibilityState === "visible") {
+        void fetchAgents();
+      }
+    }, 30000);
     return () => clearInterval(interval);
-  }, [fetchAgents]);
+  }, [fetchAgents, isVisible]);
 
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 5000);
-    return () => clearInterval(id);
+    fetch("/api/models?scope=configured", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        const list = Array.isArray(data.models) ? data.models : [];
+        setAvailableModels(
+          list
+            .map((m: { key?: string; name?: string }) => ({
+              key: String(m.key ?? ""),
+              name: String(m.name ?? m.key ?? ""),
+            }))
+            .filter((m: { key: string }) => m.key)
+        );
+      })
+      .catch(() => { });
   }, []);
+
+  useEffect(() => {
+    if (!isVisible) return;
+    const tick = () => {
+      if (document.visibilityState === "visible") {
+        setNow(Date.now());
+      }
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => clearInterval(id);
+  }, [isVisible]);
 
   // When user selects an agent, ensure it's in the mounted set
   const selectAgent = useCallback((agentId: string) => {
@@ -990,6 +1012,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
             agentModel={agent?.model || "unknown"}
             isSelected={agentId === selectedAgent}
             isVisible={isVisible}
+            availableModels={availableModels}
           />
         );
       })}

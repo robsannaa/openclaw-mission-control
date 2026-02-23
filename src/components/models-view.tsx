@@ -15,6 +15,7 @@ import {
 import { requestRestart } from "@/lib/restart-store";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/ui/loading-state";
+import { ApiWarningBadge } from "@/components/ui/api-warning-badge";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 
 type ModelInfo = {
@@ -324,6 +325,8 @@ export function ModelsView() {
   const [agentAuthProfiles, setAgentAuthProfiles] = useState<AgentAuthProfileStore[]>([]);
   const [modelCredsError, setModelCredsError] = useState<string | null>(null);
   const [revealModelSecrets, setRevealModelSecrets] = useState(false);
+  const [apiWarning, setApiWarning] = useState<string | null>(null);
+  const [apiDegraded, setApiDegraded] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
@@ -340,6 +343,12 @@ export function ModelsView() {
     try {
       const res = await fetch("/api/models?scope=status", { cache: "no-store" });
       const data = await res.json();
+      setApiWarning(
+        typeof data.warning === "string" && data.warning.trim()
+          ? data.warning.trim()
+          : null
+      );
+      setApiDegraded(Boolean(data.degraded));
       if (data.error) {
         console.warn("Models API partial error:", data.error);
       }
@@ -398,6 +407,8 @@ export function ModelsView() {
       }
     } catch (err) {
       console.warn("Failed to fetch models:", err);
+      setApiWarning(err instanceof Error ? err.message : String(err));
+      setApiDegraded(true);
       flash("Failed to load models", "error");
     } finally {
       setLoading(false);
@@ -745,18 +756,21 @@ export function ModelsView() {
         title="Models"
         description="See and switch each agent's model — saved, in-use, and last session."
         actions={
-          <button
-            type="button"
-            onClick={() => {
-              setLoading(true);
-              fetchModels();
-            }}
-            disabled={Boolean(busyKey)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", busyKey && "animate-spin")} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <ApiWarningBadge warning={apiWarning} degraded={apiDegraded} />
+            <button
+              type="button"
+              onClick={() => {
+                setLoading(true);
+                fetchModels();
+              }}
+              disabled={Boolean(busyKey)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", busyKey && "animate-spin")} />
+              Refresh
+            </button>
+          </div>
         }
       />
 

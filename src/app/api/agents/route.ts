@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile, writeFile, readdir } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome, getDefaultWorkspaceSync } from "@/lib/paths";
-import { runCliJson, runCli } from "@/lib/openclaw-cli";
+import { runCliJson, runCli, parseJsonFromCliOutput } from "@/lib/openclaw-cli";
 import { fetchGatewaySessions, summarizeSessionsByAgent } from "@/lib/gateway-sessions";
 
 const OPENCLAW_HOME = getOpenClawHome();
@@ -54,6 +54,20 @@ type AgentFull = {
 
 const SUBAGENT_RECENT_WINDOW_MS = 30 * 60 * 1000;
 const SUBAGENT_ACTIVE_WINDOW_MS = 2 * 60 * 1000;
+const AGENTS_CACHE_TTL_MS = 5000;
+
+type AgentsGetPayload = {
+  agents: AgentFull[];
+  owner: string | null;
+  defaultModel: string;
+  defaultFallbacks: string[];
+  configuredChannels: Array<{
+    channel: string;
+    enabled: boolean;
+  }>;
+};
+
+let agentsCache: { payload: AgentsGetPayload; expiresAt: number } | null = null;
 
 function asRecord(v: unknown): Record<string, unknown> {
   return v && typeof v === "object" && !Array.isArray(v)
@@ -124,6 +138,11 @@ async function readTextSafe(path: string): Promise<string | null> {
  */
 export async function GET() {
   try {
+    const now = Date.now();
+    if (agentsCache && now < agentsCache.expiresAt) {
+      return NextResponse.json(agentsCache.payload);
+    }
+
     // 1. Get agents from CLI (includes binding info)
     let cliAgents: CliAgent[] = [];
     try {
@@ -153,6 +172,10 @@ export async function GET() {
       (configList.find((c) => String(c.id || "") === "main")?.id as string | undefined) ||
       (configList.find((c) => typeof c.id === "string")?.id as string | undefined) ||
       "main";
+    const cliById = new Map<string, CliAgent>();
+    for (const agent of cliAgents) {
+      cliById.set(agent.id, agent);
+    }
 
     // Bindings in openclaw.json are the persisted routing truth.
     // Merge with CLI-reported bindings to avoid stale UI after recent edits.
@@ -238,6 +261,7 @@ export async function GET() {
     }
 
     const agents: AgentFull[] = [];
+    const workspaceIdentityCache = new Map<string, string | null>();
 
     // Determine the set of agent ids to process
     const agentIds = new Set<string>();
@@ -262,7 +286,7 @@ export async function GET() {
     }
 
     for (const id of agentIds) {
-      const cli = cliAgents.find((a) => a.id === id);
+      const cli = cliById.get(id);
       const cfg = configMap.get(id) || {};
 
       // Name / emoji — strip markdown template hints like "_(or ...)"
@@ -337,7 +361,11 @@ export async function GET() {
 
       // Identity snippet (first few meaningful lines)
       let identitySnippet: string | null = null;
-      const idFile = await readTextSafe(join(workspace, "IDENTITY.md"));
+      let idFile = workspaceIdentityCache.get(workspace);
+      if (idFile === undefined) {
+        idFile = await readTextSafe(join(workspace, "IDENTITY.md"));
+        workspaceIdentityCache.set(workspace, idFile);
+      }
       if (idFile) {
         const lines = idFile
           .split("\n")
@@ -405,13 +433,19 @@ export async function GET() {
       // ok
     }
 
-    return NextResponse.json({
+    const payload: AgentsGetPayload = {
       agents,
       owner: ownerName,
       defaultModel: defaultPrimary,
       defaultFallbacks,
       configuredChannels,
-    });
+    };
+    agentsCache = {
+      payload,
+      expiresAt: Date.now() + AGENTS_CACHE_TTL_MS,
+    };
+
+    return NextResponse.json(payload);
   } catch (err) {
     console.error("Agents API error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
@@ -426,6 +460,9 @@ export async function GET() {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Invalidate GET cache for any mutation action.
+    agentsCache = null;
+
     const body = await request.json();
     const action = body.action as string;
 
@@ -472,7 +509,10 @@ export async function POST(request: NextRequest) {
         // Try to parse JSON output
         let result: Record<string, unknown> = {};
         try {
-          result = JSON.parse(output);
+          result = parseJsonFromCliOutput<Record<string, unknown>>(
+            output,
+            "openclaw agents add --json"
+          );
         } catch {
           result = { raw: output };
         }

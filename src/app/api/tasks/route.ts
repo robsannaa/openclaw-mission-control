@@ -47,7 +47,8 @@ export async function PUT(request: NextRequest) {
     }
     const kanbanPath = await getKanbanPath();
     // Strip internal fields before saving
-    const { _fileExists: __fileExists, ...saveData } = body;
+    const { _fileExists: _, ...saveData } = body;
+    void _;
     await writeFile(kanbanPath, JSON.stringify(saveData, null, 2), "utf-8");
     notifyKanbanUpdated();
     return NextResponse.json({ ok: true });

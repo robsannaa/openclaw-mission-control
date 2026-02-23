@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
+import { ApiWarningBadge } from "@/components/ui/api-warning-badge";
 
 /* ── Types ────────────────────────────────────────── */
 
@@ -122,12 +123,6 @@ const AUTO_MODES = [
   { value: "inbound", label: "Inbound", desc: "Voice-reply to voice messages" },
   { value: "tagged", label: "Tagged", desc: "Only /tts tagged messages" },
 ];
-
-function formatBytes(b: number): string {
-  if (b >= 1048576) return `${(b / 1048576).toFixed(0)} MB`;
-  if (b >= 1024) return `${(b / 1024).toFixed(0)} KB`;
-  return `${b} B`;
-}
 
 /* ── Toast Component ─────────────────────────────── */
 
@@ -347,7 +342,6 @@ function AudioPlayer({
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [_ready, setReady] = useState(false);
 
   const audioUrl = `/api/audio?scope=stream&path=${encodeURIComponent(result.path)}`;
 
@@ -356,7 +350,6 @@ function AudioPlayer({
     if (!audio) return;
 
     const onCanPlay = () => {
-      setReady(true);
       // Auto-play when audio is ready
       if (autoPlay) {
         audio.play().then(() => setPlaying(true)).catch(() => {});
@@ -370,7 +363,7 @@ function AudioPlayer({
       setPlaying(false);
       setProgress(1);
     };
-    const onError = () => setReady(false);
+    const onError = () => {};
 
     audio.addEventListener("canplay", onCanPlay);
     audio.addEventListener("timeupdate", onTimeUpdate);
@@ -662,13 +655,32 @@ function TalkModeSection({
     (config && Object.keys(config).length > 0) || talkSectionExists === true;
 
   const startListening = useCallback(() => {
-    const SpeechRecognition =
+    type BrowserSpeechRecognition = {
+      continuous: boolean;
+      interimResults: boolean;
+      lang: string;
+      onresult: ((event: BrowserSpeechRecognitionEvent) => void) | null;
+      onerror: (() => void) | null;
+      onend: (() => void) | null;
+      start: () => void;
+    };
+    type BrowserSpeechRecognitionEvent = {
+      results?: ArrayLike<ArrayLike<{ transcript?: string }>>;
+    };
+    type BrowserSpeechRecognitionCtor = new () => BrowserSpeechRecognition;
+
+    const speechRecognitionCtor =
       typeof window !== "undefined" &&
-      (window as unknown as { SpeechRecognition?: new () => SpeechRecognition; webkitSpeechRecognition?: new () => SpeechRecognition }).SpeechRecognition;
-    const WebkitSpeechRecognition =
+      (window as unknown as {
+        SpeechRecognition?: BrowserSpeechRecognitionCtor;
+        webkitSpeechRecognition?: BrowserSpeechRecognitionCtor;
+      }).SpeechRecognition;
+    const webkitSpeechRecognitionCtor =
       typeof window !== "undefined" &&
-      (window as unknown as { webkitSpeechRecognition?: new () => SpeechRecognition }).webkitSpeechRecognition;
-    const Recognition = SpeechRecognition || WebkitSpeechRecognition;
+      (window as unknown as {
+        webkitSpeechRecognition?: BrowserSpeechRecognitionCtor;
+      }).webkitSpeechRecognition;
+    const Recognition = speechRecognitionCtor || webkitSpeechRecognitionCtor;
     if (!Recognition) {
       return;
     }
@@ -677,7 +689,7 @@ function TalkModeSection({
     rec.interimResults = false;
     rec.lang = "en-US";
     setListening(true);
-    rec.onresult = (event: SpeechRecognitionEvent) => {
+    rec.onresult = (event: BrowserSpeechRecognitionEvent) => {
       const transcript = event.results?.[0]?.[0]?.transcript;
       if (transcript) setTestMessage((prev) => (prev ? `${prev} ${transcript}` : transcript).trim());
       setListening(false);
@@ -1018,6 +1030,8 @@ function TtsSettingsPanel({
 
 export function AudioView() {
   const [data, setData] = useState<AudioFullState | null>(null);
+  const [apiWarning, setApiWarning] = useState<string | null>(null);
+  const [apiDegraded, setApiDegraded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [talkEnabling, setTalkEnabling] = useState(false);
@@ -1047,10 +1061,21 @@ export function AudioView() {
     try {
       const res = await fetch("/api/audio");
       if (!res.ok) throw new Error("Failed");
-      const json = await res.json();
+      const json = (await res.json()) as AudioFullState & {
+        warning?: unknown;
+        degraded?: unknown;
+      };
+      setApiWarning(
+        typeof json.warning === "string" && json.warning.trim()
+          ? json.warning.trim()
+          : null
+      );
+      setApiDegraded(Boolean(json.degraded));
       setData(json);
     } catch (err) {
       console.error("Audio fetch error:", err);
+      setApiWarning(err instanceof Error ? err.message : String(err));
+      setApiDegraded(true);
     } finally {
       setLoading(false);
     }
@@ -1346,12 +1371,15 @@ export function AudioView() {
         description="Text-to-speech, Talk Mode, and audio understanding configuration"
         descriptionClassName="text-sm text-muted-foreground"
         actions={
-          <button
-            onClick={fetchData}
-            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground/70"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <ApiWarningBadge warning={apiWarning} degraded={apiDegraded} />
+            <button
+              onClick={fetchData}
+              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground/70"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
         }
       />
 
@@ -1585,29 +1613,5 @@ export function AudioView() {
 
       {toast && <ToastBar toast={toast} onDone={() => setToast(null)} />}
     </SectionLayout>
-  );
-}
-
-/* ── Status Card ─────────────────────────────────── */
-
-function StatusCard({
-  label,
-  value,
-  icon: Icon,
-  color,
-}: {
-  label: string;
-  value: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-}) {
-  return (
-    <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-3">
-      <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wider text-muted-foreground mb-1">
-        <Icon className={cn("h-3.5 w-3.5", color)} />
-        {label}
-      </div>
-      <p className="text-xs font-semibold text-foreground/90 capitalize">{value}</p>
-    </div>
   );
 }

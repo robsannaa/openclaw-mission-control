@@ -149,7 +149,7 @@ export function InlineMarkdownEditor({
   useEffect(() => {
     if (content !== lastEmittedRef.current) {
       lastEmittedRef.current = content;
-      setLocalValue(content);
+      queueMicrotask(() => setLocalValue(content));
     }
   }, [content]);
 

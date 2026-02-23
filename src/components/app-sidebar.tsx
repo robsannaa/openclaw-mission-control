@@ -1,39 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import {
+  LayoutDashboard,
   LayoutGrid,
-  FileText,
-  CheckSquare,
-  Crown,
+  Clock,
   Calendar,
-  Briefcase,
   Brain,
   FolderOpen,
   Users,
-  Building2,
-  UserCircle,
+  Radio,
+  Cpu,
+  Settings,
 } from "lucide-react";
 
 const navItems: { section: string; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { section: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { section: "tasks", label: "Tasks", icon: LayoutGrid },
-  { section: "content", label: "Content", icon: FileText },
-  { section: "approvals", label: "Approvals", icon: CheckSquare },
-  { section: "council", label: "Council", icon: Crown },
+  { section: "cron", label: "Cron Jobs", icon: Clock },
   { section: "calendar", label: "Calendar", icon: Calendar },
-  { section: "projects", label: "Projects", icon: Briefcase },
+  { section: "channels", label: "Channels", icon: Radio },
   { section: "memory", label: "Memory", icon: Brain },
   { section: "docs", label: "Docs", icon: FolderOpen },
-  { section: "people", label: "People", icon: Users },
-  { section: "office", label: "Office", icon: Building2 },
-  { section: "team", label: "Team", icon: UserCircle },
+  { section: "agents", label: "Agents", icon: Users },
+  { section: "models", label: "Models", icon: Cpu },
+  { section: "config", label: "Config", icon: Settings },
 ];
 
 export function AppSidebar() {
-  const searchParams = useSearchParams();
-  const section = searchParams.get("section") || "tasks";
+  const pathname = usePathname();
+  const first = (pathname || "/")
+    .split("/")
+    .filter(Boolean)[0] || "tasks";
+  const aliases: Record<string, string> = {
+    memories: "memory",
+    documents: "docs",
+    settings: "config",
+  };
+  const section = aliases[first] || first;
 
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-foreground/10 bg-secondary">
@@ -43,7 +49,7 @@ export function AppSidebar() {
           return (
             <Link
               key={item.label}
-              href={"/?section=" + item.section}
+              href={"/" + item.section}
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 section === item.section

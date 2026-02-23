@@ -108,6 +108,25 @@ function normalizeModelConfig(modelValue: unknown): DefaultsModelConfig {
   return { primary, fallbacks };
 }
 
+function fallbackModelStatus(
+  defaultsModel: DefaultsModelConfig | null,
+  models: ModelInfo[]
+): ModelStatus {
+  const allowed = models.map((m) => String(m.key || "")).filter(Boolean);
+  const primary =
+    defaultsModel?.primary ||
+    (allowed.length > 0 ? allowed[0] : "unknown");
+  return {
+    defaultModel: primary,
+    resolvedDefault: primary,
+    fallbacks: defaultsModel?.fallbacks || [],
+    imageModel: "",
+    imageFallbacks: [],
+    aliases: {},
+    allowed,
+  };
+}
+
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((v, i) => v === b[i]);
@@ -374,12 +393,25 @@ export async function GET(request: NextRequest) {
     if (scope === "status") {
       const args = ["models", "status"];
       if (agentId) args.push("--agent", agentId);
-      const status = await runCliJson<ModelStatus>(args, 10000);
+      let status: ModelStatus | null = null;
+      let statusWarning: string | null = null;
+      try {
+        status = await runCliJson<ModelStatus>(args, 10000);
+      } catch (err) {
+        statusWarning = String(err);
+      }
 
       // Also get configured models for display names
       const listArgs = ["models", "list"];
       if (agentId) listArgs.push("--agent", agentId);
-      const list = await runCliJson<{ models: ModelInfo[] }>(listArgs, 10000);
+      let listModels: ModelInfo[] = [];
+      let listWarning: string | null = null;
+      try {
+        const list = await runCliJson<{ models: ModelInfo[] }>(listArgs, 10000);
+        listModels = list.models || [];
+      } catch (err) {
+        listWarning = String(err);
+      }
 
       // Get per-agent configs from gateway (non-critical — gracefully degrade)
       let defaultsModel: DefaultsModelConfig | null = null;
@@ -495,37 +527,52 @@ export async function GET(request: NextRequest) {
           agentStatuses[entry[0]] = entry[1];
         }
       }
-      const statusForResponse = defaultsModel
-        ? {
-            ...status,
-            defaultModel: defaultsModel.primary || status.defaultModel,
-            fallbacks: defaultsModel.fallbacks,
-          }
-        : status;
+      const statusForResponse = status
+        ? defaultsModel
+          ? {
+              ...status,
+              defaultModel: defaultsModel.primary || status.defaultModel,
+              fallbacks: defaultsModel.fallbacks,
+            }
+          : status
+        : fallbackModelStatus(defaultsModel, listModels);
+
+      const warning = [statusWarning, listWarning].filter(Boolean).join(" | ");
 
       return jsonNoStore({
         status: statusForResponse,
         defaults: defaultsModel,
         heartbeat: defaultsHeartbeat,
-        models: list.models || [],
+        models: listModels,
         agents: agentsList,
         agentStatuses,
         liveModels,
         configHash,
+        warning: warning || undefined,
       });
     }
 
     if (scope === "all") {
       // Fetch models and auth status in parallel
-      const [list, statusData] = await Promise.all([
+      const [listResult, statusData] = await Promise.all([
         runCliJson<{ count: number; models: ModelInfo[] }>(
           ["models", "list", "--all"],
           15000
-        ),
+        ).catch((err) => ({ error: String(err) })),
         runCliJson<Record<string, unknown>>(["models", "status"], 10000).catch(
           () => null
         ),
       ]);
+
+      const listError = "error" in listResult ? listResult.error : null;
+      const listModels =
+        "models" in listResult && Array.isArray(listResult.models)
+          ? listResult.models
+          : [];
+      const listCount =
+        "count" in listResult && typeof listResult.count === "number"
+          ? listResult.count
+          : listModels.length;
 
       // Extract auth providers from status
       const auth = (statusData?.auth || {}) as Record<string, unknown>;
@@ -554,19 +601,43 @@ export async function GET(request: NextRequest) {
         remainingMs: p.remainingMs,
       }));
 
+      const fallbackAllowed = Array.isArray(statusData?.allowed)
+        ? (statusData?.allowed as unknown[]).map((m) => String(m)).filter(Boolean)
+        : [];
+      const fallbackModels: ModelInfo[] = fallbackAllowed.map((key) => ({
+        key,
+        name: key,
+        input: "",
+        contextWindow: 0,
+        local: key.startsWith("ollama/"),
+        available: true,
+        tags: [],
+        missing: false,
+      }));
+      const models = listModels.length > 0 ? listModels : fallbackModels;
+      const count = listModels.length > 0 ? listCount : fallbackModels.length;
+
       return jsonNoStore({
-        count: list.count,
-        models: list.models || [],
+        count,
+        models,
         authProviders,
         oauthProfiles,
+        warning: listError || undefined,
       });
     }
 
     // scope=configured
     const args = ["models", "list"];
     if (agentId) args.push("--agent", agentId);
-    const list = await runCliJson<{ models: ModelInfo[] }>(args, 10000);
-    return jsonNoStore({ models: list.models || [] });
+    try {
+      const list = await runCliJson<{ models: ModelInfo[] }>(args, 10000);
+      return jsonNoStore({ models: list.models || [] });
+    } catch (err) {
+      return jsonNoStore({
+        models: [],
+        warning: String(err),
+      });
+    }
   } catch (err) {
     console.error("Models API GET error:", err);
     return jsonNoStore({ error: String(err) }, { status: 500 });

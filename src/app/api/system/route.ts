@@ -6,6 +6,7 @@ import { fetchGatewaySessions, type NormalizedGatewaySession } from "@/lib/gatew
 
 const OPENCLAW_HOME = getOpenClawHome();
 export const dynamic = "force-dynamic";
+const SYSTEM_CACHE_TTL_MS = 5000;
 
 type AgentInfo = {
   id: string;
@@ -63,6 +64,32 @@ type SessionInfo = {
   agentId: string;
 };
 
+type SystemPayload = {
+  agents: AgentInfo[];
+  channels: ChannelInfo[];
+  devices: DeviceInfo[];
+  skills: SkillInfo[];
+  sessions: SessionInfo[];
+  gateway: {
+    port: string | number;
+    mode: string;
+    version: string;
+  };
+  models: { id: string; alias?: string }[];
+  stats: {
+    totalAgents: number;
+    totalSessions: number;
+    totalTokens: number;
+    totalDevices: number;
+    totalSkills: number;
+    totalChannels: number;
+    cronJobs: number;
+  };
+};
+
+let systemCache: { payload: SystemPayload; expiresAt: number } | null = null;
+let systemInFlight: Promise<SystemPayload> | null = null;
+
 async function readJsonSafe<T>(path: string, fallback: T): Promise<T> {
   try {
     const raw = await readFile(path, "utf-8");
@@ -80,6 +107,11 @@ async function getAgents(
   const agentsConfig = (config.agents || {}) as Record<string, unknown>;
   const defaults = (agentsConfig.defaults || {}) as Record<string, unknown>;
   const list = ((agentsConfig.list || []) as Record<string, unknown>[]);
+  const listById = new Map<string, Record<string, unknown>>();
+  for (const row of list) {
+    const id = String(row.id || "").trim();
+    if (id) listById.set(id, row);
+  }
 
   const defaultModel = defaults.model as Record<string, unknown> | undefined;
   const defaultPrimary =
@@ -89,8 +121,19 @@ async function getAgents(
   const defaultWorkspace =
     (defaults.workspace as string) || getDefaultWorkspaceSync();
 
-  for (const agent of list) {
-    const id = agent.id as string;
+  const agentIds = new Set<string>([
+    ...listById.keys(),
+    ...sessionsByAgent.keys(),
+  ]);
+  // OpenClaw defaults to a "main" agent even when agents.list is omitted.
+  if (agentIds.size === 0) {
+    agentIds.add("main");
+  } else if (!agentIds.has("main")) {
+    agentIds.add("main");
+  }
+
+  for (const id of agentIds) {
+    const agent = listById.get(id) || {};
     const name = (agent.name as string) || id;
     const agentModel = agent.model as Record<string, unknown> | undefined;
     const model = (agentModel?.primary as string) || defaultPrimary;
@@ -123,6 +166,12 @@ async function getAgents(
       recentSessions: recentSessions.slice(0, 10),
     });
   }
+
+  agents.sort((a, b) => {
+    if (a.id === "main" && b.id !== "main") return -1;
+    if (a.id !== "main" && b.id === "main") return 1;
+    return a.name.localeCompare(b.name);
+  });
 
   return agents;
 }
@@ -257,56 +306,81 @@ function toSessionInfo(sessions: NormalizedGatewaySession[]): SessionInfo[] {
 
 export async function GET() {
   try {
-    const configPath = join(OPENCLAW_HOME, "openclaw.json");
-    const config = await readJsonSafe<Record<string, unknown>>(
-      configPath,
-      {}
-    );
-
-    const gatewaySessions = await fetchGatewaySessions(10000).catch(() => []);
-    const sessions = toSessionInfo(gatewaySessions);
-    const sessionsByAgent = new Map<string, NormalizedGatewaySession[]>();
-    for (const s of gatewaySessions) {
-      const id = String(s.agentId || "").trim();
-      if (!id || id === "unknown") continue;
-      const existing = sessionsByAgent.get(id) || [];
-      existing.push(s);
-      sessionsByAgent.set(id, existing);
+    const now = Date.now();
+    if (systemCache && now < systemCache.expiresAt) {
+      return NextResponse.json(systemCache.payload);
+    }
+    if (systemInFlight) {
+      return NextResponse.json(await systemInFlight);
     }
 
-    const [agents, channels, devices, skills] = await Promise.all([
-      getAgents(config, sessionsByAgent),
-      getChannels(config),
-      getDevices(),
-      getSkills(),
-    ]);
+    systemInFlight = (async () => {
+      const configPath = join(OPENCLAW_HOME, "openclaw.json");
+      const config = await readJsonSafe<Record<string, unknown>>(
+        configPath,
+        {}
+      );
 
-    // Extract safe config info (NO secrets)
-    const gateway = (config.gateway || {}) as Record<string, unknown>;
-    const meta = (config.meta || {}) as Record<string, unknown>;
+      const gatewaySessions = await fetchGatewaySessions(10000).catch(() => []);
+      const sessions = toSessionInfo(gatewaySessions);
+      const sessionsByAgent = new Map<string, NormalizedGatewaySession[]>();
+      for (const s of gatewaySessions) {
+        const id = String(s.agentId || "").trim();
+        if (!id || id === "unknown") continue;
+        const existing = sessionsByAgent.get(id) || [];
+        existing.push(s);
+        sessionsByAgent.set(id, existing);
+      }
 
-    return NextResponse.json({
-      agents,
-      channels,
-      devices,
-      skills,
-      sessions: sessions.slice(0, 100), // Limit to 100 most recent
-      gateway: {
-        port: gateway.port || 18789,
-        mode: gateway.mode || "local",
-        version: (meta.lastTouchedVersion as string) || "unknown",
-      },
-      models: extractModelAliases(config),
-      stats: {
-        totalAgents: agents.length,
-        totalSessions: sessions.length,
-        totalTokens: sessions.reduce((sum, s) => sum + s.totalTokens, 0),
-        totalDevices: devices.length,
-        totalSkills: skills.length,
-        totalChannels: channels.length,
-        cronJobs: 0, // Fetched separately via /api/cron
-      },
-    });
+      const [agents, channels, devices, skills] = await Promise.all([
+        getAgents(config, sessionsByAgent),
+        getChannels(config),
+        getDevices(),
+        getSkills(),
+      ]);
+
+      // Extract safe config info (NO secrets)
+      const gateway = (config.gateway || {}) as Record<string, unknown>;
+      const meta = (config.meta || {}) as Record<string, unknown>;
+      const gatewayPort = typeof gateway.port === "number" || typeof gateway.port === "string"
+        ? gateway.port
+        : 18789;
+
+      const payload: SystemPayload = {
+        agents,
+        channels,
+        devices,
+        skills,
+        sessions: sessions.slice(0, 100), // Limit to 100 most recent
+        gateway: {
+          port: gatewayPort,
+          mode: (gateway.mode as string) || "local",
+          version: (meta.lastTouchedVersion as string) || "unknown",
+        },
+        models: extractModelAliases(config),
+        stats: {
+          totalAgents: agents.length,
+          totalSessions: sessions.length,
+          totalTokens: sessions.reduce((sum, s) => sum + s.totalTokens, 0),
+          totalDevices: devices.length,
+          totalSkills: skills.length,
+          totalChannels: channels.length,
+          cronJobs: 0, // Fetched separately via /api/cron
+        },
+      };
+
+      systemCache = {
+        payload,
+        expiresAt: Date.now() + SYSTEM_CACHE_TTL_MS,
+      };
+      return payload;
+    })();
+
+    try {
+      return NextResponse.json(await systemInFlight);
+    } finally {
+      systemInFlight = null;
+    }
   } catch (err) {
     console.error("System API error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });

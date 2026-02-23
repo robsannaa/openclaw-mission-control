@@ -20,12 +20,6 @@ function read(): boolean {
 
 let _value = false;
 
-function getValue(): boolean {
-  if (typeof window === "undefined") return false;
-  _value = read();
-  return _value;
-}
-
 function notify(): void {
   for (const l of listeners) {
     try {

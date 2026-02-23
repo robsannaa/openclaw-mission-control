@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
+import { ApiWarningBadge } from "@/components/ui/api-warning-badge";
 
 type SourceCount = { source: string; files: number; chunks: number };
 
@@ -705,6 +706,8 @@ function OverviewStat({ icon: Icon, value, label, sub, color }: { icon: React.Co
 
 export function VectorView() {
   const [agents, setAgents] = useState<AgentMemory[]>([]);
+  const [apiWarning, setApiWarning] = useState<string | null>(null);
+  const [apiDegraded, setApiDegraded] = useState(false);
   const [loading, setLoading] = useState(true);
   const [reindexing, setReindexing] = useState(false);
   const [ensuringExtraPaths, setEnsuringExtraPaths] = useState(false);
@@ -728,11 +731,21 @@ export function VectorView() {
     try {
       const res = await fetch("/api/vector?scope=status");
       const data = await res.json();
+      setApiWarning(
+        typeof data.warning === "string" && data.warning.trim()
+          ? data.warning.trim()
+          : null
+      );
+      setApiDegraded(Boolean(data.degraded));
       setAgents(data.agents || []);
       setAuthProviders(data.authProviders || []);
       setMemorySearch(data.memorySearch || null);
     }
-    catch (err) { console.error("Vector fetch:", err); }
+    catch (err) {
+      console.error("Vector fetch:", err);
+      setApiWarning(err instanceof Error ? err.message : String(err));
+      setApiDegraded(true);
+    }
     finally { setLoading(false); }
   }, []);
 
@@ -864,15 +877,18 @@ export function VectorView() {
         }
         description="Browse, search, and manage your embedding index"
         actions={
-          <button
-            onClick={() => {
-              setLoading(true);
-              fetchStatus();
-            }}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-foreground/10 hover:text-foreground/70"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <ApiWarningBadge warning={apiWarning} degraded={apiDegraded} />
+            <button
+              onClick={() => {
+                setLoading(true);
+                fetchStatus();
+              }}
+              className="rounded-lg p-2 text-muted-foreground hover:bg-foreground/10 hover:text-foreground/70"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
         }
       />
       <SectionBody width="content" padding="regular" innerClassName="space-y-6">

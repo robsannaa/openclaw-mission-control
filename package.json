@@ -29,10 +29,12 @@
     "openclaw-dashboard": "./bin/cli.mjs"
   },
   "scripts": {
-    "dev": "next dev -H 127.0.0.1 -p 3000",
-    "build": "next build",
+    "dev": "next dev -H 127.0.0.1 -p 3000 --webpack",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
     "dashboard": "node bin/cli.mjs",
     "setup": "./setup.sh",
     "setup:dev": "./setup.sh --dev --no-service"

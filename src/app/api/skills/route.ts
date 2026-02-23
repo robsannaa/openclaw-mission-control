@@ -155,7 +155,13 @@ export async function GET(request: NextRequest) {
           hash: configData.hash,
         });
       } catch (err) {
-        return NextResponse.json({ error: String(err) }, { status: 500 });
+        return NextResponse.json({
+          tools: { resolved: {}, parsed: {} },
+          skills: { resolved: {}, parsed: {} },
+          hash: null,
+          warning: String(err),
+          degraded: true,
+        });
       }
     }
 
@@ -164,6 +170,32 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (err) {
     console.error("Skills API error:", err);
+    if (action === "check") {
+      return NextResponse.json({
+        summary: {
+          total: 0,
+          eligible: 0,
+          disabled: 0,
+          blocked: 0,
+          missingRequirements: 0,
+        },
+        eligible: [],
+        disabled: [],
+        blocked: [],
+        missingRequirements: [],
+        warning: String(err),
+        degraded: true,
+      });
+    }
+    if (action === "list") {
+      return NextResponse.json({
+        workspaceDir: "",
+        managedSkillsDir: "",
+        skills: [],
+        warning: String(err),
+        degraded: true,
+      });
+    }
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

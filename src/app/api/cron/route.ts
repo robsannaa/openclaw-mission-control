@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { runCli, runCliJson, runCliCaptureBoth, gatewayCall } from "@/lib/openclaw-cli";
+import { runCli, runCliJson, runCliCaptureBoth, gatewayCall, parseJsonFromCliOutput } from "@/lib/openclaw-cli";
 import { getOpenClawHome } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
@@ -149,7 +149,10 @@ export async function GET(request: NextRequest) {
       );
       // Parse the output - it's JSON with "entries" array
       try {
-        const data = JSON.parse(stdout) as { entries: CronRunEntry[] };
+        const data = parseJsonFromCliOutput<{ entries: CronRunEntry[] }>(
+          stdout,
+          `openclaw cron runs --id ${jobId} --limit ${limit}`
+        );
         return NextResponse.json(data);
       } catch {
         // Fallback: return raw text
@@ -166,7 +169,10 @@ export async function GET(request: NextRequest) {
       );
       let entries: CronRunEntry[] = [];
       try {
-        const data = JSON.parse(stdout) as { entries?: CronRunEntry[] };
+        const data = parseJsonFromCliOutput<{ entries?: CronRunEntry[] }>(
+          stdout,
+          `openclaw cron runs --id ${jobId} --limit ${limit}`
+        );
         entries = data.entries ?? [];
       } catch {
         return NextResponse.json({ output: "" });
@@ -367,8 +373,14 @@ export async function POST(request: NextRequest) {
         // Try to extract the created job ID from CLI output
         let createdId: string | null = null;
         try {
-          const parsed = JSON.parse(stdout);
-          createdId = parsed.id || parsed.jobId || null;
+          const parsed = parseJsonFromCliOutput<Record<string, unknown>>(
+            stdout,
+            "openclaw cron add"
+          );
+          createdId =
+            (typeof parsed.id === "string" && parsed.id) ||
+            (typeof parsed.jobId === "string" && parsed.jobId) ||
+            null;
         } catch {
           // Try to extract UUID from raw output
           const match = stdout.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);

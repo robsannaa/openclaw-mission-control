@@ -46,7 +46,9 @@ export function OpenClawUpdateBanner() {
   }, []);
 
   useEffect(() => {
-    fetchUpdate();
+    queueMicrotask(() => {
+      void fetchUpdate();
+    });
   }, [fetchUpdate]);
 
   const handleDismiss = useCallback(() => {
@@ -54,7 +56,7 @@ export function OpenClawUpdateBanner() {
       sessionStorage.setItem(DISMISS_KEY, info.latestVersion);
       setDismissed(true);
     }
-  }, [info?.latestVersion]);
+  }, [info]);
 
   if (loading || !info?.updateAvailable || dismissed) return null;
 

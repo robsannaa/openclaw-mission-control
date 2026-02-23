@@ -1,135 +1,74 @@
-"use client";
+import { redirect } from "next/navigation";
+import { RouteSectionView } from "@/components/route-section-view";
 
-import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
-import { DashboardView } from "@/components/dashboard-view";
-import { TasksView } from "@/components/tasks-view";
-import { CronView } from "@/components/cron-view";
-import { SessionsView } from "@/components/sessions-view";
-import { ChannelsView } from "@/components/channels-view";
-import { MemoryView } from "@/components/memory-view";
-import { DocsView } from "@/components/docs-view";
-import { ConfigEditor } from "@/components/config-editor";
-import { SkillsView } from "@/components/skills-view";
-import { ChatView } from "@/components/chat-view";
-import { LogsView } from "@/components/logs-view";
-import { ModelsView } from "@/components/models-view";
-import { AudioView } from "@/components/audio-view";
-import { VectorView } from "@/components/vector-view";
-import { AgentsView } from "@/components/agents-view";
-import { UsageView } from "@/components/usage-view";
-import { TerminalView } from "@/components/terminal-view";
-import { PermissionsView } from "@/components/permissions-view";
-import { TailscaleView } from "@/components/tailscale-view";
-import { BrowserRelayView } from "@/components/browser-relay-view";
-import { AccountsKeysView } from "@/components/accounts-keys-view";
-import { WebSearchView } from "@/components/web-search-view";
-import { OpenClawUpdateBanner } from "@/components/openclaw-update-banner";
-import { setChatActive } from "@/lib/chat-store";
+type SearchParams = Record<string, string | string[] | undefined>;
 
-function SectionContent({ section }: { section: string }) {
-  switch (section) {
-    case "dashboard":
-      return <DashboardView />;
-    case "agents":
-      return <AgentsView />;
-    case "tasks":
-      return <TasksView />;
-    case "cron":
-      return <CronView />;
-    case "sessions":
-      return <SessionsView />;
-    case "channels":
-      return <ChannelsView />;
-    case "system":
-      // Backward-compat alias for older links/bookmarks.
-      return <ChannelsView />;
-    case "memory":
-      return <MemoryView />;
-    case "docs":
-      return <DocsView />;
-    case "config":
-      return <ConfigEditor />;
-    case "skills":
-      return <SkillsView />;
-    case "models":
-      return <ModelsView />;
-    case "accounts":
-      return <AccountsKeysView />;
-    case "audio":
-      return <AudioView />;
-    case "vectors":
-      return <VectorView />;
-    case "logs":
-      return <LogsView />;
-    case "usage":
-      return <UsageView />;
-    case "terminal":
-      return <TerminalView />;
-    case "permissions":
-      return <PermissionsView />;
-    case "tailscale":
-      return <TailscaleView />;
-    case "browser":
-      return <BrowserRelayView />;
-    case "calendar":
-      return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
-          <p className="text-sm font-medium">Calendar</p>
-          <p className="text-xs">Coming soon</p>
-        </div>
-      );
-    case "search":
-      return <WebSearchView />;
-    default:
-      return <DashboardView />;
+const SECTION_TO_PATH: Record<string, string> = {
+  dashboard: "/dashboard",
+  chat: "/chat",
+  agents: "/agents",
+  tasks: "/tasks",
+  cron: "/cron",
+  heartbeat: "/heartbeat",
+  sessions: "/sessions",
+  channels: "/channels",
+  system: "/channels",
+  memory: "/memory",
+  memories: "/memory",
+  docs: "/docs",
+  documents: "/docs",
+  config: "/config",
+  settings: "/config",
+  skills: "/skills",
+  models: "/models",
+  accounts: "/accounts",
+  audio: "/audio",
+  vectors: "/vectors",
+  logs: "/logs",
+  usage: "/usage",
+  terminal: "/terminal",
+  permissions: "/permissions",
+  tailscale: "/tailscale",
+  browser: "/browser",
+  calendar: "/calendar",
+  search: "/search",
+};
+
+function firstParam(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value[0] || null;
+  return typeof value === "string" ? value : null;
+}
+
+function appendParam(
+  out: URLSearchParams,
+  key: string,
+  value: string | string[] | undefined
+) {
+  if (Array.isArray(value)) {
+    for (const v of value) out.append(key, v);
+    return;
   }
+  if (typeof value === "string") out.set(key, value);
 }
 
-function MainContent() {
-  const searchParams = useSearchParams();
-  const section = searchParams.get("section") || "dashboard";
-  const isChatSection = section === "chat";
+export default async function Home({
+  searchParams,
+}: {
+  searchParams?: Promise<SearchParams>;
+}) {
+  const paramsObj = (searchParams ? await searchParams : {}) || {};
 
-  // Track chat tab visibility for notification system
-  useEffect(() => {
-    setChatActive(isChatSection);
-    return () => setChatActive(false);
-  }, [isChatSection]);
+  const section = firstParam(paramsObj.section);
+  if (section) {
+    const targetPath = SECTION_TO_PATH[section.toLowerCase()] || "/dashboard";
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(paramsObj)) {
+      if (key === "section") continue;
+      appendParam(query, key, value);
+    }
+    const suffix = query.toString();
+    redirect(suffix ? `${targetPath}?${suffix}` : targetPath);
+  }
 
-  return (
-    <>
-      {/*
-       * ChatView is ALWAYS mounted so chat state persists across tab switches.
-       * When not on the chat tab, it's hidden via CSS (not unmounted).
-       */}
-      <div
-        className={isChatSection ? "flex flex-1 flex-col overflow-hidden" : "hidden"}
-      >
-        <ChatView isVisible={isChatSection} />
-      </div>
-
-      {/* All other views: update banner + section content */}
-      {!isChatSection && (
-        <>
-          <OpenClawUpdateBanner />
-          <SectionContent section={section} />
-        </>
-      )}
-    </>
-  );
-}
-
-export default function Home() {
-  return (
-    <Suspense
-      fallback={
-        <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
-          Loading...
-        </div>
-      }
-    >
-      <MainContent />
-    </Suspense>
-  );
+  return <RouteSectionView section="dashboard" />;
 }

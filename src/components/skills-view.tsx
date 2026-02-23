@@ -8,11 +8,12 @@ import {
   AlertTriangle, X, Loader2, Check, Download,
   Settings2, Package, Cpu,
   FileText, Terminal, Globe, Wrench, ArrowLeft,
-  Info, CircleStop, Trash2, Play, Copy, Star,
+  Info, CircleStop, Play, Copy, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
+import { ApiWarningBadge } from "@/components/ui/api-warning-badge";
 
 /* ── Types ──────────────────────────────────────── */
 
@@ -979,6 +980,7 @@ function ClawHubPanel({
           latestVersion: fromCatalog?.version,
           summary: fromCatalog?.summary ?? "",
           displayName: fromCatalog?.displayName,
+          developer: fromCatalog?.developer,
           stars: fromCatalog?.stars,
           downloads: fromCatalog?.downloads,
         };
@@ -1071,8 +1073,10 @@ function ClawHubPanel({
         score?: number;
         developer?: string;
         author?: string;
+        displayName?: string;
       }) => ({
         slug: String(item.slug || ""),
+        displayName: item.displayName || undefined,
         version: item.version || "latest",
         summary: item.summary || "",
         score: typeof item.score === "number" ? item.score : undefined,
@@ -1256,6 +1260,11 @@ function ClawHubPanel({
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-xs font-medium text-foreground">{item.displayName || item.slug}</p>
+                      {item.developer && (
+                        <p className="mt-0.5 text-xs text-muted-foreground/80 truncate" title={item.developer}>
+                          by {item.developer}
+                        </p>
+                      )}
                       <p className="mt-0.5 text-xs leading-snug text-foreground/80 dark:text-foreground/90 break-words">
                         {item.summary || item.slug}
                       </p>
@@ -1316,18 +1325,39 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
   const [selectedSkill, setSelectedSkill] = useState<string | null>(initialSkillName);
   const [toast, setToast] = useState<Toast | null>(null);
   const [togglingSkill, setTogglingSkill] = useState<string | null>(null);
+  const [apiWarning, setApiWarning] = useState<string | null>(null);
+  const [apiDegraded, setApiDegraded] = useState(false);
   const tab: "skills" | "clawhub" =
     (searchParams.get("tab") || "").toLowerCase() === "clawhub" ? "clawhub" : "skills";
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
+    setApiWarning(null);
+    setApiDegraded(false);
     try {
       const [listRes, checkRes] = await Promise.all([
-        fetch("/api/skills").then((r) => r.json()),
-        fetch("/api/skills?action=check").then((r) => r.json()),
+        fetch("/api/skills"),
+        fetch("/api/skills?action=check"),
       ]);
-      setSkills(listRes.skills || []);
-      setSummary(checkRes.summary || null);
+      const listData = (await listRes.json()) as {
+        skills?: Skill[];
+        warning?: unknown;
+        degraded?: unknown;
+      };
+      const checkData = (await checkRes.json()) as {
+        summary?: Summary | null;
+        warning?: unknown;
+        degraded?: unknown;
+      };
+
+      const warnings = [listData.warning, checkData.warning]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .map((value) => value.trim());
+      setApiWarning(warnings.length > 0 ? warnings.join(" | ") : null);
+      setApiDegraded(Boolean(listData.degraded) || Boolean(checkData.degraded));
+
+      setSkills(listData.skills || []);
+      setSummary(checkData.summary || null);
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
@@ -1440,10 +1470,11 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
 
   const switchTab = useCallback((next: "skills" | "clawhub") => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("section", "skills");
+    params.delete("section");
     if (next === "clawhub") params.set("tab", "clawhub");
     else params.delete("tab");
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }, [pathname, router, searchParams]);
 
   // Detail view
@@ -1454,7 +1485,7 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
           name={selectedSkill}
           onBack={() => {
             if (initialSkillName) {
-              router.push("/?section=skills");
+              router.push("/skills");
               return;
             }
             setSelectedSkill(null);
@@ -1468,7 +1499,6 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
 
   if (loading) return <LoadingState label="Loading skills..." size="lg" />;
 
-  const bundledCount = skills.filter((s) => getSkillOrigin(s) === "bundled").length;
   const workspaceCount = skills.filter((s) => getSkillOrigin(s) === "workspace").length;
 
   return (
@@ -1486,6 +1516,7 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
         meta={null}
         actions={
           <div className="flex items-center gap-2">
+            <ApiWarningBadge warning={apiWarning} degraded={apiDegraded} />
             <div className="inline-flex rounded-lg border border-foreground/10 bg-muted/50 p-1">
               <button
                 type="button"

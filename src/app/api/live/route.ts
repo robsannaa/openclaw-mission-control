@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readFile, readdir } from "fs/promises";
+import { readFile, readdir, stat, open } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome, getGatewayUrl, getGatewayPort } from "@/lib/paths";
 import { fetchGatewaySessions, summarizeSessionsByAgent } from "@/lib/gateway-sessions";
@@ -16,8 +16,33 @@ async function readJsonSafe<T>(path: string, fallback: T): Promise<T> {
 
 async function tailLines(path: string, n: number): Promise<string[]> {
   try {
-    const content = await readFile(path, "utf-8");
-    return content.trim().split("\n").filter(Boolean).slice(-n);
+    const maxBytes = 256 * 1024;
+    const s = await stat(path);
+    if (s.size <= 0) return [];
+
+    let content: string;
+    if (s.size > maxBytes) {
+      const fh = await open(path, "r");
+      try {
+        const buf = Buffer.alloc(maxBytes);
+        await fh.read(buf, 0, maxBytes, s.size - maxBytes);
+        content = buf.toString("utf-8");
+      } finally {
+        await fh.close();
+      }
+      // Drop partial first line when reading a tail chunk.
+      const firstNewline = content.indexOf("\n");
+      if (firstNewline !== -1) {
+        content = content.slice(firstNewline + 1);
+      }
+    } else {
+      content = await readFile(path, "utf-8");
+    }
+
+    return content
+      .split("\n")
+      .filter((line) => line.trim().length > 0)
+      .slice(-n);
   } catch {
     return [];
   }
@@ -161,9 +186,11 @@ async function readRecentCronRuns(): Promise<CronRunEntry[]> {
   const all: CronRunEntry[] = [];
   try {
     const files = await readdir(runsDir);
-    for (const file of files) {
-      if (!file.endsWith(".jsonl")) continue;
-      const lines = await tailLines(join(runsDir, file), 5);
+    const runFiles = files.filter((file) => file.endsWith(".jsonl"));
+    const tails = await Promise.all(
+      runFiles.map((file) => tailLines(join(runsDir, file), 5))
+    );
+    for (const lines of tails) {
       for (const line of lines) {
         try {
           const entry = JSON.parse(line) as CronRunEntry;
@@ -179,10 +206,26 @@ async function readRecentCronRuns(): Promise<CronRunEntry[]> {
 async function readAgentSessions(): Promise<
   { id: string; sessionCount: number; totalTokens: number; lastActivity: number }[]
 > {
+  const configuredAgentIds = new Set<string>();
+  try {
+    const config = await readJsonSafe<Record<string, unknown>>(
+      join(OPENCLAW_HOME, "openclaw.json"),
+      {}
+    );
+    const agents = (config.agents || {}) as Record<string, unknown>;
+    const list = Array.isArray(agents.list) ? (agents.list as Record<string, unknown>[]) : [];
+    for (const row of list) {
+      const id = String(row.id || "").trim();
+      if (id) configuredAgentIds.add(id);
+    }
+  } catch {
+    // ignore; we'll still fall back to runtime sessions and main agent.
+  }
+
   try {
     const sessions = await fetchGatewaySessions(10000);
     const summary = summarizeSessionsByAgent(sessions);
-    return [...summary.entries()]
+    const rows = [...summary.entries()]
       .map(([id, s]) => ({
         id,
         sessionCount: s.sessionCount,
@@ -190,7 +233,34 @@ async function readAgentSessions(): Promise<
         lastActivity: s.lastActive,
       }))
       .sort((a, b) => b.lastActivity - a.lastActivity);
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const id of configuredAgentIds) {
+      if (!byId.has(id)) {
+        byId.set(id, {
+          id,
+          sessionCount: 0,
+          totalTokens: 0,
+          lastActivity: 0,
+        });
+      }
+    }
+    if (!byId.has("main")) {
+      byId.set("main", {
+        id: "main",
+        sessionCount: 0,
+        totalTokens: 0,
+        lastActivity: 0,
+      });
+    }
+    return [...byId.values()].sort((a, b) => b.lastActivity - a.lastActivity);
   } catch {
-    return [];
+    const fallbackIds = configuredAgentIds.size > 0 ? [...configuredAgentIds] : ["main"];
+    if (!fallbackIds.includes("main")) fallbackIds.unshift("main");
+    return fallbackIds.map((id) => ({
+      id,
+      sessionCount: 0,
+      totalTokens: 0,
+      lastActivity: 0,
+    }));
   }
 }

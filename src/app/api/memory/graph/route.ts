@@ -376,8 +376,7 @@ async function resolveOpenAiKey(): Promise<string | undefined> {
 }
 
 async function extractEntitiesFromFile(
-  content: string,
-  _sourceFile: string
+  content: string
 ): Promise<LLMExtractionResult> {
   const apiKey = await resolveOpenAiKey();
   if (!apiKey) return { entities: [], relations: [] };
@@ -502,7 +501,7 @@ async function buildLlmGraph(
   // Process files
   if (hasApiKey) {
     for (const file of files) {
-      const result = await extractEntitiesFromFile(file.content, file.name);
+      const result = await extractEntitiesFromFile(file.content);
 
       for (const entity of result.entities) {
         ensureEntity(entity.name, entity.type, entity.summary, file.name);

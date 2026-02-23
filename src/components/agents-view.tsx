@@ -960,7 +960,6 @@ function CopyBtn({ text }: { text: string }) {
 
 function SummaryBar({ agents }: { agents: Agent[] }) {
   const totalSessions = agents.reduce((s, a) => s + a.sessionCount, 0);
-  const _totalTokens = agents.reduce((s, a) => s + a.totalTokens, 0);
   const activeCount = agents.filter((a) => a.status === "active").length;
   const channelSet = new Set(agents.flatMap((a) => a.channels));
 
@@ -2095,7 +2094,7 @@ function ChannelBindingPicker({
                   </div>
                   <div className="flex items-center gap-2">
                     <Link
-                      href="/?section=terminal"
+                      href="/terminal"
                       className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 inline-flex items-center gap-1.5"
                     >
                       Open Terminal
@@ -2125,7 +2124,7 @@ function ChannelBindingPicker({
                   </div>
                   <div className="flex items-center gap-2">
                     <Link
-                      href="/?section=terminal"
+                      href="/terminal"
                       className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 inline-flex items-center gap-1.5"
                     >
                       Open Terminal
@@ -2569,7 +2568,6 @@ function EditAgentModal({
   idx,
   allAgents,
   defaultModel,
-  defaultFallbacks: _defaultFallbacks,
   onClose,
   onSaved,
   onChannelsChanged,
@@ -2578,7 +2576,6 @@ function EditAgentModal({
   idx: number;
   allAgents: Agent[];
   defaultModel: string;
-  defaultFallbacks: string[];
   onClose: () => void;
   onSaved: () => void;
   onChannelsChanged?: () => void;
@@ -2816,7 +2813,7 @@ function EditAgentModal({
               <p className="mt-1 text-xs text-muted-foreground/50">
                 {models.length} authenticated models.{" "}
                 <Link
-                  href="/?section=models"
+                  href="/models"
                   className="text-violet-400 hover:text-violet-300"
                 >
                   Manage providers →
@@ -3239,9 +3236,8 @@ export function AgentsView() {
 
   const openDocsForWorkspace = useCallback((workspacePath: string) => {
     const params = new URLSearchParams();
-    params.set("section", "docs");
     params.set("workspace", workspacePath);
-    router.push(`/?${params.toString()}`);
+    router.push(`/docs?${params.toString()}`);
   }, [router]);
 
   const fetchAgents = useCallback(async () => {
@@ -3270,7 +3266,9 @@ export function AgentsView() {
 
   useEffect(() => {
     const pollId = window.setInterval(() => {
-      void fetchAgents();
+      if (document.visibilityState === "visible") {
+        void fetchAgents();
+      }
     }, 5000);
     return () => window.clearInterval(pollId);
   }, [fetchAgents]);
@@ -3312,10 +3310,11 @@ export function AgentsView() {
 
   const switchTab = useCallback((next: "agents" | "subagents") => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("section", "agents");
+    params.delete("section");
     if (next === "subagents") params.set("tab", "subagents");
     else params.delete("tab");
-    router.push(`/?${params.toString()}`);
+    const query = params.toString();
+    router.push(query ? `/agents?${query}` : "/agents");
   }, [router, searchParams]);
 
   useEffect(() => {
@@ -3504,7 +3503,6 @@ export function AgentsView() {
           idx={editingIdx}
           allAgents={data.agents}
           defaultModel={data.defaultModel}
-          defaultFallbacks={data.defaultFallbacks}
           onClose={() => setEditingAgentId(null)}
           onSaved={() => {
             void fetchAgents();

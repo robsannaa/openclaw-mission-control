@@ -144,7 +144,11 @@ export function LogsView() {
   useEffect(() => {
     queueMicrotask(() => fetchLogs());
     if (autoRefresh) {
-      timerRef.current = setInterval(fetchLogs, 3000);
+      timerRef.current = setInterval(() => {
+        if (document.visibilityState === "visible") {
+          void fetchLogs();
+        }
+      }, 3000);
     }
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);

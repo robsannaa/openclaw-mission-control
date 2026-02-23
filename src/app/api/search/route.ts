@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { getOpenClawBin } from "@/lib/paths";
+import { parseJsonFromCliOutput } from "@/lib/openclaw-cli";
 
 const exec = promisify(execFile);
 
@@ -36,7 +37,10 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const parsed = JSON.parse(stdout) as { results: SearchResult[] };
+    const parsed = parseJsonFromCliOutput<{ results: SearchResult[] }>(
+      stdout,
+      `openclaw memory search ${query.trim()} --json`
+    );
 
     // Sanitize: strip any passwords or sensitive data from snippets
     const results = (parsed.results || []).map((r) => ({

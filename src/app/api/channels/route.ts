@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { readFile } from "fs/promises";
+import { join } from "path";
 import { runCliJson, runCli, gatewayCall } from "@/lib/openclaw-cli";
+import { getOpenClawHome } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
@@ -292,6 +295,19 @@ function normalizeChannels(
   return out;
 }
 
+async function readChannelsConfigFallback(): Promise<Record<string, unknown>> {
+  try {
+    const configPath = join(getOpenClawHome(), "openclaw.json");
+    const raw = await readFile(configPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!isRecord(parsed)) return {};
+    const channels = parsed.channels;
+    return isRecord(channels) ? channels : {};
+  } catch {
+    return {};
+  }
+}
+
 /**
  * GET /api/channels
  *
@@ -307,15 +323,24 @@ export async function GET(request: NextRequest) {
   try {
     if (scope === "all" || scope === "list") {
       // Get channel list + status + config in parallel
-      const [channelList, statusResult, configResult] = await Promise.all([
+      const [channelList, statusResult, configResult, localChannelsConfig] = await Promise.all([
         runCliJson<Record<string, unknown>>(["channels", "list"], 10000).catch(() => ({})),
         runCliJson<Record<string, unknown>>(["channels", "status"], 10000).catch(() => ({})),
         gatewayCall<Record<string, unknown>>("config.get", undefined, 10000).catch(() => null),
+        readChannelsConfigFallback(),
       ]);
 
-      // Extract channel config from gateway
-      const resolved = (configResult?.resolved || {}) as Record<string, unknown>;
-      const channelsConfig = (resolved.channels || {}) as Record<string, unknown>;
+      // Extract channel config from gateway; if unavailable, fall back to local config file.
+      const resolved = isRecord(configResult?.resolved) ? configResult.resolved : {};
+      const parsed = isRecord(configResult?.parsed) ? configResult.parsed : {};
+      const resolvedChannels = isRecord(resolved.channels) ? resolved.channels : {};
+      const parsedChannels = isRecord(parsed.channels) ? parsed.channels : {};
+      const channelsConfig =
+        Object.keys(resolvedChannels).length > 0
+          ? resolvedChannels
+          : Object.keys(parsedChannels).length > 0
+            ? parsedChannels
+            : localChannelsConfig;
 
       // Build enriched channel info from modern + legacy schemas.
       const channels = normalizeChannels(channelList, statusResult, channelsConfig);

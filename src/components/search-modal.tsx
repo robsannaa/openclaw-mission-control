@@ -6,7 +6,7 @@ import {
   useRef,
   useCallback,
 } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search, Brain, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -59,7 +59,6 @@ function highlightSnippet(text: string): string {
 
 export function SearchModal({ open, onClose }: Props) {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -111,16 +110,16 @@ export function SearchModal({ open, onClose }: Props) {
 
   const openResult = useCallback((result: SearchResult) => {
     const params = new URLSearchParams(searchParams.toString());
-    params.set("section", "memory");
+    params.delete("section");
     params.set("memoryPath", result.path);
     params.set("memoryLine", String(result.startLine));
     if (query.trim()) params.set("memoryQuery", query.trim());
     else params.delete("memoryQuery");
 
     const next = params.toString();
-    router.push(next ? `${pathname}?${next}` : pathname, { scroll: false });
+    router.push(next ? `/memory?${next}` : "/memory", { scroll: false });
     onClose();
-  }, [onClose, pathname, query, router, searchParams]);
+  }, [onClose, query, router, searchParams]);
 
   // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {

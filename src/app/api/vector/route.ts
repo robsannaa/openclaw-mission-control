@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readdir, stat } from "fs/promises";
-import { join } from "path";
 import { runCliJson, runCli, gatewayCall } from "@/lib/openclaw-cli";
 import { getOpenClawHome, getDefaultWorkspace } from "@/lib/paths";
 
@@ -99,10 +98,16 @@ export async function GET(request: NextRequest) {
   try {
     if (scope === "status") {
       // Get memory status for all agents
-      const agents = await runCliJson<MemoryStatus[]>(
-        ["memory", "status"],
-        15000
-      );
+      let agents: MemoryStatus[] = [];
+      let agentsWarning: string | null = null;
+      try {
+        agents = await runCliJson<MemoryStatus[]>(
+          ["memory", "status"],
+          15000
+        );
+      } catch (err) {
+        agentsWarning = String(err);
+      }
 
       // Enrich with DB file sizes
       const enriched = await Promise.all(
@@ -157,6 +162,7 @@ export async function GET(request: NextRequest) {
         configHash,
         authProviders,
         home: getOpenClawHome(),
+        warning: agentsWarning || undefined,
       });
     }
 

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gatewayCall } from "@/lib/openclaw-cli";
+import { readFile } from "fs/promises";
+import { join } from "path";
+import { getOpenClawHome } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
+const OPENCLAW_HOME = getOpenClawHome();
 
 const SENSITIVE_PATTERNS = [
   /api[_-]?key/i,
@@ -138,7 +142,23 @@ export async function GET(request: NextRequest) {
     });
   } catch (err) {
     console.error("Config GET error:", err);
-    return NextResponse.json({ error: formatGatewayError(err) }, { status: 500 });
+    try {
+      const raw = await readFile(join(OPENCLAW_HOME, "openclaw.json"), "utf-8");
+      const parsed = JSON.parse(raw) as Record<string, unknown>;
+      const redacted = redactSensitive(parsed) as Record<string, unknown>;
+      return NextResponse.json({
+        config: redacted,
+        rawConfig: parsed,
+        resolvedConfig: parsed,
+        baseHash: "",
+        schema: {},
+        uiHints: {},
+        warning: formatGatewayError(err),
+        degraded: true,
+      });
+    } catch {
+      return NextResponse.json({ error: formatGatewayError(err) }, { status: 500 });
+    }
   }
 }
 

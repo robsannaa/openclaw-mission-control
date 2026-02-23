@@ -424,7 +424,34 @@ export async function GET() {
     const snapshot = await readSnapshot();
     return NextResponse.json(snapshot);
   } catch (err) {
-    return NextResponse.json({ error: cliError(err) }, { status: 500 });
+    return NextResponse.json({
+      ts: Date.now(),
+      approvals: {},
+      allowlist: [],
+      execPolicies: [],
+      sandbox: {
+        sandbox: {
+          mode: "unknown",
+          workspaceAccess: "unknown",
+          sessionIsSandboxed: false,
+          tools: { allow: [], deny: [] },
+        },
+        elevated: { enabled: false },
+      },
+      capabilities: {
+        sandboxMode: "unknown",
+        sessionIsSandboxed: false,
+        workspaceAccess: "unknown",
+        toolPolicyMode: "allowlist",
+        allowedToolsConfigured: [],
+        deniedToolsConfigured: [],
+        flags: [],
+        allowlistCount: 0,
+        policyScopeCount: 0,
+      },
+      warning: cliError(err),
+      degraded: true,
+    });
   }
 }
 

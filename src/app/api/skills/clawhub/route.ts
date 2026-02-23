@@ -38,6 +38,7 @@ type SearchItem = {
   score?: number;
   developer?: string;
   author?: string;
+  displayName?: string;
 };
 
 type InstalledItem = {

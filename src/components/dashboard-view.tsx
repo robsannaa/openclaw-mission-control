@@ -888,9 +888,8 @@ export function DashboardView() {
     (jobId: string) => {
       if (!jobId) return;
       const params = new URLSearchParams();
-      params.set("section", "cron");
       params.set("job", jobId);
-      router.push(`/?${params.toString()}`);
+      router.push(`/cron?${params.toString()}`);
     },
     [router]
   );
@@ -980,7 +979,7 @@ export function DashboardView() {
       title: "Gateway is offline",
       detail: "The OpenClaw gateway process is not responding. Most features will not work.",
       fixLabel: "Restart Gateway",
-      fixHref: "/?section=channels",
+      fixHref: "/channels",
     });
   }
 
@@ -993,7 +992,7 @@ export function DashboardView() {
         title: `Cron "${job.name}" keeps failing`,
         detail: `${job.consecutiveErrors} consecutive errors. Last: ${job.lastError || "unknown"}`,
         fixLabel: "Fix Cron Job",
-        fixHref: `/?section=cron&show=errors`,
+        fixHref: "/cron?show=errors",
       });
     }
   }
@@ -1007,7 +1006,7 @@ export function DashboardView() {
         title: `"${job.name}" has no delivery target`,
         detail: "Job runs but can't deliver results. Set a recipient (e.g. telegram:CHAT_ID).",
         fixLabel: "Set Target",
-        fixHref: `/?section=cron&show=errors`,
+        fixHref: "/cron?show=errors",
       });
     }
   }
@@ -1021,7 +1020,7 @@ export function DashboardView() {
         title: `Cron "${job.name}" last run failed`,
         detail: job.lastError || "Unknown error",
         fixLabel: "View Details",
-        fixHref: `/?section=cron&show=errors`,
+        fixHref: "/cron?show=errors",
       });
     }
   }
@@ -1034,7 +1033,7 @@ export function DashboardView() {
       title: "No messaging channels connected",
       detail: "Connect Telegram, WhatsApp, or another channel to receive agent messages.",
       fixLabel: "Setup Channel",
-      fixHref: "/?section=agents",
+      fixHref: "/agents",
     });
   }
 
@@ -1046,7 +1045,7 @@ export function DashboardView() {
       title: "No cron jobs configured",
       detail: "Scheduled tasks let your agent work automatically — summaries, reminders, reports.",
       fixLabel: "Create Cron Job",
-      fixHref: "/?section=cron",
+      fixHref: "/cron",
     });
   }
 
@@ -1154,8 +1153,8 @@ export function DashboardView() {
                   : "bg-emerald-500/15 text-emerald-400"
               }
               alert={live.cron.stats.error > 0 ? `${live.cron.stats.error} error` : undefined}
-              alertHref={live.cron.stats.error > 0 ? "/?section=cron&show=errors" : undefined}
-              onClick={live.cron.stats.error > 0 ? () => window.location.href = "/?section=cron&show=errors" : undefined}
+              alertHref={live.cron.stats.error > 0 ? "/cron?show=errors" : undefined}
+              onClick={live.cron.stats.error > 0 ? () => window.location.href = "/cron?show=errors" : undefined}
             />
             <StatCard
               icon={Smartphone}
@@ -1265,10 +1264,10 @@ export function DashboardView() {
                   </p>
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {[
-                      { label: "Chat with your agent", href: "/?section=chat", desc: "Send a message and see it respond" },
-                      { label: "Create a cron job", href: "/?section=cron", desc: "Schedule tasks like daily briefs" },
-                      { label: "Connect a channel", href: "/?section=agents", desc: "Link Telegram, WhatsApp, etc." },
-                      { label: "Explore skills", href: "/?section=skills", desc: "See what your agent can do" },
+                      { label: "Chat with your agent", href: "/chat", desc: "Send a message and see it respond" },
+                      { label: "Create a cron job", href: "/cron", desc: "Schedule tasks like daily briefs" },
+                      { label: "Connect a channel", href: "/agents", desc: "Link Telegram, WhatsApp, etc." },
+                      { label: "Explore skills", href: "/skills", desc: "See what your agent can do" },
                     ].map((item) => (
                       <a
                         key={item.href}

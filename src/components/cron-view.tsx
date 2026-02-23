@@ -386,7 +386,9 @@ function EditCronForm({
   }, []);
 
   useEffect(() => {
-    void fetchTargets();
+    queueMicrotask(() => {
+      void fetchTargets();
+    });
   }, [fetchTargets]);
 
   const targetChannel = useCallback((t: string) => {
@@ -399,9 +401,11 @@ function EditCronForm({
   // When channel changes, show dropdown again; clear to only if it was for a different channel
   useEffect(() => {
     if (!channel) return;
-    setCustomTo(false);
-    if (to && targetChannel(to) !== channel) setTo("");
-  }, [channel]);
+    queueMicrotask(() => {
+      setCustomTo(false);
+      if (to && targetChannel(to) !== channel) setTo("");
+    });
+  }, [channel, to, targetChannel]);
 
   const readyChannels = useMemo(() => {
     return channels.filter((ch) => {
@@ -886,9 +890,11 @@ function CreateCronForm({
 
   useEffect(() => {
     if (!channel) return;
-    setCustomTo(false);
-    if (to && targetChannelCreate(to) !== channel) setTo("");
-  }, [channel]);
+    queueMicrotask(() => {
+      setCustomTo(false);
+      if (to && targetChannelCreate(to) !== channel) setTo("");
+    });
+  }, [channel, to, targetChannelCreate]);
 
   const readyChannels = useMemo(() => {
     return channels.filter((ch) => {

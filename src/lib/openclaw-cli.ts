@@ -79,12 +79,83 @@ export async function runCli(
   return stdout;
 }
 
+const ANSI_ESCAPE_PATTERN =
+  // Matches CSI and related ANSI escape sequences.
+  /\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g;
+
+function stripAnsi(value: string): string {
+  return value.replace(ANSI_ESCAPE_PATTERN, "");
+}
+
+function parseJsonCandidate<T>(value: string): T | null {
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+function findJsonSuffix(rawOutput: string): string | null {
+  const cleaned = stripAnsi(rawOutput).replace(/\r/g, "").trim();
+  if (!cleaned) return null;
+  if (cleaned.startsWith("{") || cleaned.startsWith("[")) {
+    return cleaned;
+  }
+
+  const starts: number[] = [];
+  for (let i = 0; i < cleaned.length; i += 1) {
+    const ch = cleaned[i];
+    if (ch === "{" || ch === "[") starts.push(i);
+  }
+
+  for (let i = starts.length - 1; i >= 0; i -= 1) {
+    const candidate = cleaned.slice(starts[i]).trim();
+    if (!candidate) continue;
+    if (!candidate.startsWith("{") && !candidate.startsWith("[")) continue;
+    if (parseJsonCandidate(candidate) !== null) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+export function parseJsonFromCliOutput<T>(
+  rawOutput: string,
+  context = "CLI output"
+): T {
+  const candidate = findJsonSuffix(rawOutput);
+  if (!candidate) {
+    const snippet = stripAnsi(rawOutput).replace(/\r/g, "").trim().slice(0, 400);
+    throw new Error(
+      snippet
+        ? `Failed to parse JSON from ${context}. Output: ${snippet}`
+        : `Failed to parse JSON from ${context}: empty output`
+    );
+  }
+  return JSON.parse(candidate) as T;
+}
+
 export async function runCliJson<T>(
   args: string[],
   timeout = 15000
 ): Promise<T> {
-  const stdout = await runCli([...args, "--json"], timeout);
-  return JSON.parse(stdout) as T;
+  try {
+    const stdout = await runCli([...args, "--json"], timeout);
+    return parseJsonFromCliOutput<T>(stdout, `openclaw ${args.join(" ")} --json`);
+  } catch (err) {
+    const stdout = typeof (err as { stdout?: unknown })?.stdout === "string"
+      ? String((err as { stdout?: unknown }).stdout)
+      : "";
+    if (stdout.trim()) {
+      try {
+        return parseJsonFromCliOutput<T>(stdout, `openclaw ${args.join(" ")} --json`);
+      } catch {
+        // Fall through to original error.
+      }
+    }
+    throw err;
+  }
 }
 
 export async function gatewayCall<T>(
@@ -96,5 +167,5 @@ export async function gatewayCall<T>(
   if (params) args.push("--params", JSON.stringify(params));
   if (timeout > 10000) args.push("--timeout", String(timeout));
   const stdout = await runCli(args, timeout + 5000);
-  return JSON.parse(stdout) as T;
+  return parseJsonFromCliOutput<T>(stdout, `openclaw gateway call ${method}`);
 }

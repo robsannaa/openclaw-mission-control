@@ -284,7 +284,11 @@ export function PairingNotifications() {
   // Initial fetch + poll every 15s
   useEffect(() => {
     fetchData();
-    pollRef.current = setInterval(fetchData, 15000);
+    pollRef.current = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        void fetchData();
+      }
+    }, 15000);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
