@@ -140,13 +140,16 @@ const PERIOD_TITLES: Record<Period, string> = {
 };
 
 const USAGE_COLORS = {
-  input: "#4fb8f4",
-  output: "#f59a52",
-  sessions: "#47cfae",
-  grid: "rgba(120, 144, 173, 0.18)",
-  tick: "rgba(166, 186, 213, 0.84)",
-  tickMuted: "rgba(148, 163, 184, 0.74)",
-  text: "rgba(226, 232, 240, 0.9)",
+  input: "var(--chart-1)",
+  output: "var(--chart-3)",
+  sessions: "var(--chart-2)",
+  grid: "var(--chart-grid)",
+  tick: "var(--chart-tick)",
+  tickMuted: "var(--chart-tick-muted)",
+  text: "var(--chart-text)",
+  barHigh: "var(--chart-4)",
+  barMid: "var(--chart-2)",
+  barLow: "var(--chart-muted)",
 };
 
 function fmtTokens(n: number): string {
@@ -381,11 +384,11 @@ function ModelMixTooltip({
       <p className="text-xs font-medium text-foreground/90">{shortModel(modelName)}</p>
       <div className="mt-1.5 space-y-1 text-xs">
         <div className="flex items-center justify-between gap-4">
-          <span className="text-sky-400">input</span>
+          <span style={{ color: USAGE_COLORS.input }}>input</span>
           <span className="font-mono text-foreground/90">{fmtTokensLong(input)} ({split.inPct}%)</span>
         </div>
         <div className="flex items-center justify-between gap-4">
-          <span className="text-orange-400">output</span>
+          <span style={{ color: USAGE_COLORS.output }}>output</span>
           <span className="font-mono text-foreground/90">{fmtTokensLong(output)} ({split.outPct}%)</span>
         </div>
         <div className="mt-1 border-t border-foreground/10 pt-1.5 text-xs font-semibold text-foreground/90">
@@ -534,7 +537,7 @@ export function UsageView() {
                 className={cn(
                   "rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
                   period === p
-                    ? "border-cyan-300/35 bg-cyan-500/14 text-cyan-100"
+                    ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
                     : "border-transparent text-muted-foreground hover:border-foreground/10 hover:bg-foreground/5 hover:text-foreground"
                 )}
               >
@@ -605,7 +608,7 @@ export function UsageView() {
                   <select
                     value={tokenFlowModel}
                     onChange={(e) => setTokenFlowModel(e.target.value)}
-                    className="rounded-lg border border-foreground/10 bg-card/80 px-2.5 py-1.5 text-xs text-foreground/90 focus:outline-none focus:ring-2 focus:ring-cyan-500/40"
+                    className="rounded-lg border border-foreground/10 bg-card/80 px-2.5 py-1.5 text-xs text-foreground/90 focus:outline-none focus:ring-2 focus:ring-violet-500/35"
                   >
                     <option value="all">All models</option>
                     {data.modelBreakdown.map((m) => (
@@ -705,12 +708,12 @@ export function UsageView() {
                     >
                       <defs>
                         <linearGradient id="mixInput" x1="0" y1="0" x2="1" y2="0">
-                          <stop offset="0%" stopColor="#4fb8f4" stopOpacity={0.92} />
-                          <stop offset="100%" stopColor="#39aee8" stopOpacity={0.86} />
+                          <stop offset="0%" stopColor={USAGE_COLORS.input} stopOpacity={0.92} />
+                          <stop offset="100%" stopColor={USAGE_COLORS.input} stopOpacity={0.74} />
                         </linearGradient>
                         <linearGradient id="mixOutput" x1="0" y1="0" x2="1" y2="0">
-                          <stop offset="0%" stopColor="#f59a52" stopOpacity={0.95} />
-                          <stop offset="100%" stopColor="#ec8441" stopOpacity={0.9} />
+                          <stop offset="0%" stopColor={USAGE_COLORS.output} stopOpacity={0.95} />
+                          <stop offset="100%" stopColor={USAGE_COLORS.output} stopOpacity={0.76} />
                         </linearGradient>
                       </defs>
                       <CartesianGrid stroke={USAGE_COLORS.grid} strokeDasharray="3 3" horizontal={false} />
@@ -766,7 +769,13 @@ export function UsageView() {
                         {agentChart.map((entry) => (
                           <Cell
                             key={entry.agent}
-                            fill={entry.sessions > 10 ? "#52b7e9" : entry.sessions > 4 ? "#4fcab3" : "#7a8ea8"}
+                            fill={
+                              entry.sessions > 10
+                                ? USAGE_COLORS.barHigh
+                                : entry.sessions > 4
+                                  ? USAGE_COLORS.barMid
+                                  : USAGE_COLORS.barLow
+                            }
                           />
                         ))}
                       </Bar>

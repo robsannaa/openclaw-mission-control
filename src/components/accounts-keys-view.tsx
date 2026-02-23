@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  Cpu,
   Eye,
   EyeOff,
   KeyRound,
@@ -19,17 +20,18 @@ type AccountsResponse = {
   sourceOfTruth: {
     gatewayConfig: boolean;
     channelsStatus: boolean;
+    modelsStatus: boolean;
   };
   summary: {
     agents: number;
+    modelProvidersConnected: number;
+    modelProvidersTotal: number;
+    authProfiles: number;
     channelAccounts: number;
     channelAccountsRunning: number;
     configEnvKeys: number;
     processEnvKeys: number;
     configSecrets: number;
-    skillCredentialServices: number;
-    skillCredentialReady: number;
-    skillCredentialEnvKeys: number;
     discoveredCredentials: number;
     discoveredCredentialServices: number;
   };
@@ -40,6 +42,42 @@ type AccountsResponse = {
     agentDir: string;
     model: string | null;
     isDefault: boolean;
+  }>;
+  modelAuthByAgent: Array<{
+    agentId: string;
+    storePath: string | null;
+    shellEnvFallback: { enabled: boolean; appliedKeys: string[] };
+    providers: Array<{
+      provider: string;
+      connected: boolean;
+      effectiveKind: string | null;
+      effectiveDetail: string | null;
+      profileCount: number;
+      oauthCount: number;
+      tokenCount: number;
+      apiKeyCount: number;
+      labels: string[];
+      envSource: string | null;
+      envValue: string | null;
+      modelsJsonSource: string | null;
+    }>;
+    oauthProfiles: Array<{
+      profileId: string;
+      provider: string;
+      type: string;
+      status: string;
+      source: string;
+      label: string;
+      expiresAt: number | null;
+      remainingMs: number | null;
+    }>;
+    unusableProfiles: Array<{
+      profileId: string;
+      provider: string;
+      kind: string;
+      until: number | null;
+      remainingMs: number | null;
+    }>;
   }>;
   channels: {
     chat: Record<string, string[]>;
@@ -66,13 +104,6 @@ type AccountsResponse = {
     process: Array<{ key: string; value: string; source: string; redacted: boolean }>;
   };
   skillCredentials: {
-    summary: {
-      skills: number;
-      ready: number;
-      missing: number;
-      envKeys: number;
-      resolvedEnvKeys: number;
-    };
     skills: Array<{
       name: string;
       source: string;
@@ -132,6 +163,15 @@ function formatAgo(ts: number | null): string {
   if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}m ago`;
   if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}h ago`;
   return `${Math.floor(ms / 86_400_000)}d ago`;
+}
+
+function formatDuration(ms: number | null): string {
+  if (!ms || ms <= 0) return "n/a";
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
 }
 
 function masked(value: string): string {
@@ -234,6 +274,84 @@ export function AccountsKeysView() {
     }
 
     return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
+  }, [data]);
+
+  const modelProviderSummary = useMemo(() => {
+    if (!data) {
+      return [] as Array<{
+        provider: string;
+        connectedAgents: string[];
+        effectiveKinds: string[];
+        labels: string[];
+        envSources: string[];
+        envValues: string[];
+        oauth: Array<{ profileId: string; status: string; remainingMs: number | null }>;
+      }>;
+    }
+    const byProvider = new Map<
+      string,
+      {
+        connectedAgents: Set<string>;
+        effectiveKinds: Set<string>;
+        labels: Set<string>;
+        envSources: Set<string>;
+        envValues: Set<string>;
+        oauth: Array<{ profileId: string; status: string; remainingMs: number | null }>;
+      }
+    >();
+
+    for (const row of data.modelAuthByAgent) {
+      for (const provider of row.providers) {
+        const key = provider.provider || "unknown";
+        if (!byProvider.has(key)) {
+          byProvider.set(key, {
+            connectedAgents: new Set<string>(),
+            effectiveKinds: new Set<string>(),
+            labels: new Set<string>(),
+            envSources: new Set<string>(),
+            envValues: new Set<string>(),
+            oauth: [],
+          });
+        }
+        const entry = byProvider.get(key)!;
+        if (provider.connected) entry.connectedAgents.add(row.agentId);
+        if (provider.effectiveKind) entry.effectiveKinds.add(provider.effectiveKind);
+        if (provider.effectiveDetail) entry.labels.add(provider.effectiveDetail);
+        for (const label of provider.labels) entry.labels.add(label);
+        if (provider.envSource) entry.envSources.add(provider.envSource);
+        if (provider.envValue) entry.envValues.add(provider.envValue);
+      }
+      for (const oauth of row.oauthProfiles) {
+        const key = oauth.provider || "unknown";
+        if (!byProvider.has(key)) {
+          byProvider.set(key, {
+            connectedAgents: new Set<string>(),
+            effectiveKinds: new Set<string>(),
+            labels: new Set<string>(),
+            envSources: new Set<string>(),
+            envValues: new Set<string>(),
+            oauth: [],
+          });
+        }
+        byProvider.get(key)!.oauth.push({
+          profileId: oauth.profileId,
+          status: oauth.status,
+          remainingMs: oauth.remainingMs,
+        });
+      }
+    }
+
+    return [...byProvider.entries()]
+      .map(([provider, entry]) => ({
+        provider,
+        connectedAgents: [...entry.connectedAgents].sort((a, b) => a.localeCompare(b)),
+        effectiveKinds: [...entry.effectiveKinds].sort((a, b) => a.localeCompare(b)),
+        labels: [...entry.labels].sort((a, b) => a.localeCompare(b)),
+        envSources: [...entry.envSources].sort((a, b) => a.localeCompare(b)),
+        envValues: [...entry.envValues].sort((a, b) => a.localeCompare(b)),
+        oauth: entry.oauth.sort((a, b) => a.profileId.localeCompare(b.profileId)),
+      }))
+      .sort((a, b) => a.provider.localeCompare(b.provider));
   }, [data]);
 
   const getEnvEditor = useCallback(
@@ -382,11 +500,22 @@ export function AccountsKeysView() {
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 {statusPill(data.sourceOfTruth.gatewayConfig, "Gateway Config")}
                 {statusPill(data.sourceOfTruth.channelsStatus, "Channel Runtime")}
+                {statusPill(data.sourceOfTruth.modelsStatus, "Model Auth Runtime")}
               </div>
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="rounded-md border border-border/70 bg-muted/30 p-3">
                   <p className="text-xs text-muted-foreground">Agents</p>
                   <p className="mt-1 text-xs font-semibold">{data.summary.agents}</p>
+                </div>
+                <div className="rounded-md border border-border/70 bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">Model Providers Connected</p>
+                  <p className="mt-1 text-xs font-semibold">
+                    {data.summary.modelProvidersConnected}/{data.summary.modelProvidersTotal}
+                  </p>
+                </div>
+                <div className="rounded-md border border-border/70 bg-muted/30 p-3">
+                  <p className="text-xs text-muted-foreground">Model Auth Profiles</p>
+                  <p className="mt-1 text-xs font-semibold">{data.summary.authProfiles}</p>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/30 p-3">
                   <p className="text-xs text-muted-foreground">Channel Accounts Running</p>
@@ -403,12 +532,6 @@ export function AccountsKeysView() {
                   <p className="mt-1 text-xs font-semibold">{data.summary.processEnvKeys}</p>
                 </div>
                 <div className="rounded-md border border-border/70 bg-muted/30 p-3">
-                  <p className="text-xs text-muted-foreground">Skill Credential Services</p>
-                  <p className="mt-1 text-xs font-semibold">
-                    {data.summary.skillCredentialReady}/{data.summary.skillCredentialServices}
-                  </p>
-                </div>
-                <div className="rounded-md border border-border/70 bg-muted/30 p-3">
                   <p className="text-xs text-muted-foreground">Discovered External Credentials</p>
                   <p className="mt-1 text-xs font-semibold">
                     {data.summary.discoveredCredentials} ({data.summary.discoveredCredentialServices} services)
@@ -418,6 +541,88 @@ export function AccountsKeysView() {
                   <p className="text-xs text-muted-foreground">Discovered Config Secrets</p>
                   <p className="mt-1 text-xs font-semibold">{data.summary.configSecrets}</p>
                 </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-border/70 bg-card p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="inline-flex items-center gap-2 text-xs font-semibold text-foreground">
+                  <Cpu className="h-4 w-4" />
+                  Model Provider Auth
+                </h2>
+                <a
+                  href="/models"
+                  className="rounded border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  Manage in Models
+                </a>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                From <code>openclaw models status --json</code>. OpenAI OAuth often appears under{" "}
+                <code>openai-codex</code> provider profiles.
+              </p>
+              <div className="mt-3 space-y-2">
+                {modelProviderSummary.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    No model auth providers detected yet.
+                  </p>
+                ) : null}
+                {modelProviderSummary.map((provider) => (
+                  <div
+                    key={provider.provider}
+                    className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-medium text-foreground">{provider.provider}</p>
+                      <p
+                        className={
+                          provider.connectedAgents.length > 0
+                            ? "text-emerald-300"
+                            : "text-amber-300"
+                        }
+                      >
+                        {provider.connectedAgents.length > 0
+                          ? `connected (${provider.connectedAgents.join(", ")})`
+                          : "not connected"}
+                      </p>
+                    </div>
+                    {provider.effectiveKinds.length > 0 && (
+                      <p className="mt-1 text-muted-foreground">
+                        auth: {provider.effectiveKinds.join(", ")}
+                      </p>
+                    )}
+                    {provider.envSources.length > 0 && (
+                      <p className="mt-1 text-muted-foreground">
+                        key source: {provider.envSources.join(", ")}
+                      </p>
+                    )}
+                    {provider.envValues.length > 0 && (
+                      <p className="mt-1 break-all text-muted-foreground">
+                        key value:{" "}
+                        <code>
+                          {provider.envValues
+                            .map((value) => renderSecret(value, revealSecrets, false))
+                            .join(", ")}
+                        </code>
+                      </p>
+                    )}
+                    {provider.labels.length > 0 && (
+                      <p className="mt-1 break-all text-muted-foreground">
+                        profiles: {provider.labels.join(" · ")}
+                      </p>
+                    )}
+                    {provider.oauth.length > 0 && (
+                      <div className="mt-1 space-y-1 text-muted-foreground">
+                        {provider.oauth.map((oauth) => (
+                          <p key={`${provider.provider}:${oauth.profileId}`}>
+                            oauth {oauth.profileId}: {oauth.status || "unknown"} · remaining{" "}
+                            {formatDuration(oauth.remainingMs)}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -449,57 +654,6 @@ export function AccountsKeysView() {
                     {acct.lastError ? (
                       <p className="mt-1 text-red-300">lastError: {acct.lastError}</p>
                     ) : null}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-border/70 bg-card p-4">
-              <h2 className="text-xs font-semibold text-foreground">Skill Credential Matrix</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Skill-declared env requirements 
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                ready={data.skillCredentials.summary.ready}/{data.skillCredentials.summary.skills} · env keys resolved={data.skillCredentials.summary.resolvedEnvKeys}/{data.skillCredentials.summary.envKeys}
-              </p>
-              <div className="mt-3 space-y-2">
-                {data.skillCredentials.skills.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">No skill credential requirements discovered.</p>
-                ) : null}
-                {data.skillCredentials.skills.map((skill) => (
-                  <div
-                    key={skill.name}
-                    className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium text-foreground">{skill.name}</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-muted-foreground">{skill.source}</span>
-                        <span className={skill.ready ? "text-emerald-300" : "text-amber-300"}>
-                          {skill.ready ? "ready" : `missing ${skill.missingEnv.length}`}
-                        </span>
-                      </div>
-                    </div>
-                    <p className="mt-1 text-muted-foreground">
-                      eligible={String(skill.eligible)} disabled={String(skill.disabled)} blocked={String(skill.blockedByAllowlist)}
-                    </p>
-                    {skill.primaryEnv ? (
-                      <p className="mt-1 text-muted-foreground">
-                        primaryEnv=<code>{skill.primaryEnv}</code>
-                      </p>
-                    ) : null}
-                    <div className="mt-2 space-y-1">
-                      {skill.env.map((env) => (
-                        <p key={`${skill.name}:${env.key}`} className="break-all text-muted-foreground">
-                          <span className="text-foreground">{env.key}</span> · {env.present ? (env.source || "set") : "missing"} ={" "}
-                          <code>
-                            {env.present
-                              ? renderSecret(env.value || "", revealSecrets, env.redacted)
-                              : "(not set)"}
-                          </code>
-                        </p>
-                      ))}
-                    </div>
                   </div>
                 ))}
               </div>
@@ -550,7 +704,7 @@ export function AccountsKeysView() {
               <div className="rounded-xl border border-border/70 bg-card p-4">
                 <h2 className="text-xs font-semibold text-foreground">Config Env Credentials</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Vercel-style edit flow: current value plus double-entry confirmation. Includes skill-required env keys.
+                  Vercel-style edit flow: current value plus double-entry confirmation.
                 </p>
                 <div className="mt-3 space-y-2">
                   {editableConfigEnvRows.length === 0 ? (

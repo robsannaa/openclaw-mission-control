@@ -286,14 +286,12 @@ function relationLabel(value: string): string {
 }
 
 const RELATION_COLORS: ReadonlyArray<{ dark: string; light: string }> = [
-  { dark: "rgba(34,197,94,0.85)", light: "rgba(21,128,61,0.88)" },
-  { dark: "rgba(56,189,248,0.85)", light: "rgba(3,105,161,0.88)" },
-  { dark: "rgba(168,85,247,0.85)", light: "rgba(126,34,206,0.88)" },
-  { dark: "rgba(251,146,60,0.85)", light: "rgba(194,65,12,0.88)" },
-  { dark: "rgba(236,72,153,0.85)", light: "rgba(190,24,93,0.88)" },
-  { dark: "rgba(250,204,21,0.85)", light: "rgba(161,98,7,0.88)" },
-  { dark: "rgba(244,63,94,0.85)", light: "rgba(185,28,28,0.88)" },
-  { dark: "rgba(20,184,166,0.85)", light: "rgba(13,148,136,0.88)" },
+  { dark: "rgba(126,162,231,0.88)", light: "rgba(43,76,126,0.88)" },
+  { dark: "rgba(82,183,169,0.88)", light: "rgba(42,157,143,0.88)" },
+  { dark: "rgba(241,179,85,0.88)", light: "rgba(233,160,59,0.88)" },
+  { dark: "rgba(143,184,255,0.88)", light: "rgba(76,110,245,0.88)" },
+  { dark: "rgba(240,106,117,0.88)", light: "rgba(214,69,80,0.88)" },
+  { dark: "rgba(194,209,229,0.82)", light: "rgba(100,116,139,0.82)" },
 ];
 
 function relationToColor(relation: string, isDark: boolean): string {
@@ -339,21 +337,22 @@ function timeRangeMs(range: TimeRange): number {
 
 function nodeKindColor(kind: string, isDark: boolean): string {
   const normalized = String(kind || "").toLowerCase();
+  const tint = (light: string, dark: string) => (isDark ? dark : light);
   // New LLM-extracted entity types
-  if (normalized === "concept") return isDark ? "rgba(56,189,248,0.32)" : "rgba(56,189,248,0.18)";
-  if (normalized === "preference") return isDark ? "rgba(168,85,247,0.30)" : "rgba(168,85,247,0.16)";
-  if (normalized === "tool") return isDark ? "rgba(249,115,22,0.32)" : "rgba(249,115,22,0.17)";
-  if (normalized === "organization") return isDark ? "rgba(245,158,11,0.30)" : "rgba(245,158,11,0.16)";
-  if (normalized === "event") return isDark ? "rgba(20,184,166,0.30)" : "rgba(20,184,166,0.16)";
+  if (normalized === "concept") return tint("rgba(43,76,126,0.2)", "rgba(126,162,231,0.34)");
+  if (normalized === "preference") return tint("rgba(76,110,245,0.18)", "rgba(143,184,255,0.32)");
+  if (normalized === "tool") return tint("rgba(233,160,59,0.18)", "rgba(241,179,85,0.32)");
+  if (normalized === "organization") return tint("rgba(214,69,80,0.16)", "rgba(240,106,117,0.3)");
+  if (normalized === "event") return tint("rgba(42,157,143,0.18)", "rgba(82,183,169,0.3)");
   // Unchanged entity types
-  if (normalized === "person") return isDark ? "rgba(34,197,94,0.30)" : "rgba(34,197,94,0.16)";
-  if (normalized === "project") return isDark ? "rgba(236,72,153,0.28)" : "rgba(236,72,153,0.14)";
+  if (normalized === "person") return tint("rgba(42,157,143,0.16)", "rgba(82,183,169,0.28)");
+  if (normalized === "project") return tint("rgba(76,110,245,0.16)", "rgba(143,184,255,0.3)");
   // Legacy types (backward compat with saved graphs)
-  if (normalized === "topic") return isDark ? "rgba(56,189,248,0.32)" : "rgba(56,189,248,0.18)";
-  if (normalized === "fact") return isDark ? "rgba(99,102,241,0.28)" : "rgba(99,102,241,0.16)";
-  if (normalized === "profile") return isDark ? "rgba(168,85,247,0.30)" : "rgba(168,85,247,0.16)";
-  if (normalized === "task") return isDark ? "rgba(251,146,60,0.30)" : "rgba(251,146,60,0.17)";
-  return isDark ? "rgba(148,163,184,0.26)" : "rgba(148,163,184,0.12)";
+  if (normalized === "topic") return tint("rgba(43,76,126,0.2)", "rgba(126,162,231,0.34)");
+  if (normalized === "fact") return tint("rgba(76,110,245,0.16)", "rgba(143,184,255,0.28)");
+  if (normalized === "profile") return tint("rgba(82,183,169,0.18)", "rgba(82,183,169,0.3)");
+  if (normalized === "task") return tint("rgba(233,160,59,0.18)", "rgba(241,179,85,0.32)");
+  return tint("rgba(100,116,139,0.14)", "rgba(149,163,184,0.26)");
 }
 
 function kindLabel(kind: string): string {
@@ -1381,7 +1380,7 @@ export function MemoryGraphView() {
           border: isDark ? "1px solid rgba(255,255,255,0.12)" : "1px solid rgba(15,23,42,0.14)",
           background: `linear-gradient(140deg, ${nodeKindColor(node.kind, isDark)} 0%, ${isDark ? "rgba(12,12,16,0.72)" : "rgba(255,255,255,0.94)"
             } 100%)`,
-          color: isDark ? "#f4f4f5" : "#111827",
+          color: "var(--foreground)",
           opacity,
           minWidth: 200,
           boxShadow: selected
@@ -1754,8 +1753,8 @@ export function MemoryGraphView() {
         className={cn(
           "relative min-h-0 flex-1",
           isDark
-            ? "bg-[radial-gradient(circle_at_20%_0%,rgba(34,197,94,0.11),transparent_45%),radial-gradient(circle_at_88%_100%,rgba(56,189,248,0.14),transparent_44%)]"
-            : "bg-[radial-gradient(circle_at_20%_0%,rgba(16,185,129,0.08),transparent_42%),radial-gradient(circle_at_88%_100%,rgba(14,165,233,0.12),transparent_42%)]"
+            ? "bg-[radial-gradient(circle_at_20%_0%,rgba(82,183,169,0.12),transparent_45%),radial-gradient(circle_at_88%_100%,rgba(126,162,231,0.16),transparent_44%)]"
+            : "bg-[radial-gradient(circle_at_20%_0%,rgba(42,157,143,0.09),transparent_42%),radial-gradient(circle_at_88%_100%,rgba(43,76,126,0.12),transparent_42%)]"
         )}
       >
         <ReactFlow
@@ -1772,7 +1771,7 @@ export function MemoryGraphView() {
           colorMode={isDark ? "dark" : "light"}
           className="h-full w-full"
         >
-          <Background gap={20} size={1} color={isDark ? "rgba(255,255,255,0.10)" : "rgba(15,23,42,0.14)"} />
+          <Background gap={20} size={1} color="var(--chart-grid)" />
           <MiniMap pannable zoomable />
           <Controls />
         </ReactFlow>

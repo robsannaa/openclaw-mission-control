@@ -74,6 +74,12 @@ type SystemPayload = {
     port: string | number;
     mode: string;
     version: string;
+    /** Auth mode: token | password (from gateway.auth.mode). No value = auth not configured. */
+    authMode?: "token" | "password";
+    /** True if gateway.auth.token is set (value never sent). */
+    tokenConfigured?: boolean;
+    /** gateway.auth.allowTailscale (Tailscale clients can connect without token). */
+    allowTailscale?: boolean;
   };
   models: { id: string; alias?: string }[];
   stats: {
@@ -341,10 +347,14 @@ export async function GET() {
 
       // Extract safe config info (NO secrets)
       const gateway = (config.gateway || {}) as Record<string, unknown>;
+      const auth = (gateway.auth || {}) as Record<string, unknown>;
       const meta = (config.meta || {}) as Record<string, unknown>;
       const gatewayPort = typeof gateway.port === "number" || typeof gateway.port === "string"
         ? gateway.port
         : 18789;
+      const authMode = auth.mode === "password" ? "password" : auth.mode === "token" ? "token" : undefined;
+      const tokenConfigured = typeof auth.token === "string" && auth.token.trim().length > 0;
+      const allowTailscale = auth.allowTailscale !== false;
 
       const payload: SystemPayload = {
         agents,
@@ -356,6 +366,9 @@ export async function GET() {
           port: gatewayPort,
           mode: (gateway.mode as string) || "local",
           version: (meta.lastTouchedVersion as string) || "unknown",
+          authMode,
+          tokenConfigured,
+          allowTailscale,
         },
         models: extractModelAliases(config),
         stats: {

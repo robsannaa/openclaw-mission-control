@@ -53,120 +53,130 @@
   --radius: 0.625rem;
 
   /* Core backgrounds */
-  --background: #f8f8fa;
-  --foreground: #18181b;
+  --background: #f3f6fb;
+  --foreground: #1b2430;
   --card: #ffffff;
-  --card-foreground: #18181b;
+  --card-foreground: #1b2430;
   --popover: #ffffff;
-  --popover-foreground: #18181b;
-  --primary: #18181b;
-  --primary-foreground: #fafafa;
-  --secondary: #f0f0f3;
-  --secondary-foreground: #18181b;
-  --muted: #f0f0f3;
-  --muted-foreground: #71717a;
-  --accent: #f0f0f3;
-  --accent-foreground: #18181b;
+  --popover-foreground: #1b2430;
+  --primary: #2b4c7e;
+  --primary-foreground: #f8fbff;
+  --secondary: #e7edf5;
+  --secondary-foreground: #1b2430;
+  --muted: #e7edf5;
+  --muted-foreground: #64748b;
+  --accent: #e1e8f2;
+  --accent-foreground: #1b2430;
   --destructive: #dc2626;
 
   /* Borders & inputs */
-  --border: rgba(0, 0, 0, 0.08);
-  --input: rgba(0, 0, 0, 0.10);
-  --ring: rgba(0, 0, 0, 0.15);
+  --border: rgba(24, 38, 56, 0.12);
+  --input: rgba(24, 38, 56, 0.16);
+  --ring: rgba(43, 76, 126, 0.28);
 
   /* Charts */
-  --chart-1: #6366f1;
-  --chart-2: #0891b2;
-  --chart-3: #d97706;
-  --chart-4: #9333ea;
-  --chart-5: #dc2626;
+  --chart-1: #2b4c7e;
+  --chart-2: #2a9d8f;
+  --chart-3: #e9a03b;
+  --chart-4: #4c6ef5;
+  --chart-5: #d64550;
+  --chart-grid: rgba(43, 76, 126, 0.16);
+  --chart-tick: rgba(71, 85, 105, 0.84);
+  --chart-tick-muted: rgba(100, 116, 139, 0.74);
+  --chart-text: rgba(30, 41, 59, 0.92);
+  --chart-muted: #7a8ea8;
 
   /* Sidebar */
-  --sidebar: #f0f0f5;
-  --sidebar-foreground: #18181b;
-  --sidebar-primary: #7c3aed;
+  --sidebar: #e9eff7;
+  --sidebar-foreground: #1b2430;
+  --sidebar-primary: #2b4c7e;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #e8e8f0;
-  --sidebar-accent-foreground: #18181b;
-  --sidebar-border: rgba(0, 0, 0, 0.08);
-  --sidebar-ring: rgba(0, 0, 0, 0.15);
+  --sidebar-accent: #dde6f2;
+  --sidebar-accent-foreground: #1b2430;
+  --sidebar-border: rgba(24, 38, 56, 0.12);
+  --sidebar-ring: rgba(43, 76, 126, 0.24);
 
   /* ── Semantic surface tokens ── */
   --surface-0: #ffffff;                   /* Flat card / panel */
-  --surface-1: rgba(0, 0, 0, 0.02);      /* Subtle raised */
-  --surface-2: rgba(0, 0, 0, 0.04);      /* Elevated card */
-  --surface-3: rgba(0, 0, 0, 0.06);      /* Input / pill / tag */
-  --surface-inset: rgba(0, 0, 0, 0.03);  /* Recessed area inside a card */
+  --surface-1: rgba(24, 38, 56, 0.02);      /* Subtle raised */
+  --surface-2: rgba(24, 38, 56, 0.05);      /* Elevated card */
+  --surface-3: rgba(24, 38, 56, 0.08);      /* Input / pill / tag */
+  --surface-inset: rgba(24, 38, 56, 0.04);  /* Recessed area inside a card */
   --surface-overlay: rgba(255, 255, 255, 0.95); /* Dropdown, popover */
-  --surface-header: rgba(255, 255, 255, 0.8);   /* Header / toolbar */
+  --surface-header: rgba(245, 248, 253, 0.9);   /* Header / toolbar */
 
   /* ── Semantic border tokens ── */
-  --border-subtle: rgba(0, 0, 0, 0.04);
-  --border-default: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.12);
-  --border-accent: rgba(0, 0, 0, 0.16);
+  --border-subtle: rgba(24, 38, 56, 0.06);
+  --border-default: rgba(24, 38, 56, 0.12);
+  --border-strong: rgba(24, 38, 56, 0.18);
+  --border-accent: rgba(43, 76, 126, 0.24);
 
   /* ── Semantic text tokens ── */
-  --text-primary: #18181b;
-  --text-secondary: #3f3f46;
-  --text-tertiary: #71717a;
-  --text-quaternary: #a1a1aa;
-  --text-placeholder: #a1a1aa;
+  --text-primary: #1b2430;
+  --text-secondary: #334155;
+  --text-tertiary: #64748b;
+  --text-quaternary: #94a3b8;
+  --text-placeholder: #94a3b8;
 
 }
 
 /* ── Dark mode ──────────────────────────────────── */
 .dark {
-  --background: #050508;
-  --foreground: #f4f4f5;
-  --card: #111114;
-  --card-foreground: #f4f4f5;
-  --popover: #111114;
-  --popover-foreground: #f4f4f5;
-  --primary: #e4e4e7;
-  --primary-foreground: #18181b;
-  --secondary: #1e1e22;
-  --secondary-foreground: #f4f4f5;
-  --muted: #1e1e22;
-  --muted-foreground: #71717a;
-  --accent: #1e1e22;
-  --accent-foreground: #f4f4f5;
+  --background: #0d1420;
+  --foreground: #e6edf8;
+  --card: #111b2a;
+  --card-foreground: #e6edf8;
+  --popover: #111b2a;
+  --popover-foreground: #e6edf8;
+  --primary: #93b3e8;
+  --primary-foreground: #0d1420;
+  --secondary: #1a2738;
+  --secondary-foreground: #e6edf8;
+  --muted: #1a2738;
+  --muted-foreground: #95a3b8;
+  --accent: #23344d;
+  --accent-foreground: #e6edf8;
   --destructive: #dc2626;
-  --border: rgba(255, 255, 255, 0.08);
-  --input: rgba(255, 255, 255, 0.12);
-  --ring: rgba(255, 255, 255, 0.2);
-  --chart-1: #6366f1;
-  --chart-2: #22d3ee;
-  --chart-3: #f59e0b;
-  --chart-4: #a855f7;
-  --chart-5: #ef4444;
-  --sidebar: #0a0a0e;
-  --sidebar-foreground: #f4f4f5;
-  --sidebar-primary: #7c3aed;
-  --sidebar-primary-foreground: #f4f4f5;
-  --sidebar-accent: #1e1e22;
-  --sidebar-accent-foreground: #f4f4f5;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
-  --sidebar-ring: rgba(255, 255, 255, 0.2);
+  --border: rgba(194, 212, 240, 0.14);
+  --input: rgba(194, 212, 240, 0.18);
+  --ring: rgba(147, 179, 232, 0.42);
+  --chart-1: #7ea2e7;
+  --chart-2: #52b7a9;
+  --chart-3: #f1b355;
+  --chart-4: #8fb8ff;
+  --chart-5: #f06a75;
+  --chart-grid: rgba(147, 179, 232, 0.22);
+  --chart-tick: rgba(195, 209, 229, 0.86);
+  --chart-tick-muted: rgba(149, 163, 184, 0.76);
+  --chart-text: rgba(230, 237, 248, 0.92);
+  --chart-muted: #72839d;
+  --sidebar: #0f1826;
+  --sidebar-foreground: #e6edf8;
+  --sidebar-primary: #7ea2e7;
+  --sidebar-primary-foreground: #0d1420;
+  --sidebar-accent: #1c2b42;
+  --sidebar-accent-foreground: #e6edf8;
+  --sidebar-border: rgba(194, 212, 240, 0.14);
+  --sidebar-ring: rgba(147, 179, 232, 0.42);
 
-  --surface-0: #111114;
-  --surface-1: rgba(255, 255, 255, 0.02);
-  --surface-2: rgba(255, 255, 255, 0.04);
-  --surface-3: rgba(255, 255, 255, 0.06);
-  --surface-inset: rgba(255, 255, 255, 0.02);
-  --surface-overlay: rgba(17, 17, 20, 0.97);
-  --surface-header: rgba(12, 12, 16, 0.6);
+  --surface-0: #111b2a;
+  --surface-1: rgba(194, 212, 240, 0.04);
+  --surface-2: rgba(194, 212, 240, 0.08);
+  --surface-3: rgba(194, 212, 240, 0.12);
+  --surface-inset: rgba(194, 212, 240, 0.06);
+  --surface-overlay: rgba(17, 27, 42, 0.97);
+  --surface-header: rgba(11, 18, 31, 0.72);
 
-  --border-subtle: rgba(255, 255, 255, 0.04);
-  --border-default: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --border-accent: rgba(255, 255, 255, 0.16);
+  --border-subtle: rgba(194, 212, 240, 0.08);
+  --border-default: rgba(194, 212, 240, 0.14);
+  --border-strong: rgba(194, 212, 240, 0.2);
+  --border-accent: rgba(147, 179, 232, 0.36);
 
-  --text-primary: #f4f4f5;
-  --text-secondary: #a1a1aa;
-  --text-tertiary: #71717a;
-  --text-quaternary: #52525b;
-  --text-placeholder: #52525b;
+  --text-primary: #e6edf8;
+  --text-secondary: #c3d1e5;
+  --text-tertiary: #95a3b8;
+  --text-quaternary: #72839d;
+  --text-placeholder: #72839d;
 }
 
 @layer base {
@@ -186,7 +196,7 @@
   }
 }
 
-/* Apple-style liquid glass background */
+/* App background treatment */
 body {
   position: relative;
   min-height: 100vh;
@@ -194,81 +204,26 @@ body {
   transition: background-color 0.4s ease, background-image 0.4s ease;
 }
 
-/* Light: liquid glass — frosted orbs (lavender, blue, cool gray) */
+/* Light: clean paper + slate wash */
 html:not(.dark) body {
-  background-color: #eef0f5;
+  background-color: #f3f6fb;
   background-image:
-    radial-gradient(ellipse 110% 90% at 15% 15%, rgba(255, 255, 255, 0.92) 0%, transparent 48%),
-    radial-gradient(ellipse 95% 85% at 88% 85%, rgba(238, 242, 255, 0.9) 0%, transparent 45%),
-    radial-gradient(ellipse 85% 75% at 50% 45%, rgba(248, 247, 255, 0.85) 0%, transparent 50%),
-    radial-gradient(ellipse 75% 90% at 72% 18%, rgba(245, 243, 255, 0.75) 0%, transparent 42%),
-    radial-gradient(ellipse 80% 70% at 22% 78%, rgba(235, 245, 255, 0.7) 0%, transparent 45%),
-    radial-gradient(ellipse 60% 80% at 55% 55%, rgba(250, 250, 253, 0.6) 0%, transparent 50%);
+    linear-gradient(180deg, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0) 34%),
+    radial-gradient(130% 90% at 0% 0%, rgba(43, 76, 126, 0.12) 0%, transparent 58%),
+    radial-gradient(100% 80% at 100% 100%, rgba(42, 157, 143, 0.1) 0%, transparent 60%),
+    radial-gradient(75% 70% at 50% 18%, rgba(100, 116, 139, 0.08) 0%, transparent 62%);
   background-attachment: fixed;
 }
 
-/* Dark: liquid glass — deep glass orbs */
+/* Dark: deep slate + subtle cyan/navy glow */
 .dark body {
-  background-color: #050508;
+  background-color: #0d1420;
   background-image:
-    radial-gradient(ellipse 100% 80% at 15% 20%, rgba(88, 80, 236, 0.18) 0%, transparent 50%),
-    radial-gradient(ellipse 90% 70% at 88% 75%, rgba(6, 95, 70, 0.12) 0%, transparent 45%),
-    radial-gradient(ellipse 80% 100% at 50% 50%, rgba(30, 41, 59, 0.4) 0%, transparent 55%),
-    radial-gradient(ellipse 70% 80% at 70% 25%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
-    radial-gradient(ellipse 85% 60% at 25% 85%, rgba(15, 50, 40, 0.1) 0%, transparent 45%);
+    linear-gradient(180deg, rgba(9, 14, 24, 0.36) 0%, rgba(9, 14, 24, 0) 30%),
+    radial-gradient(120% 92% at 4% 0%, rgba(126, 162, 231, 0.2) 0%, transparent 58%),
+    radial-gradient(95% 84% at 96% 100%, rgba(56, 136, 125, 0.16) 0%, transparent 60%),
+    radial-gradient(80% 70% at 50% 18%, rgba(35, 52, 77, 0.28) 0%, transparent 64%);
   background-attachment: fixed;
-}
-
-/* Frosted glass overlay (liquid glass sheen) */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  background-image:
-    radial-gradient(1.2px 1.2px at 10% 15%, rgba(255,255,255,0.45), transparent),
-    radial-gradient(0.8px 0.8px at 20% 40%, rgba(255,255,255,0.25), transparent),
-    radial-gradient(1.5px 1.5px at 35% 8%, rgba(255,255,255,0.55), transparent),
-    radial-gradient(1px 1px at 48% 62%, rgba(255,255,255,0.35), transparent),
-    radial-gradient(0.8px 0.8px at 55% 28%, rgba(255,255,255,0.20), transparent),
-    radial-gradient(1.5px 1.5px at 65% 78%, rgba(255,255,255,0.50), transparent),
-    radial-gradient(1px 1px at 72% 42%, rgba(255,255,255,0.30), transparent),
-    radial-gradient(0.8px 0.8px at 82% 58%, rgba(255,255,255,0.20), transparent),
-    radial-gradient(1.5px 1.5px at 92% 22%, rgba(255,255,255,0.55), transparent),
-    radial-gradient(1px 1px at 15% 75%, rgba(255,255,255,0.35), transparent),
-    radial-gradient(0.8px 0.8px at 38% 88%, rgba(255,255,255,0.20), transparent),
-    radial-gradient(1.5px 1.5px at 58% 5%, rgba(255,255,255,0.50), transparent),
-    radial-gradient(1px 1px at 78% 92%, rgba(255,255,255,0.30), transparent),
-    radial-gradient(0.8px 0.8px at 5% 48%, rgba(255,255,255,0.20), transparent),
-    radial-gradient(1.5px 1.5px at 88% 72%, rgba(255,255,255,0.50), transparent),
-    radial-gradient(0.6px 0.6px at 25% 55%, rgba(255,255,255,0.15), transparent),
-    radial-gradient(1px 1px at 45% 35%, rgba(255,255,255,0.30), transparent),
-    radial-gradient(0.6px 0.6px at 62% 12%, rgba(255,255,255,0.15), transparent),
-    radial-gradient(1.2px 1.2px at 85% 45%, rgba(255,255,255,0.40), transparent),
-    radial-gradient(0.6px 0.6px at 95% 85%, rgba(255,255,255,0.15), transparent);
-  background-size: 220px 220px;
-}
-
-/* Light mode: very subtle glass sheen */
-html:not(.dark) body::before {
-  opacity: 0.35;
-  background-image:
-    radial-gradient(1px 1px at 12% 18%, rgba(255,255,255,0.9), transparent),
-    radial-gradient(0.8px 0.8px at 25% 42%, rgba(255,255,255,0.6), transparent),
-    radial-gradient(1.2px 1.2px at 38% 10%, rgba(255,255,255,0.8), transparent),
-    radial-gradient(1px 1px at 52% 65%, rgba(255,255,255,0.5), transparent),
-    radial-gradient(0.8px 0.8px at 68% 30%, rgba(255,255,255,0.4), transparent),
-    radial-gradient(1.2px 1.2px at 78% 82%, rgba(255,255,255,0.7), transparent),
-    radial-gradient(1px 1px at 18% 72%, rgba(255,255,255,0.5), transparent),
-    radial-gradient(0.8px 0.8px at 92% 15%, rgba(255,255,255,0.6), transparent),
-    radial-gradient(1px 1px at 42% 38%, rgba(255,255,255,0.45), transparent);
-}
-
-.dark body::before {
-  opacity: 1;
 }
 
 /* Custom scrollbar — adapts to theme */
@@ -298,12 +253,16 @@ html:not(.dark) body::before {
   background: rgba(255, 255, 255, 0.15);
 }
 
-/* Ensure content sits above the star layer */
-body > * {
-  position: relative;
-  z-index: 1;
+/* ── Liquid glass (frosted glass + subtle border + depth) ───────────
+   Use for header, sidebar, cards. See FlyonUI liquid glass guide.   */
+@layer utilities {
+  .glass {
+    @apply border border-white/20 dark:border-white/10 bg-white/50 dark:bg-white/[0.06] backdrop-blur-md shadow-lg;
+  }
+  .glass-subtle {
+    @apply border border-white/15 dark:border-white/10 bg-white/40 dark:bg-white/[0.05] backdrop-blur-sm shadow-md;
+  }
 }
-
 
 /* ═══════════════════════════════════════════════════════════════════
    LIGHT MODE — ACCENT COLOR ADJUSTMENTS
@@ -324,11 +283,11 @@ body > * {
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── Accent text colors — boost contrast on white backgrounds ── */
-:root:not(.dark) .text-violet-100 { color: #6d28d9 !important; }
-:root:not(.dark) .text-violet-200 { color: #6d28d9 !important; }
-:root:not(.dark) .text-violet-300 { color: #7c3aed !important; }
-:root:not(.dark) .text-violet-400 { color: #7c3aed !important; }
-:root:not(.dark) .text-violet-400\/40 { color: rgba(124, 58, 237, 0.5) !important; }
+:root:not(.dark) .text-violet-100 { color: #1e3a8a !important; }
+:root:not(.dark) .text-violet-200 { color: #1e3a8a !important; }
+:root:not(.dark) .text-violet-300 { color: #2563eb !important; }
+:root:not(.dark) .text-violet-400 { color: #2563eb !important; }
+:root:not(.dark) .text-violet-400\/40 { color: rgba(37, 99, 235, 0.5) !important; }
 :root:not(.dark) .text-emerald-100 { color: #047857 !important; }
 :root:not(.dark) .text-emerald-200 { color: #047857 !important; }
 :root:not(.dark) .text-emerald-300 { color: #059669 !important; }
@@ -360,15 +319,15 @@ body > * {
 :root:not(.dark) .text-zinc-300 { color: #52525b !important; }
 
 /* ── Accent hover text ── */
-:root:not(.dark) .hover\:text-violet-300:hover { color: #6d28d9 !important; }
-:root:not(.dark) .hover\:text-violet-200:hover { color: #6d28d9 !important; }
+:root:not(.dark) .hover\:text-violet-300:hover { color: #1d4ed8 !important; }
+:root:not(.dark) .hover\:text-violet-200:hover { color: #1d4ed8 !important; }
 
 /* ── Accent backgrounds — slightly more opacity for visibility ── */
-:root:not(.dark) .bg-violet-500\/10 { background-color: rgba(139, 92, 246, 0.08) !important; }
-:root:not(.dark) .bg-violet-500\/15 { background-color: rgba(139, 92, 246, 0.10) !important; }
-:root:not(.dark) .bg-violet-500\/20 { background-color: rgba(139, 92, 246, 0.12) !important; }
-:root:not(.dark) .bg-violet-600\/20 { background-color: rgba(124, 58, 237, 0.10) !important; }
-:root:not(.dark) .bg-violet-950\/60 { background-color: rgba(124, 58, 237, 0.06) !important; }
+:root:not(.dark) .bg-violet-500\/10 { background-color: rgba(37, 99, 235, 0.08) !important; }
+:root:not(.dark) .bg-violet-500\/15 { background-color: rgba(37, 99, 235, 0.11) !important; }
+:root:not(.dark) .bg-violet-500\/20 { background-color: rgba(37, 99, 235, 0.14) !important; }
+:root:not(.dark) .bg-violet-600\/20 { background-color: rgba(29, 78, 216, 0.11) !important; }
+:root:not(.dark) .bg-violet-950\/60 { background-color: rgba(29, 78, 216, 0.08) !important; }
 :root:not(.dark) .bg-emerald-500\/10 { background-color: rgba(16, 185, 129, 0.08) !important; }
 :root:not(.dark) .bg-red-500\/10 { background-color: rgba(239, 68, 68, 0.08) !important; }
 :root:not(.dark) .bg-amber-500\/10 { background-color: rgba(245, 158, 11, 0.08) !important; }
@@ -378,19 +337,19 @@ body > * {
 :root:not(.dark) .bg-sky-500\/20 { background-color: rgba(14, 165, 233, 0.12) !important; }
 :root:not(.dark) .bg-sky-950\/50 { background-color: rgba(14, 165, 233, 0.06) !important; }
 :root:not(.dark) .bg-amber-950\/40 { background-color: rgba(245, 158, 11, 0.06) !important; }
-:root:not(.dark) .bg-violet-900\/80 { background-color: rgba(139, 92, 246, 0.10) !important; }
+:root:not(.dark) .bg-violet-900\/80 { background-color: rgba(29, 78, 216, 0.12) !important; }
 
 /* ── Accent hover backgrounds ── */
-:root:not(.dark) .hover\:bg-violet-500\/10:hover { background-color: rgba(124, 58, 237, 0.10) !important; }
-:root:not(.dark) .hover\:bg-violet-600\/30:hover { background-color: rgba(124, 58, 237, 0.15) !important; }
+:root:not(.dark) .hover\:bg-violet-500\/10:hover { background-color: rgba(29, 78, 216, 0.12) !important; }
+:root:not(.dark) .hover\:bg-violet-600\/30:hover { background-color: rgba(29, 78, 216, 0.18) !important; }
 :root:not(.dark) .hover\:bg-red-500\/10:hover { background-color: rgba(220, 38, 38, 0.08) !important; }
 :root:not(.dark) .hover\:bg-red-500\/20:hover { background-color: rgba(220, 38, 38, 0.10) !important; }
 
 /* ── Accent border colors ── */
-:root:not(.dark) .border-violet-500\/20 { border-color: rgba(124, 58, 237, 0.15) !important; }
-:root:not(.dark) .border-violet-500\/30 { border-color: rgba(124, 58, 237, 0.20) !important; }
-:root:not(.dark) .border-violet-500\/40 { border-color: rgba(124, 58, 237, 0.25) !important; }
-:root:not(.dark) .border-violet-500\/50 { border-color: rgba(124, 58, 237, 0.30) !important; }
+:root:not(.dark) .border-violet-500\/20 { border-color: rgba(29, 78, 216, 0.16) !important; }
+:root:not(.dark) .border-violet-500\/30 { border-color: rgba(29, 78, 216, 0.22) !important; }
+:root:not(.dark) .border-violet-500\/40 { border-color: rgba(29, 78, 216, 0.28) !important; }
+:root:not(.dark) .border-violet-500\/50 { border-color: rgba(29, 78, 216, 0.34) !important; }
 :root:not(.dark) .border-emerald-500\/20 { border-color: rgba(5, 150, 105, 0.15) !important; }
 :root:not(.dark) .border-emerald-500\/30 { border-color: rgba(5, 150, 105, 0.20) !important; }
 :root:not(.dark) .border-amber-500\/20 { border-color: rgba(180, 83, 9, 0.15) !important; }
@@ -403,9 +362,29 @@ body > * {
 /* ── React Flow internals (third-party, can't use Tailwind tokens) ── */
 :root:not(.dark) .react-flow__node { color: var(--foreground); }
 :root:not(.dark) .react-flow__edge-path { stroke: rgba(0, 0, 0, 0.2); }
-:root:not(.dark) .react-flow__edge.animated path { stroke: rgba(124, 58, 237, 0.4); }
+:root:not(.dark) .react-flow__edge.animated path { stroke: rgba(37, 99, 235, 0.42); }
+
+/* ── Dark mode accent remap (keep violet utility classes on-brand) ── */
+.dark .text-violet-100 { color: #dbeafe !important; }
+.dark .text-violet-200 { color: #bfdbfe !important; }
+.dark .text-violet-300 { color: #93c5fd !important; }
+.dark .text-violet-400 { color: #93c5fd !important; }
+.dark .text-violet-400\/40 { color: rgba(147, 197, 253, 0.55) !important; }
+.dark .hover\:text-violet-300:hover { color: #bfdbfe !important; }
+.dark .hover\:text-violet-200:hover { color: #bfdbfe !important; }
+.dark .bg-violet-500\/10 { background-color: rgba(96, 165, 250, 0.16) !important; }
+.dark .bg-violet-500\/15 { background-color: rgba(96, 165, 250, 0.2) !important; }
+.dark .bg-violet-500\/20 { background-color: rgba(96, 165, 250, 0.24) !important; }
+.dark .bg-violet-600\/20 { background-color: rgba(59, 130, 246, 0.2) !important; }
+.dark .bg-violet-900\/80 { background-color: rgba(30, 58, 138, 0.32) !important; }
+.dark .bg-violet-950\/60 { background-color: rgba(15, 23, 42, 0.44) !important; }
+.dark .hover\:bg-violet-500\/10:hover { background-color: rgba(96, 165, 250, 0.24) !important; }
+.dark .hover\:bg-violet-600\/30:hover { background-color: rgba(59, 130, 246, 0.3) !important; }
+.dark .border-violet-500\/20 { border-color: rgba(96, 165, 250, 0.28) !important; }
+.dark .border-violet-500\/30 { border-color: rgba(96, 165, 250, 0.36) !important; }
+.dark .border-violet-500\/40 { border-color: rgba(96, 165, 250, 0.44) !important; }
+.dark .border-violet-500\/50 { border-color: rgba(96, 165, 250, 0.52) !important; }
 
 /* ── Gradient stops (legacy, rare) ── */
 :root:not(.dark) .from-zinc-500 { --tw-gradient-from: #a1a1aa !important; }
 :root:not(.dark) .to-zinc-600 { --tw-gradient-to: #a1a1aa !important; }
-

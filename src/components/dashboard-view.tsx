@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity,
@@ -27,6 +28,8 @@ import {
   ArrowRight,
   Shield,
   Rocket,
+  KeyRound,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionLayout } from "@/components/section-layout";
@@ -41,7 +44,7 @@ type LiveData = {
     stats: { total: number; ok: number; error: number };
   };
   cronRuns: CronRun[];
-  agents: { id: string; sessionCount: number; totalTokens: number; lastActivity: number }[];
+  agents: { id: string; name: string; emoji: string; sessionCount: number; totalTokens: number; lastActivity: number }[];
   logEntries: LogEntry[];
 };
 
@@ -76,6 +79,19 @@ type SystemData = {
   skills: { name: string; source: string }[];
   models: { id: string; alias?: string }[];
   stats: { totalDevices: number; totalSkills: number; totalChannels: number };
+  gateway?: {
+    port?: number;
+    mode?: string;
+    authMode?: "token" | "password";
+    tokenConfigured?: boolean;
+    allowTailscale?: boolean;
+  };
+};
+
+type PairingSummary = {
+  dm: unknown[];
+  devices: unknown[];
+  total: number;
 };
 
 type GatewayDiagnosticsData = {
@@ -208,6 +224,16 @@ function formatBytesCompact(b: number): string {
   return `${b} B`;
 }
 
+const DASHBOARD_COLORS = {
+  primary: "var(--chart-1)",
+  success: "var(--chart-2)",
+  warning: "var(--chart-3)",
+  info: "var(--chart-4)",
+  danger: "var(--chart-5)",
+  muted: "var(--chart-muted)",
+  mutedStrong: "var(--muted-foreground)",
+};
+
 /* ── SSE hook: useSystemStats ─────────────────────── */
 
 function useSystemStats() {
@@ -333,24 +359,24 @@ function MemoryCompositionBar({
   };
 
   const segments = [
-    seg("app", "App", memory.app, "#2dd4bf"),
-    seg("wired", "Wired", memory.wired, "#a78bfa"),
-    seg("compressed", "Compressed", memory.compressed, "#fb7185"),
-    seg("cached", "Cached Files", memory.cached, "#60a5fa"),
-    seg("free", memoryFreeLabel, memory.free, "#94a3b8"),
+    seg("app", "App", memory.app, DASHBOARD_COLORS.success),
+    seg("wired", "Wired", memory.wired, DASHBOARD_COLORS.info),
+    seg("compressed", "Compressed", memory.compressed, DASHBOARD_COLORS.danger),
+    seg("cached", "Cached Files", memory.cached, DASHBOARD_COLORS.primary),
+    seg("free", memoryFreeLabel, memory.free, DASHBOARD_COLORS.muted),
   ].filter((s): s is { key: string; label: string; value: number; color: string } => Boolean(s));
 
   if (segments.length === 0) {
     const fallbackUsed = Math.max(0, memory.used || 0);
     const fallbackFree = Math.max(0, memory.total - fallbackUsed);
-    if (fallbackUsed > 0) segments.push({ key: "used", label: "Used", value: fallbackUsed, color: "#8b5cf6" });
-    if (fallbackFree > 0) segments.push({ key: "free", label: memoryFreeLabel, value: fallbackFree, color: "#94a3b8" });
+    if (fallbackUsed > 0) segments.push({ key: "used", label: "Used", value: fallbackUsed, color: DASHBOARD_COLORS.primary });
+    if (fallbackFree > 0) segments.push({ key: "free", label: memoryFreeLabel, value: fallbackFree, color: DASHBOARD_COLORS.muted });
   }
 
   const known = segments.reduce((sum, item) => sum + item.value, 0);
   const remainder = Math.max(0, (memory.total || 0) - known);
   if (remainder > (memory.total || 0) * 0.005) {
-    segments.push({ key: "other", label: "Kernel / Other", value: remainder, color: "#64748b" });
+    segments.push({ key: "other", label: "Kernel / Other", value: remainder, color: DASHBOARD_COLORS.mutedStrong });
   }
 
   const denom = Math.max(memory.total || 0, segments.reduce((sum, item) => sum + item.value, 0), 1);
@@ -384,7 +410,7 @@ function MemoryCompositionBar({
 function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; connected: boolean }) {
   if (!stats) {
     return (
-      <div className="rounded-xl border border-foreground/10 bg-card/90 p-6">
+      <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
           <Gauge className="h-4 w-4 animate-pulse" />
           Connecting to system stats stream...
@@ -394,11 +420,11 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
   }
 
   const cpuColor =
-    stats.cpu.usage > 80 ? "#ef4444" : stats.cpu.usage > 50 ? "#f59e0b" : "#10b981";
+    stats.cpu.usage > 80 ? DASHBOARD_COLORS.danger : stats.cpu.usage > 50 ? DASHBOARD_COLORS.warning : DASHBOARD_COLORS.success;
   const memColor =
-    stats.memory.percent > 85 ? "#ef4444" : stats.memory.percent > 65 ? "#f59e0b" : "#8b5cf6";
+    stats.memory.percent > 85 ? DASHBOARD_COLORS.danger : stats.memory.percent > 65 ? DASHBOARD_COLORS.warning : DASHBOARD_COLORS.primary;
   const diskColor =
-    stats.disk.percent > 90 ? "#ef4444" : stats.disk.percent > 75 ? "#f59e0b" : "#3b82f6";
+    stats.disk.percent > 90 ? DASHBOARD_COLORS.danger : stats.disk.percent > 75 ? DASHBOARD_COLORS.warning : DASHBOARD_COLORS.info;
   const memorySourceLabel =
     stats.memory.source === "vm_stat"
       ? " (Activity-style)"
@@ -432,7 +458,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
       </div>
 
       {/* Gauges row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 rounded-xl border border-foreground/10 bg-card/90 px-4 py-5">
+      <div className="glass grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 rounded-xl px-4 py-5">
         <div className="relative flex justify-center">
           <RadialGauge
             value={stats.cpu.usage}
@@ -465,7 +491,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
       {/* Detail cards grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {/* CPU details */}
-        <div className="rounded-xl border border-foreground/10 bg-card/90 p-3 space-y-2">
+        <div className="glass-subtle rounded-xl p-3 space-y-2">
           <div className="flex items-center gap-2">
             <Cpu className="h-3.5 w-3.5 text-emerald-400" />
             <span className="text-xs font-semibold text-foreground/70">CPU</span>
@@ -493,7 +519,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* Memory details */}
-        <div className="rounded-xl border border-foreground/10 bg-card/90 p-3 space-y-2">
+        <div className="glass-subtle rounded-xl p-3 space-y-2">
           <div className="flex items-center gap-2">
             <MemoryStick className="h-3.5 w-3.5 text-violet-400" />
             <span className="text-xs font-semibold text-foreground/70">
@@ -565,7 +591,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* Disk details */}
-        <div className="rounded-xl border border-foreground/10 bg-card/90 p-3 space-y-2">
+        <div className="glass-subtle rounded-xl p-3 space-y-2">
           <div className="flex items-center gap-2">
             <HardDrive className="h-3.5 w-3.5 text-blue-400" />
             <span className="text-xs font-semibold text-foreground/70">Disk</span>
@@ -594,7 +620,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* System info */}
-        <div className="rounded-xl border border-foreground/10 bg-card/90 p-3 space-y-2">
+        <div className="glass-subtle rounded-xl p-3 space-y-2">
           <div className="flex items-center gap-2">
             <Timer className="h-3.5 w-3.5 text-amber-400" />
             <span className="text-xs font-semibold text-foreground/70">System</span>
@@ -623,7 +649,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
       </div>
 
       {/* OpenClaw storage stats */}
-      <div className="rounded-xl border border-foreground/10 bg-card/90 p-3 space-y-2">
+      <div className="glass-subtle rounded-xl p-3 space-y-2">
         <div className="flex items-center gap-2">
           <Database className="h-3.5 w-3.5 text-pink-400" />
           <span className="text-xs font-semibold text-foreground/70">OpenClaw Storage</span>
@@ -680,7 +706,7 @@ function GatewayDiagnosticsPanel({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-foreground/10 bg-card/90 p-4">
+      <div className="glass rounded-xl p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-xs text-foreground/90">Gateway Diagnostics</p>
@@ -756,7 +782,7 @@ function GatewayDiagnosticsPanel({
 
       {data && (
         <>
-          <div className="rounded-xl border border-foreground/10 bg-card/90 p-3">
+          <div className="glass-subtle rounded-xl p-3">
             <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
               Alerts & Recommendations
             </h3>
@@ -797,7 +823,7 @@ function GatewayDiagnosticsPanel({
             </div>
           </div>
 
-          <div className="rounded-xl border border-foreground/10 bg-card/90 p-3">
+          <div className="glass-subtle rounded-xl p-3">
             <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
               Doctor Output
             </h3>
@@ -853,6 +879,7 @@ export function DashboardView() {
   const [gatewayDiag, setGatewayDiag] = useState<GatewayDiagnosticsData | null>(null);
   const [gatewayDiagError, setGatewayDiagError] = useState<string | null>(null);
   const [gatewayDiagLoading, setGatewayDiagLoading] = useState(false);
+  const [pairingSummary, setPairingSummary] = useState<PairingSummary | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { stats: sysStats, connected: sseConnected } = useSystemStats();
@@ -900,6 +927,10 @@ export function DashboardView() {
     fetch("/api/system", { cache: "no-store" })
       .then((r) => r.json())
       .then(setSystem)
+      .catch(() => { });
+    fetch("/api/pairing", { cache: "no-store" })
+      .then((r) => r.json())
+      .then(setPairingSummary)
       .catch(() => { });
 
     const startLivePolling = () => {
@@ -1170,6 +1201,52 @@ export function DashboardView() {
             />
           </div>
 
+          {/* ── Access & pairing (gateway token, device/DM requests) ─── */}
+          <div className="glass-subtle rounded-xl p-4">
+            <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <KeyRound className="h-3.5 w-3.5" /> Access & pairing
+            </h2>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-medium text-foreground/80">Gateway auth</p>
+                <p className="mt-1 text-xs text-muted-foreground/80">
+                  {system?.gateway?.authMode
+                    ? `Mode: ${system.gateway.authMode}${system.gateway.tokenConfigured ? " · Token set" : ""}`
+                    : "Not configured (open access)"}
+                  {system?.gateway?.allowTailscale && " · Tailscale allowed"}
+                </p>
+                <p className="mt-2 text-xs text-muted-foreground/60">
+                  Set or edit the token in{" "}
+                  <Link href="/config" className="text-violet-400 hover:underline">
+                    Config
+                  </Link>{" "}
+                  under <code className="rounded bg-foreground/10 px-1">gateway.auth.token</code>. The UI shows it redacted; to view or copy the full token, run on the gateway host: <code className="rounded bg-foreground/10 px-1">openclaw config get gateway.auth.token</code>. For remote access, paste the token when the dashboard prompts.{" "}
+                  <a
+                    href="https://docs.openclaw.ai/web/dashboard"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-violet-400 hover:underline"
+                  >
+                    Docs
+                  </a>
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-foreground/80">Pairing requests</p>
+                <p className="mt-1 text-xs text-muted-foreground/80">
+                  {(pairingSummary?.total ?? 0) > 0
+                    ? `${pairingSummary?.total ?? 0} pending (device + DM) — use the bell in the header to approve or reject.`
+                    : "No pending requests. New device or DM pairing will show in the header bell."}
+                </p>
+                {(pairingSummary?.total ?? 0) > 0 && (
+                  <p className="mt-2 text-xs text-muted-foreground/60">
+                    Click the <Bell className="inline h-3 w-3" /> icon in the top bar to manage.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
           {/* ── Top Issues Now ─────────────────────────── */}
           {issues.length > 0 && (
             <div>
@@ -1213,7 +1290,7 @@ export function DashboardView() {
                     <div
                       key={issue.id}
                       className={cn(
-                        "flex items-start gap-3 rounded-xl border p-3.5",
+                        "glass-subtle flex items-start gap-3 rounded-xl p-3.5",
                         severityCfg.border,
                         severityCfg.bg
                       )}
@@ -1250,7 +1327,7 @@ export function DashboardView() {
 
           {/* ── Getting Started (newbie rails) ────────── */}
           {isFreshSetup && issues.length === 0 && (
-            <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-5">
+            <div className="glass-subtle rounded-xl border border-violet-500/20 bg-violet-500/10 dark:bg-violet-500/5 p-5">
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/15">
                   <Rocket className="h-5 w-5 text-violet-400" />
@@ -1298,15 +1375,15 @@ export function DashboardView() {
                 {live.agents.map((agent) => (
                   <div
                     key={agent.id}
-                    className="rounded-xl border border-foreground/10 bg-card/90 p-4"
+                    className="glass rounded-xl p-4"
                   >
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-base">
-                        {agent.id === "main" ? "🦞" : "💀"}
+                        {agent.emoji || (agent.id === "main" ? "🦞" : "🤖")}
                       </div>
                       <div className="flex-1">
                         <p className="text-xs font-semibold text-foreground capitalize">
-                          {agent.id}
+                          {agent.name || agent.id}
                         </p>
                         <div className="flex items-center gap-3 text-xs text-muted-foreground">
                           <span>{agent.sessionCount} session{agent.sessionCount !== 1 ? "s" : ""}</span>
@@ -1377,7 +1454,7 @@ export function DashboardView() {
                   return (
                     <div
                       key={job.id}
-                      className="rounded-xl border border-foreground/10 bg-card/90 p-4"
+                      className="glass rounded-xl p-4"
                     >
                       <div className="flex items-center gap-2.5">
                         <div
@@ -1448,7 +1525,7 @@ export function DashboardView() {
                     type="button"
                     key={`${run.jobId}-${run.ts}-${i}`}
                     onClick={() => openCronJob(run.jobId)}
-                    className="w-full rounded-lg border border-foreground/5 bg-card/70 px-4 py-2.5 text-left transition-colors hover:border-violet-500/25 hover:bg-violet-500/5"
+                    className="w-full glass-subtle rounded-lg px-4 py-2.5 text-left transition-colors hover:border-violet-500/25 hover:bg-violet-500/5"
                   >
                     <div className="flex items-center gap-2">
                       {run.status === "ok" ? (
@@ -1484,7 +1561,7 @@ export function DashboardView() {
             <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <Radio className="h-3.5 w-3.5" /> Gateway Log
             </h2>
-            <div className="rounded-xl border border-foreground/10 bg-background/60 p-1">
+            <div className="glass-subtle rounded-xl p-1">
               <div className="max-h-80 overflow-y-auto font-mono text-xs leading-5">
                 {live.logEntries.map((entry, i) => {
                   const isError =
@@ -1569,8 +1646,8 @@ function StatCard({
   return (
     <div
       className={cn(
-        "rounded-xl border border-foreground/10 bg-card/90 p-3",
-        onClick && "cursor-pointer transition-colors hover:border-foreground/15"
+        "glass rounded-xl p-3",
+        onClick && "cursor-pointer transition-colors hover:border-white/30 dark:hover:border-white/20"
       )}
       onClick={onClick}
     >

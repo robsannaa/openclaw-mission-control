@@ -3,15 +3,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
+  ArrowRight,
   Bot,
   Check,
   Eye,
   EyeOff,
   Heart,
+  KeyRound,
+  ListOrdered,
+  Loader2,
+  Plus,
   RefreshCw,
   RotateCcw,
   Sparkles,
+  Trash2,
 } from "lucide-react";
+import Link from "next/link";
 import { requestRestart } from "@/lib/restart-store";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/ui/loading-state";
@@ -53,6 +60,12 @@ type ModelStatus = {
       }>;
     };
   };
+};
+
+type AuthOrderPayload = {
+  agentId: string;
+  provider: string;
+  order: string[] | null;
 };
 
 type DefaultsModelConfig = {
@@ -306,6 +319,10 @@ export function ModelsView() {
   const [status, setStatus] = useState<ModelStatus | null>(null);
   const [defaults, setDefaults] = useState<DefaultsModelConfig | null>(null);
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [allModels, setAllModels] = useState<ModelInfo[]>([]);
+  const [allModelsLoading, setAllModelsLoading] = useState(false);
+  const [allModelsWarning, setAllModelsWarning] = useState<string | null>(null);
+  const [configuredAllowed, setConfiguredAllowed] = useState<string[]>([]);
   const [agents, setAgents] = useState<AgentModelInfo[]>([]);
   const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentRuntimeStatus>>({});
   const [liveModels, setLiveModels] = useState<Record<string, LiveModelInfo>>({});
@@ -331,12 +348,56 @@ export function ModelsView() {
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
+  const [catalogProviderFilter, setCatalogProviderFilter] = useState<string>("all");
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [catalogModelToAdd, setCatalogModelToAdd] = useState("");
+  const [customModelToAdd, setCustomModelToAdd] = useState("");
+  const [providerForToken, setProviderForToken] = useState("openai");
+  const [providerToken, setProviderToken] = useState("");
+  const [revealProviderToken, setRevealProviderToken] = useState(false);
+  const [orderAgentId, setOrderAgentId] = useState("main");
+  const [orderProvider, setOrderProvider] = useState("openai");
+  const [orderDraft, setOrderDraft] = useState<string[]>([]);
+  const [orderSelectedProfileId, setOrderSelectedProfileId] = useState("");
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [orderBusy, setOrderBusy] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flash = useCallback((message: string, type: "success" | "error") => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ message, type });
     toastTimer.current = setTimeout(() => setToast(null), 3200);
+  }, []);
+
+  const postModelAction = useCallback(async (body: Record<string, unknown>) => {
+    const res = await fetch("/api/models", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      throw new Error(String(data.error || `Request failed with ${res.status}`));
+    }
+    return data as Record<string, unknown>;
+  }, []);
+
+  const fetchAllModels = useCallback(async () => {
+    setAllModelsLoading(true);
+    try {
+      const res = await fetch("/api/models?scope=all", { cache: "no-store" });
+      const data = await res.json();
+      const nextModels = Array.isArray(data.models) ? (data.models as ModelInfo[]) : [];
+      setAllModels(nextModels);
+      setAllModelsWarning(
+        typeof data.warning === "string" && data.warning.trim() ? data.warning.trim() : null
+      );
+    } catch (err) {
+      setAllModelsWarning(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAllModelsLoading(false);
+    }
   }, []);
 
   const fetchModels = useCallback(async () => {
@@ -364,6 +425,15 @@ export function ModelsView() {
         setDefaults(null);
       }
       setModels(Array.isArray(data.models) ? (data.models as ModelInfo[]) : []);
+      const configuredAllowedRaw = Array.isArray(data.allowedConfigured)
+        ? data.allowedConfigured.map((entry: unknown) => String(entry)).filter(Boolean)
+        : null;
+      setConfiguredAllowed(
+        configuredAllowedRaw ??
+          (Array.isArray(data.status?.allowed)
+            ? data.status.allowed.map((entry: unknown) => String(entry)).filter(Boolean)
+            : [])
+      );
       setAgents(Array.isArray(data.agents) ? (data.agents as AgentModelInfo[]) : []);
       setAgentStatuses(
         (data.agentStatuses || {}) as Record<string, AgentRuntimeStatus>
@@ -419,8 +489,17 @@ export function ModelsView() {
     fetchModels();
   }, [fetchModels]);
 
+  useEffect(() => {
+    fetchAllModels();
+  }, [fetchAllModels]);
+
   const runAction = useCallback(
-    async (body: Record<string, unknown>, successMsg: string, key: string) => {
+    async (
+      body: Record<string, unknown>,
+      successMsg: string,
+      key: string,
+      options?: { restart?: boolean; refreshCatalog?: boolean }
+    ) => {
       setBusyKey(key);
       const maxAttempts = 3;
       const isTransient = (msg: string) => {
@@ -435,25 +514,15 @@ export function ModelsView() {
       try {
         for (let attempt = 1; attempt <= maxAttempts; attempt++) {
           try {
-            const res = await fetch("/api/models", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(body),
-            });
-            const data = await res.json();
-            if (data.error) {
-              const msg = String(data.error);
-              if (isTransient(msg) && attempt < maxAttempts) {
-                await sleep(900 * attempt);
-                continue;
-              }
-              flash(msg, "error");
-              return;
-            }
-
+            await postModelAction(body);
             flash(successMsg, "success");
-            requestRestart("Model configuration was updated.");
+            if (options?.restart !== false) {
+              requestRestart("Model configuration was updated.");
+            }
             await fetchModels();
+            if (options?.refreshCatalog) {
+              await fetchAllModels();
+            }
             return;
           } catch (err) {
             const msg = String(err);
@@ -469,7 +538,7 @@ export function ModelsView() {
         setBusyKey(null);
       }
     },
-    [fetchModels, flash]
+    [fetchAllModels, fetchModels, flash, postModelAction]
   );
 
   const aliases = useMemo(
@@ -533,7 +602,7 @@ export function ModelsView() {
     [status]
   );
 
-  const optionMap = useMemo(() => {
+  const configuredOptionMap = useMemo(() => {
     const map = new Map<string, ModelOption>();
 
     for (const model of models) {
@@ -599,14 +668,56 @@ export function ModelsView() {
     providerAuthMap,
   ]);
 
+  const catalogOptionMap = useMemo(() => {
+    const map = new Map<string, ModelOption>();
+    for (const model of allModels) {
+      const provider = modelProvider(model.key);
+      const auth = providerAuthMap.get(provider);
+      map.set(model.key, {
+        key: model.key,
+        name: model.name || modelNameFromKey(model.key),
+        provider,
+        available: Boolean(model.available),
+        local: Boolean(model.local),
+        known: true,
+        ready: Boolean(model.local || model.available || allowedModels.has(model.key)),
+        authConnected: Boolean(auth?.connected),
+        authKind: auth?.authKind || null,
+        oauthStatus: auth?.oauthStatus || null,
+      });
+    }
+    return map;
+  }, [allModels, allowedModels, providerAuthMap]);
+
+  const allOptionMap = useMemo(() => {
+    const map = new Map<string, ModelOption>();
+    for (const [key, option] of catalogOptionMap.entries()) {
+      map.set(key, option);
+    }
+    for (const [key, option] of configuredOptionMap.entries()) {
+      map.set(key, option);
+    }
+    return map;
+  }, [catalogOptionMap, configuredOptionMap]);
+
   const modelOptions = useMemo(() => {
-    return [...optionMap.values()].sort((a, b) => {
+    return [...configuredOptionMap.values()].sort((a, b) => {
       const aReady = a.ready || a.local ? 0 : 1;
       const bReady = b.ready || b.local ? 0 : 1;
       if (aReady !== bReady) return aReady - bReady;
       return a.name.localeCompare(b.name);
     });
-  }, [optionMap]);
+  }, [configuredOptionMap]);
+
+  const allModelOptions = useMemo(() => {
+    return [...allOptionMap.values()].sort((a, b) => {
+      const aReady = a.ready || a.local ? 0 : 1;
+      const bReady = b.ready || b.local ? 0 : 1;
+      if (aReady !== bReady) return aReady - bReady;
+      if (a.provider !== b.provider) return a.provider.localeCompare(b.provider);
+      return a.name.localeCompare(b.name);
+    });
+  }, [allOptionMap]);
 
   const heartbeatModelOptions = useMemo(() => {
     const empty: ModelOption = {
@@ -621,8 +732,8 @@ export function ModelsView() {
       authKind: null,
       oauthStatus: null,
     };
-    return [empty, ...modelOptions];
-  }, [modelOptions]);
+    return [empty, ...allModelOptions];
+  }, [allModelOptions]);
 
   const availableModels = useMemo(
     () => modelOptions.filter((m) => m.ready || m.local),
@@ -639,11 +750,11 @@ export function ModelsView() {
 
   const selectableOptions = useCallback(
     (currentKey: string) => {
-      return modelOptions.filter(
+      return allModelOptions.filter(
         (opt) => opt.ready || opt.local || opt.authConnected || opt.key === currentKey
       );
     },
-    [modelOptions]
+    [allModelOptions]
   );
 
   const providerAuthSummary = useMemo(() => {
@@ -656,6 +767,105 @@ export function ModelsView() {
       }))
       .sort((a, b) => a.provider.localeCompare(b.provider));
   }, [providerAuthMap]);
+
+  const availableProviders = useMemo(() => {
+    const providers = new Set<string>();
+    for (const row of providerAuthSummary) {
+      if (row.provider) providers.add(row.provider);
+    }
+    for (const option of allModelOptions) {
+      if (option.provider && option.provider !== "custom") providers.add(option.provider);
+    }
+    for (const store of agentAuthProfiles) {
+      for (const profile of store.profiles) {
+        if (profile.provider) providers.add(profile.provider);
+      }
+    }
+    return [...providers].sort((a, b) => a.localeCompare(b));
+  }, [agentAuthProfiles, allModelOptions, providerAuthSummary]);
+
+  const filteredCatalogOptions = useMemo(() => {
+    const query = catalogSearch.trim().toLowerCase();
+    return allModelOptions.filter((option) => {
+      if (catalogProviderFilter !== "all" && option.provider !== catalogProviderFilter) {
+        return false;
+      }
+      if (!query) return true;
+      return (
+        option.name.toLowerCase().includes(query) ||
+        option.key.toLowerCase().includes(query) ||
+        option.provider.toLowerCase().includes(query)
+      );
+    });
+  }, [allModelOptions, catalogProviderFilter, catalogSearch]);
+
+  const selectedOrderAgentProfiles = useMemo(() => {
+    const row = agentAuthProfiles.find((entry) => entry.agentId === orderAgentId);
+    if (!row) return [];
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    for (const profile of row.profiles) {
+      if (profile.provider !== orderProvider) continue;
+      if (!profile.id || seen.has(profile.id)) continue;
+      seen.add(profile.id);
+      ids.push(profile.id);
+    }
+    ids.sort((a, b) => a.localeCompare(b));
+    return ids;
+  }, [agentAuthProfiles, orderAgentId, orderProvider]);
+
+  useEffect(() => {
+    if (sortedAgents.length === 0) return;
+    if (!sortedAgents.some((agent) => agent.id === orderAgentId)) {
+      setOrderAgentId(sortedAgents[0].id);
+    }
+  }, [orderAgentId, sortedAgents]);
+
+  useEffect(() => {
+    if (availableProviders.length === 0) return;
+    if (!availableProviders.includes(providerForToken)) {
+      setProviderForToken(availableProviders[0]);
+    }
+    if (!availableProviders.includes(orderProvider)) {
+      setOrderProvider(availableProviders[0]);
+    }
+  }, [availableProviders, orderProvider, providerForToken]);
+
+  useEffect(() => {
+    if (selectedOrderAgentProfiles.includes(orderSelectedProfileId)) return;
+    setOrderSelectedProfileId(selectedOrderAgentProfiles[0] || "");
+  }, [orderSelectedProfileId, selectedOrderAgentProfiles]);
+
+  const loadAuthOrder = useCallback(
+    async (agentId: string, provider: string) => {
+      if (!agentId || !provider) return;
+      setOrderLoading(true);
+      try {
+        const data = await postModelAction({
+          action: "get-auth-order",
+          agentId,
+          provider,
+        });
+        const authOrder = (data.authOrder || {}) as AuthOrderPayload;
+        const nextOrder = Array.isArray(authOrder.order)
+          ? authOrder.order.map((entry) => String(entry)).filter(Boolean)
+          : [];
+        setOrderDraft(nextOrder);
+        setOrderError(null);
+      } catch (err) {
+        setOrderError(err instanceof Error ? err.message : String(err));
+        setOrderDraft([]);
+      } finally {
+        setOrderLoading(false);
+      }
+    },
+    [postModelAction]
+  );
+
+  useEffect(() => {
+    if (!orderAgentId || !orderProvider) return;
+    loadAuthOrder(orderAgentId, orderProvider);
+  }, [loadAuthOrder, orderAgentId, orderProvider]);
 
   const mainAgent = agents.find((agent) => agent.id === "main") || null;
   const mainHasOverride = Boolean(mainAgent && !mainAgent.usesDefaults);
@@ -700,6 +910,7 @@ export function ModelsView() {
           action: "set-agent-model",
           agentId: agent.id,
           primary: nextModel,
+          fallbacks: Array.isArray(agent.modelFallbacks) ? agent.modelFallbacks : null,
         },
         `${agent.name} now configured for ${getModelDisplayName(
           nextModel,
@@ -738,6 +949,204 @@ export function ModelsView() {
     [runAction]
   );
 
+  const addDefaultFallback = useCallback(
+    async (modelKey: string) => {
+      const key = String(modelKey || "").trim();
+      if (!key || key === defaultPrimary || defaultFallbacks.includes(key)) return;
+      await runAction(
+        { action: "set-fallbacks", fallbacks: [...defaultFallbacks, key] },
+        `Added fallback ${getModelDisplayName(key, models, aliases)}`,
+        "defaults:fallbacks"
+      );
+    },
+    [aliases, defaultFallbacks, defaultPrimary, models, runAction]
+  );
+
+  const removeDefaultFallback = useCallback(
+    async (modelKey: string) => {
+      const next = defaultFallbacks.filter((fallback) => fallback !== modelKey);
+      await runAction(
+        { action: "set-fallbacks", fallbacks: next },
+        `Removed fallback ${getModelDisplayName(modelKey, models, aliases)}`,
+        "defaults:fallbacks"
+      );
+    },
+    [aliases, defaultFallbacks, models, runAction]
+  );
+
+  const addAgentFallback = useCallback(
+    async (agent: AgentModelInfo, modelKey: string) => {
+      const key = String(modelKey || "").trim();
+      if (!key) return;
+      const primary = agent.modelPrimary || defaultPrimary;
+      const current = Array.isArray(agent.modelFallbacks) ? agent.modelFallbacks : [];
+      if (key === primary || current.includes(key)) return;
+      const nextFallbacks = [...current, key];
+      await runAction(
+        {
+          action: "set-agent-model",
+          agentId: agent.id,
+          primary,
+          fallbacks: nextFallbacks,
+        },
+        `${agent.name} fallback chain updated`,
+        `agent:fallback:${agent.id}`
+      );
+    },
+    [defaultPrimary, runAction]
+  );
+
+  const removeAgentFallback = useCallback(
+    async (agent: AgentModelInfo, modelKey: string) => {
+      const primary = agent.modelPrimary || defaultPrimary;
+      const current = Array.isArray(agent.modelFallbacks) ? agent.modelFallbacks : [];
+      const nextFallbacks = current.filter((entry) => entry !== modelKey);
+      await runAction(
+        {
+          action: "set-agent-model",
+          agentId: agent.id,
+          primary,
+          fallbacks: nextFallbacks,
+        },
+        `${agent.name} fallback chain updated`,
+        `agent:fallback:${agent.id}`
+      );
+    },
+    [defaultPrimary, runAction]
+  );
+
+  const addAllowedModel = useCallback(
+    async (modelKey: string) => {
+      const key = String(modelKey || "").trim();
+      if (!key || configuredAllowed.includes(key)) return;
+      await runAction(
+        { action: "add-allowed-model", model: key },
+        `Added ${getModelDisplayName(key, allModels, aliases)} to allowed models`,
+        "allowlist:add",
+        { refreshCatalog: true }
+      );
+      setCatalogModelToAdd("");
+      setCustomModelToAdd("");
+    },
+    [aliases, allModels, configuredAllowed, runAction]
+  );
+
+  const removeAllowedModel = useCallback(
+    async (modelKey: string) => {
+      const key = String(modelKey || "").trim();
+      if (!key) return;
+      await runAction(
+        { action: "remove-allowed-model", model: key },
+        `Removed ${getModelDisplayName(key, allModels, aliases)} from allowed models`,
+        "allowlist:remove",
+        { refreshCatalog: true }
+      );
+    },
+    [aliases, allModels, runAction]
+  );
+
+  const saveProviderToken = useCallback(async () => {
+    if (!providerForToken || !providerToken.trim()) return;
+    await runAction(
+      {
+        action: "auth-provider",
+        provider: providerForToken,
+        token: providerToken.trim(),
+      },
+      `${providerForToken} credential saved`,
+      "auth:provider",
+      { restart: false, refreshCatalog: true }
+    );
+    setProviderToken("");
+    setRevealProviderToken(false);
+  }, [providerForToken, providerToken, runAction]);
+
+  const scanModels = useCallback(async () => {
+    await runAction(
+      {
+        action: "scan-models",
+        noProbe: false,
+      },
+      "Model scan complete",
+      "catalog:scan",
+      { restart: false, refreshCatalog: true }
+    );
+  }, [runAction]);
+
+  const addOrderProfile = useCallback((profileId: string) => {
+    const id = String(profileId || "").trim();
+    if (!id) return;
+    setOrderDraft((current) => (current.includes(id) ? current : [...current, id]));
+  }, []);
+
+  const removeOrderProfile = useCallback((profileId: string) => {
+    setOrderDraft((current) => current.filter((id) => id !== profileId));
+  }, []);
+
+  const moveOrderProfile = useCallback((profileId: string, direction: -1 | 1) => {
+    setOrderDraft((current) => {
+      const index = current.indexOf(profileId);
+      if (index < 0) return current;
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= current.length) return current;
+      const next = [...current];
+      const [entry] = next.splice(index, 1);
+      next.splice(nextIndex, 0, entry);
+      return next;
+    });
+  }, []);
+
+  const saveAuthOrder = useCallback(async () => {
+    if (!orderAgentId || !orderProvider || orderDraft.length === 0) return;
+    setOrderBusy(true);
+    try {
+      await postModelAction({
+        action: "set-auth-order",
+        agentId: orderAgentId,
+        provider: orderProvider,
+        profileIds: orderDraft,
+      });
+      flash("Auth order override saved", "success");
+      await loadAuthOrder(orderAgentId, orderProvider);
+    } catch (err) {
+      flash(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setOrderBusy(false);
+    }
+  }, [flash, loadAuthOrder, orderAgentId, orderDraft, orderProvider, postModelAction]);
+
+  const clearAuthOrder = useCallback(async () => {
+    if (!orderAgentId || !orderProvider) return;
+    setOrderBusy(true);
+    try {
+      await postModelAction({
+        action: "clear-auth-order",
+        agentId: orderAgentId,
+        provider: orderProvider,
+      });
+      flash("Auth order override cleared", "success");
+      await loadAuthOrder(orderAgentId, orderProvider);
+    } catch (err) {
+      flash(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setOrderBusy(false);
+    }
+  }, [flash, loadAuthOrder, orderAgentId, orderProvider, postModelAction]);
+
+  const globalFallbackCandidates = useMemo(
+    () =>
+      selectableOptions(defaultPrimary).filter(
+        (option) =>
+          option.key !== defaultPrimary && !defaultFallbacks.includes(option.key)
+      ),
+    [defaultFallbacks, defaultPrimary, selectableOptions]
+  );
+
+  const catalogPreviewOptions = useMemo(
+    () => filteredCatalogOptions.slice(0, 400),
+    [filteredCatalogOptions]
+  );
+
   if (loading) {
     return <LoadingState label="Loading models..." />;
   }
@@ -763,6 +1172,7 @@ export function ModelsView() {
               onClick={() => {
                 setLoading(true);
                 fetchModels();
+                fetchAllModels();
               }}
               disabled={Boolean(busyKey)}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
@@ -822,7 +1232,16 @@ export function ModelsView() {
 
               const fallbackActive = resolved !== configured;
               const sessionLag = Boolean(lastSession && lastSession !== resolved);
-              const rowBusy = busyKey === `agent:${agent.id}` || busyKey === `reset:${agent.id}`;
+              const configuredFallbacks = Array.isArray(agent.modelFallbacks)
+                ? agent.modelFallbacks
+                : [];
+              const fallbackCandidates = selectableOptions(configured).filter(
+                (opt) => opt.key !== configured && !configuredFallbacks.includes(opt.key)
+              );
+              const rowBusy =
+                busyKey === `agent:${agent.id}` ||
+                busyKey === `reset:${agent.id}` ||
+                busyKey === `agent:fallback:${agent.id}`;
 
               return (
                 <div
@@ -913,6 +1332,51 @@ export function ModelsView() {
                     {rowBusy && <p className="text-cyan-700 dark:text-cyan-300 text-xs">Applying...</p>}
                   </div>
 
+                  <div className="mt-2 rounded-lg border border-border/70 bg-muted/15 p-2.5">
+                    <p className="text-xs text-muted-foreground">Fallback chain override</p>
+                    {configuredFallbacks.length === 0 ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        No explicit fallback list. This agent follows its default chain.
+                      </p>
+                    ) : (
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {configuredFallbacks.map((fallback) => (
+                          <button
+                            key={`${agent.id}:fallback:${fallback}`}
+                            type="button"
+                            onClick={() => {
+                              void removeAgentFallback(agent, fallback);
+                            }}
+                            disabled={Boolean(busyKey)}
+                            className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60 disabled:opacity-50"
+                          >
+                            {getModelDisplayName(fallback, models, aliases)}
+                            <Trash2 className="h-3 w-3" />
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <select
+                        value=""
+                        disabled={Boolean(busyKey) || fallbackCandidates.length === 0}
+                        onChange={(e) => {
+                          const next = e.target.value;
+                          if (!next) return;
+                          void addAgentFallback(agent, next);
+                        }}
+                        className="rounded-lg border border-border bg-muted/50 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40 disabled:opacity-50"
+                      >
+                        <option value="">Add fallback model…</option>
+                        {fallbackCandidates.map((opt) => (
+                          <option key={`${agent.id}:candidate:${opt.key}`} value={opt.key}>
+                            {opt.name} · {opt.provider}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
                   {sessionLag && (
                     <p className="text-amber-700 dark:text-amber-300 mt-2 text-xs">
                       Last session still shows the previous model. New turns should use the
@@ -922,6 +1386,360 @@ export function ModelsView() {
                 </div>
               );
             })}
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <Plus className="h-4 w-4 text-emerald-500" />
+              <h2 className="text-xs font-semibold text-foreground">Model Catalog & Allowlist</h2>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <StatusPill tone="good" label={`${configuredAllowed.length} allowed`} />
+              <StatusPill tone="info" label={`${allModels.length} discovered`} />
+              <StatusPill tone="neutral" label={`${filteredCatalogOptions.length} filtered`} />
+            </div>
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Manage <code>agents.defaults.models</code> with forms instead of manual JSON edits.
+            This controls which provider models are available in selection UIs.
+          </p>
+
+          <div className="mt-3 grid gap-2 md:grid-cols-[10rem_1fr_auto_auto]">
+            <select
+              value={catalogProviderFilter}
+              onChange={(e) => setCatalogProviderFilter(e.target.value)}
+              className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+            >
+              <option value="all">All providers</option>
+              {availableProviders.map((provider) => (
+                <option key={`catalog:provider:${provider}`} value={provider}>
+                  {provider}
+                </option>
+              ))}
+            </select>
+            <input
+              type="text"
+              value={catalogSearch}
+              onChange={(e) => setCatalogSearch(e.target.value)}
+              placeholder="Search model name or key"
+              className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                fetchAllModels();
+              }}
+              disabled={allModelsLoading || Boolean(busyKey)}
+              className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+            >
+              {allModelsLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              Refresh catalog
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void scanModels();
+              }}
+              disabled={Boolean(busyKey)}
+              className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+            >
+              {busyKey === "catalog:scan" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              Scan providers
+            </button>
+          </div>
+
+          {allModelsWarning && (
+            <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+              Catalog warning: {allModelsWarning}
+            </p>
+          )}
+
+          <div className="mt-3 rounded-lg border border-border/70 bg-muted/15 p-2.5">
+            <p className="text-xs text-muted-foreground">Allowed models</p>
+            {configuredAllowed.length === 0 ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                No explicit allowlist in config yet.
+              </p>
+            ) : (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {configuredAllowed.map((entry) => (
+                  <button
+                    key={`allowlist:${entry}`}
+                    type="button"
+                    onClick={() => {
+                      void removeAllowedModel(entry);
+                    }}
+                    disabled={Boolean(busyKey)}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60 disabled:opacity-50"
+                  >
+                    {getModelDisplayName(entry, allModels, aliases)}
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-3 grid gap-2 md:grid-cols-[1fr_auto]">
+            <select
+              value={catalogModelToAdd}
+              onChange={(e) => setCatalogModelToAdd(e.target.value)}
+              className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+            >
+              <option value="">Select a model from providers…</option>
+              {catalogPreviewOptions.map((opt) => (
+                <option key={`catalog:add:${opt.key}`} value={opt.key}>
+                  {opt.name} · {opt.provider}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => {
+                void addAllowedModel(catalogModelToAdd);
+              }}
+              disabled={!catalogModelToAdd || Boolean(busyKey)}
+              className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add
+            </button>
+          </div>
+
+          {filteredCatalogOptions.length > catalogPreviewOptions.length && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Showing first {catalogPreviewOptions.length} results. Narrow search to see fewer options.
+            </p>
+          )}
+
+          <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
+            <input
+              type="text"
+              value={customModelToAdd}
+              onChange={(e) => setCustomModelToAdd(e.target.value)}
+              placeholder="Custom model key (e.g. provider/name)"
+              className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                void addAllowedModel(customModelToAdd);
+              }}
+              disabled={!customModelToAdd.trim() || Boolean(busyKey)}
+              className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add custom
+            </button>
+          </div>
+        </section>
+
+        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-cyan-500" />
+              <h2 className="text-xs font-semibold text-foreground">Provider Access & Auth Order</h2>
+            </div>
+            <StatusPill
+              tone={providerAuthSummary.some((provider) => provider.connected) ? "good" : "warn"}
+              label={`${providerAuthSummary.filter((provider) => provider.connected).length}/${providerAuthSummary.length} providers connected`}
+            />
+          </div>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Headless-safe controls for VPC deployments: paste provider keys and manage per-agent
+            auth profile order overrides.
+          </p>
+
+          <div className="mt-3 rounded-lg border border-border/70 bg-muted/15 p-3">
+            <p className="text-xs font-semibold text-foreground">Save provider key/token</p>
+            <div className="mt-2 grid gap-2 md:grid-cols-[10rem_1fr_auto_auto]">
+              <select
+                value={providerForToken}
+                onChange={(e) => setProviderForToken(e.target.value)}
+                className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+              >
+                {availableProviders.map((provider) => (
+                  <option key={`token:provider:${provider}`} value={provider}>
+                    {provider}
+                  </option>
+                ))}
+              </select>
+              <input
+                type={revealProviderToken ? "text" : "password"}
+                value={providerToken}
+                onChange={(e) => setProviderToken(e.target.value)}
+                placeholder="Paste API key/token"
+                className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+              />
+              <button
+                type="button"
+                onClick={() => setRevealProviderToken((prev) => !prev)}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+              >
+                {revealProviderToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                {revealProviderToken ? "Hide" : "Show"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void saveProviderToken();
+                }}
+                disabled={!providerToken.trim() || Boolean(busyKey)}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Save key
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-lg border border-border/70 bg-muted/15 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-foreground">Per-agent auth order override</p>
+              {orderLoading ? (
+                <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Loading order…
+                </p>
+              ) : (
+                <StatusPill
+                  tone={orderDraft.length > 0 ? "warn" : "neutral"}
+                  label={orderDraft.length > 0 ? "override active" : "using default rotation"}
+                />
+              )}
+            </div>
+
+            <div className="mt-2 grid gap-2 md:grid-cols-[1fr_1fr]">
+              <select
+                value={orderAgentId}
+                onChange={(e) => setOrderAgentId(e.target.value)}
+                className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+              >
+                {sortedAgents.map((agent) => (
+                  <option key={`order:agent:${agent.id}`} value={agent.id}>
+                    {agent.name} ({agent.id})
+                  </option>
+                ))}
+              </select>
+              <select
+                value={orderProvider}
+                onChange={(e) => setOrderProvider(e.target.value)}
+                className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+              >
+                {availableProviders.map((provider) => (
+                  <option key={`order:provider:${provider}`} value={provider}>
+                    {provider}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="mt-2 grid gap-2 md:grid-cols-[1fr_auto]">
+              <select
+                value={orderSelectedProfileId}
+                onChange={(e) => setOrderSelectedProfileId(e.target.value)}
+                className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+              >
+                <option value="">Select profile id…</option>
+                {selectedOrderAgentProfiles.map((profileId) => (
+                  <option key={`order:profile:${profileId}`} value={profileId}>
+                    {profileId}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => {
+                  addOrderProfile(orderSelectedProfileId);
+                }}
+                disabled={!orderSelectedProfileId || orderBusy}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add profile
+              </button>
+            </div>
+
+            {orderError && (
+              <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{orderError}</p>
+            )}
+
+            <div className="mt-2 space-y-1.5">
+              {orderDraft.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  No override set for this provider/agent pair.
+                </p>
+              ) : (
+                orderDraft.map((profileId, index) => (
+                  <div
+                    key={`order:draft:${profileId}`}
+                    className="flex items-center justify-between gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-xs"
+                  >
+                    <span className="text-foreground">{profileId}</span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => moveOrderProfile(profileId, -1)}
+                        disabled={index === 0 || orderBusy}
+                        className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground disabled:opacity-40"
+                      >
+                        Up
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => moveOrderProfile(profileId, 1)}
+                        disabled={index === orderDraft.length - 1 || orderBusy}
+                        className="rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground disabled:opacity-40"
+                      >
+                        Down
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removeOrderProfile(profileId)}
+                        disabled={orderBusy}
+                        className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground disabled:opacity-40"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  void saveAuthOrder();
+                }}
+                disabled={orderBusy || orderDraft.length === 0}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+              >
+                {orderBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ListOrdered className="h-3.5 w-3.5" />}
+                Save order
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void clearAuthOrder();
+                }}
+                disabled={orderBusy}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+              >
+                Clear override
+              </button>
+            </div>
           </div>
         </section>
 
@@ -977,6 +1795,51 @@ export function ModelsView() {
               }}
             />
           </div>
+
+          <div className="mt-3 rounded-lg border border-border/70 bg-muted/15 p-2.5">
+            <p className="text-xs text-muted-foreground">Fallback chain</p>
+            {defaultFallbacks.length === 0 ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                No fallback models configured.
+              </p>
+            ) : (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {defaultFallbacks.map((fallback) => (
+                  <button
+                    key={`defaults:fallback:${fallback}`}
+                    type="button"
+                    onClick={() => {
+                      void removeDefaultFallback(fallback);
+                    }}
+                    disabled={Boolean(busyKey)}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60 disabled:opacity-50"
+                  >
+                    {getModelDisplayName(fallback, models, aliases)}
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <select
+                value=""
+                disabled={Boolean(busyKey) || globalFallbackCandidates.length === 0}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  if (!next) return;
+                  void addDefaultFallback(next);
+                }}
+                className="rounded-lg border border-border bg-muted/50 px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40 disabled:opacity-50"
+              >
+                <option value="">Add fallback model…</option>
+                {globalFallbackCandidates.map((opt) => (
+                  <option key={`defaults:candidate:${opt.key}`} value={opt.key}>
+                    {opt.name} · {opt.provider}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
         </section>
 
         <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
@@ -985,64 +1848,72 @@ export function ModelsView() {
               <Heart className="h-4 w-4 text-rose-400" />
               <h2 className="text-xs font-semibold text-foreground">Heartbeat</h2>
             </div>
-            {heartbeat?.model ? (
-              <StatusPill tone="good" label="Configured" />
+            {heartbeat?.every === "0m" || !heartbeat?.model ? (
+              <StatusPill tone="neutral" label={heartbeat?.every === "0m" ? "Off" : "Not set"} />
             ) : (
-              <StatusPill tone="neutral" label="Not set" />
+              <StatusPill tone="good" label="On" />
             )}
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Model and interval for <code>agents.defaults.heartbeat</code>. Used for periodic
-            system heartbeat runs.
-          </p>
 
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
+          <div className="mt-3 rounded-lg border border-foreground/10 bg-muted/20 p-3 text-sm text-muted-foreground">
+            <p className="font-medium text-foreground/90">What is Heartbeat?</p>
+            <p className="mt-1.5 text-xs leading-relaxed">
+              Heartbeat runs your agent on a schedule (e.g. every 30m). Each run, the agent reads <code className="rounded bg-foreground/10 px-1">HEARTBEAT.md</code> in your workspace (if it exists), follows any instructions there, and can reply <code className="rounded bg-foreground/10 px-1">HEARTBEAT_OK</code> to do nothing. Shorter intervals use more tokens. Set interval to <strong>Off</strong> to disable.
+            </p>
+          </div>
+
+          <p className="mt-3 text-xs font-medium text-foreground/80">
+            Default model &amp; interval (<code className="rounded bg-foreground/10 px-1">agents.defaults.heartbeat</code>)
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
             <div className="rounded-lg border border-border p-2.5 bg-muted/20">
-              <p className="uppercase tracking-wide text-muted-foreground text-xs">
-                Model
-              </p>
+              <p className="uppercase tracking-wide text-muted-foreground text-xs">Current model</p>
               <p className="mt-1 text-xs font-semibold text-foreground">
-                {heartbeat?.model
-                  ? getModelDisplayName(heartbeat.model, models, aliases)
-                  : "—"}
+                {heartbeat?.every === "0m"
+                  ? "— (heartbeat off)"
+                  : heartbeat?.model
+                    ? getModelDisplayName(heartbeat.model, models, aliases)
+                    : "—"}
               </p>
             </div>
             <div className="rounded-lg border border-border p-2.5 bg-muted/20">
-              <p className="uppercase tracking-wide text-muted-foreground text-xs">
-                Interval
-              </p>
+              <p className="uppercase tracking-wide text-muted-foreground text-xs">Current interval</p>
               <p className="mt-1 text-xs font-semibold text-foreground">
-                {heartbeat?.every || "—"}
+                {heartbeat?.every === "0m"
+                  ? "Off"
+                  : heartbeat?.every || "—"}
               </p>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
             <div className="w-full max-w-md">
-              <label className="mb-1 block text-xs text-muted-foreground">Heartbeat model</label>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Model for heartbeat runs</label>
               <ModelSelect
-                value={heartbeat?.model ?? ""}
+                value={heartbeat?.every === "0m" ? "" : (heartbeat?.model ?? "")}
                 options={heartbeatModelOptions}
                 disabled={Boolean(busyKey)}
                 onSelect={(next) => {
-                  void changeHeartbeat({ model: next, every: heartbeat?.every ?? "1h" });
+                  const every = heartbeat?.every === "0m" ? "30m" : (heartbeat?.every ?? "1h");
+                  void changeHeartbeat({ model: next, every });
                 }}
               />
             </div>
-            <div className="w-full max-w-[8rem]">
-              <label className="mb-1 block text-xs text-muted-foreground">Interval</label>
+            <div className="w-full max-w-[10rem]">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">Run every</label>
               <select
                 value={heartbeat?.every ?? "1h"}
                 disabled={Boolean(busyKey)}
                 onChange={(e) => {
                   const every = e.target.value;
                   void changeHeartbeat({
-                    model: heartbeat?.model ?? "",
+                    model: every === "0m" ? "" : (heartbeat?.model ?? ""),
                     every,
                   });
                 }}
                 className="rounded-lg border border-border bg-muted/50 w-full px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-cyan-500/40 disabled:opacity-50"
               >
+                <option value="0m">Off</option>
                 <option value="15m">15m</option>
                 <option value="30m">30m</option>
                 <option value="1h">1h</option>
@@ -1051,8 +1922,26 @@ export function ModelsView() {
               </select>
             </div>
             {busyKey === "heartbeat" && (
-              <p className="text-cyan-700 dark:text-cyan-300 text-xs self-center">Applying...</p>
+              <p className="text-cyan-700 dark:text-cyan-300 text-xs self-center">Applying…</p>
             )}
+          </div>
+
+          <div className="mt-4 flex items-center gap-2 rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2.5">
+            <Heart className="h-4 w-4 shrink-0 text-violet-400" />
+            <p className="text-xs text-muted-foreground">
+              Edit the prompt, <code className="rounded bg-foreground/10 px-1">HEARTBEAT.md</code> behavior, and per-agent overrides on the{" "}
+              <Link href="/heartbeat" className="font-medium text-violet-400 hover:underline">
+                Heartbeat
+              </Link>{" "}
+              page.
+            </p>
+            <Link
+              href="/heartbeat"
+              className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-lg border border-foreground/10 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/80 hover:text-foreground"
+            >
+              Open Heartbeat
+              <ArrowRight className="h-3 w-3" />
+            </Link>
           </div>
         </section>
 

@@ -75,6 +75,11 @@ type DefaultsMatchSnapshot = {
   file: DefaultsModelConfig | null;
 };
 
+type AllowedModelsMatchSnapshot = {
+  gateway: string[] | null;
+  file: string[] | null;
+};
+
 const NO_STORE_HEADERS = { "Cache-Control": "no-store" } as const;
 const VERIFY_TIMEOUT_MS = 7000;
 const VERIFY_INTERVAL_MS = 300;
@@ -130,6 +135,19 @@ function fallbackModelStatus(
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((v, i) => v === b[i]);
+}
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const key = String(entry || "").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
 }
 
 function sleep(ms: number) {
@@ -282,6 +300,53 @@ async function readDefaultsModelConfigFromFile(): Promise<DefaultsModelConfig | 
   }
 }
 
+async function readDefaultsAllowedModels(): Promise<string[] | null> {
+  try {
+    const configData = await gatewayCallWithRetry<Record<string, unknown>>(
+      "config.get",
+      undefined,
+      10000
+    );
+    const parsed = (configData.parsed || {}) as Record<string, unknown>;
+    const agents = (parsed.agents || {}) as Record<string, unknown>;
+    const defaults = (agents.defaults || {}) as Record<string, unknown>;
+    return normalizeStringList(defaults.models);
+  } catch {
+    return null;
+  }
+}
+
+async function readDefaultsAllowedModelsFromFile(): Promise<string[] | null> {
+  try {
+    const raw = await readFile(join(OPENCLAW_HOME, "openclaw.json"), "utf-8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const agents = (parsed.agents || {}) as Record<string, unknown>;
+    const defaults = (agents.defaults || {}) as Record<string, unknown>;
+    return normalizeStringList(defaults.models);
+  } catch {
+    return null;
+  }
+}
+
+async function waitForPersistedAllowedModels(
+  expected: string[]
+): Promise<{ matched: boolean; snapshot: AllowedModelsMatchSnapshot | null }> {
+  return waitForMatch<AllowedModelsMatchSnapshot>(
+    async () => {
+      const [gateway, file] = await Promise.all([
+        readDefaultsAllowedModels(),
+        readDefaultsAllowedModelsFromFile(),
+      ]);
+      return { gateway, file };
+    },
+    (snapshot) =>
+      Boolean(snapshot.gateway) &&
+      Boolean(snapshot.file) &&
+      arraysEqual(snapshot.gateway!, expected) &&
+      arraysEqual(snapshot.file!, expected)
+  );
+}
+
 async function patchDefaultsModelConfig(
   primary: string,
   fallbacks: string[]
@@ -415,6 +480,7 @@ export async function GET(request: NextRequest) {
 
       // Get per-agent configs from gateway (non-critical — gracefully degrade)
       let defaultsModel: DefaultsModelConfig | null = null;
+      let parsedAllowedModels: string[] = [];
       let agentsList: {
         id: string;
         name: string;
@@ -448,6 +514,7 @@ export async function GET(request: NextRequest) {
             ? parsedDefaultsModel
             : null;
         const hb = parsedDefaultsBlock.heartbeat;
+        parsedAllowedModels = normalizeStringList(parsedDefaultsBlock.models);
         if (hb && typeof hb === "object" && !Array.isArray(hb)) {
           const h = hb as Record<string, unknown>;
           defaultsHeartbeat = {
@@ -542,6 +609,7 @@ export async function GET(request: NextRequest) {
       return jsonNoStore({
         status: statusForResponse,
         defaults: defaultsModel,
+        allowedConfigured: parsedAllowedModels,
         heartbeat: defaultsHeartbeat,
         models: listModels,
         agents: agentsList,
@@ -658,6 +726,13 @@ export async function GET(request: NextRequest) {
  *   { action: "set-alias", alias: "...", model: "..." }
  *   { action: "remove-alias", alias: "..." }
  *   { action: "set-heartbeat", model?: "...", every?: "..." }  // agents.defaults.heartbeat
+ *   { action: "set-allowed-models", models: ["provider/model", ...] }
+ *   { action: "add-allowed-model", model: "provider/model" }
+ *   { action: "remove-allowed-model", model: "provider/model" }
+ *   { action: "get-auth-order", agentId: "...", provider: "..." }
+ *   { action: "set-auth-order", agentId: "...", provider: "...", profileIds: ["provider:id", ...] }
+ *   { action: "clear-auth-order", agentId: "...", provider: "..." }
+ *   { action: "scan-models", provider?: "...", noProbe?: boolean }
  *   { action: "auth-provider", provider: "...", token: "..." }  // paste API key/token for a provider
  */
 export async function POST(request: NextRequest) {
@@ -976,6 +1051,192 @@ export async function POST(request: NextRequest) {
           action,
           heartbeat: next,
         });
+      }
+
+      case "set-allowed-models": {
+        const expectedModels = normalizeStringList(body.models);
+        await applyConfigPatchWithRetry({
+          agents: { defaults: { models: expectedModels } },
+        });
+        const verified = await waitForPersistedAllowedModels(expectedModels);
+        if (!verified.matched) {
+          return jsonNoStore(
+            {
+              error: "Allowed models update could not be verified",
+              expectedModels,
+              observed: verified.snapshot,
+            },
+            { status: 409 }
+          );
+        }
+        return NextResponse.json({ ok: true, action, models: expectedModels });
+      }
+
+      case "add-allowed-model": {
+        const nextModel = String(body.model || "").trim();
+        if (!nextModel) {
+          return jsonNoStore(
+            { error: "Model is required" },
+            { status: 400 }
+          );
+        }
+        const current = await readDefaultsAllowedModels();
+        if (!current) {
+          return jsonNoStore(
+            { error: "Failed to read current allowed models" },
+            { status: 500 }
+          );
+        }
+        const expectedModels = current.includes(nextModel)
+          ? current
+          : [...current, nextModel];
+        await applyConfigPatchWithRetry({
+          agents: { defaults: { models: expectedModels } },
+        });
+        const verified = await waitForPersistedAllowedModels(expectedModels);
+        if (!verified.matched) {
+          return jsonNoStore(
+            {
+              error: `Allowed model add could not be verified (${nextModel})`,
+              expectedModels,
+              observed: verified.snapshot,
+            },
+            { status: 409 }
+          );
+        }
+        return NextResponse.json({ ok: true, action, model: nextModel });
+      }
+
+      case "remove-allowed-model": {
+        const model = String(body.model || "").trim();
+        if (!model) {
+          return jsonNoStore(
+            { error: "Model is required" },
+            { status: 400 }
+          );
+        }
+        const current = await readDefaultsAllowedModels();
+        if (!current) {
+          return jsonNoStore(
+            { error: "Failed to read current allowed models" },
+            { status: 500 }
+          );
+        }
+        const expectedModels = current.filter((entry) => entry !== model);
+        await applyConfigPatchWithRetry({
+          agents: { defaults: { models: expectedModels } },
+        });
+        const verified = await waitForPersistedAllowedModels(expectedModels);
+        if (!verified.matched) {
+          return jsonNoStore(
+            {
+              error: `Allowed model removal could not be verified (${model})`,
+              expectedModels,
+              observed: verified.snapshot,
+            },
+            { status: 409 }
+          );
+        }
+        return NextResponse.json({ ok: true, action, model });
+      }
+
+      case "get-auth-order": {
+        const agentId = String(body.agentId || "main").trim() || "main";
+        const provider = String(body.provider || "").trim();
+        if (!provider) {
+          return jsonNoStore(
+            { error: "Provider is required" },
+            { status: 400 }
+          );
+        }
+        const authOrder = await runCliJson<Record<string, unknown>>(
+          ["models", "auth", "order", "get", "--agent", agentId, "--provider", provider],
+          10000
+        );
+        return NextResponse.json({ ok: true, action, authOrder });
+      }
+
+      case "set-auth-order": {
+        const agentId = String(body.agentId || "main").trim() || "main";
+        const provider = String(body.provider || "").trim();
+        const profileIds = normalizeStringList(body.profileIds);
+        if (!provider) {
+          return jsonNoStore(
+            { error: "Provider is required" },
+            { status: 400 }
+          );
+        }
+        if (profileIds.length === 0) {
+          return jsonNoStore(
+            { error: "At least one auth profile id is required" },
+            { status: 400 }
+          );
+        }
+        await runCli(
+          [
+            "models",
+            "auth",
+            "order",
+            "set",
+            "--agent",
+            agentId,
+            "--provider",
+            provider,
+            ...profileIds,
+          ],
+          15000
+        );
+        const authOrder = await runCliJson<Record<string, unknown>>(
+          ["models", "auth", "order", "get", "--agent", agentId, "--provider", provider],
+          10000
+        ).catch(() => null);
+        return NextResponse.json({
+          ok: true,
+          action,
+          agentId,
+          provider,
+          profileIds,
+          authOrder,
+        });
+      }
+
+      case "clear-auth-order": {
+        const agentId = String(body.agentId || "main").trim() || "main";
+        const provider = String(body.provider || "").trim();
+        if (!provider) {
+          return jsonNoStore(
+            { error: "Provider is required" },
+            { status: 400 }
+          );
+        }
+        await runCli(
+          [
+            "models",
+            "auth",
+            "order",
+            "clear",
+            "--agent",
+            agentId,
+            "--provider",
+            provider,
+          ],
+          15000
+        );
+        const authOrder = await runCliJson<Record<string, unknown>>(
+          ["models", "auth", "order", "get", "--agent", agentId, "--provider", provider],
+          10000
+        ).catch(() => null);
+        return NextResponse.json({ ok: true, action, agentId, provider, authOrder });
+      }
+
+      case "scan-models": {
+        const provider = String(body.provider || "").trim();
+        const noProbe = body.noProbe === true;
+        const args = ["models", "scan", "--no-input", "--yes"];
+        if (provider) args.push("--provider", provider);
+        if (noProbe) args.push("--no-probe");
+        const result = await runCliJson<Record<string, unknown>>(args, 60000);
+        return NextResponse.json({ ok: true, action, result });
       }
 
       case "auth-provider": {

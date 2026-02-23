@@ -203,10 +203,18 @@ async function readRecentCronRuns(): Promise<CronRunEntry[]> {
   return all.slice(0, 15);
 }
 
-async function readAgentSessions(): Promise<
-  { id: string; sessionCount: number; totalTokens: number; lastActivity: number }[]
-> {
+type AgentSessionRow = {
+  id: string;
+  name: string;
+  emoji: string;
+  sessionCount: number;
+  totalTokens: number;
+  lastActivity: number;
+};
+
+async function readAgentSessions(): Promise<AgentSessionRow[]> {
   const configuredAgentIds = new Set<string>();
+  const identityByAgentId = new Map<string, { name: string; emoji: string }>();
   try {
     const config = await readJsonSafe<Record<string, unknown>>(
       join(OPENCLAW_HOME, "openclaw.json"),
@@ -216,51 +224,60 @@ async function readAgentSessions(): Promise<
     const list = Array.isArray(agents.list) ? (agents.list as Record<string, unknown>[]) : [];
     for (const row of list) {
       const id = String(row.id || "").trim();
-      if (id) configuredAgentIds.add(id);
+      if (id) {
+        configuredAgentIds.add(id);
+        const identity =
+          row.identity && typeof row.identity === "object"
+            ? (row.identity as Record<string, unknown>)
+            : {};
+        const rawName =
+          (row.name as string) || (identity.name as string) || id;
+        const name =
+          rawName.replace(/\s*_\(.*?\)_?\s*/g, "").trim() || rawName || id;
+        const rawEmoji =
+          (identity.emoji as string) || "🤖";
+        const emoji = String(rawEmoji).replace(/\s*_\(.*?\)_?\s*/g, "").trim() || "🤖";
+        identityByAgentId.set(id, { name, emoji });
+      }
     }
   } catch {
     // ignore; we'll still fall back to runtime sessions and main agent.
+  }
+
+  function row(
+    id: string,
+    sessionCount: number,
+    totalTokens: number,
+    lastActivity: number
+  ): AgentSessionRow {
+    const identity = identityByAgentId.get(id) || {
+      name: id,
+      emoji: id === "main" ? "🦞" : "🤖",
+    };
+    return { id, name: identity.name, emoji: identity.emoji, sessionCount, totalTokens, lastActivity };
   }
 
   try {
     const sessions = await fetchGatewaySessions(10000);
     const summary = summarizeSessionsByAgent(sessions);
     const rows = [...summary.entries()]
-      .map(([id, s]) => ({
-        id,
-        sessionCount: s.sessionCount,
-        totalTokens: s.totalTokens,
-        lastActivity: s.lastActive,
-      }))
+      .map(([id, s]) =>
+        row(id, s.sessionCount, s.totalTokens, s.lastActive)
+      )
       .sort((a, b) => b.lastActivity - a.lastActivity);
-    const byId = new Map(rows.map((row) => [row.id, row]));
+    const byId = new Map(rows.map((r) => [r.id, r]));
     for (const id of configuredAgentIds) {
       if (!byId.has(id)) {
-        byId.set(id, {
-          id,
-          sessionCount: 0,
-          totalTokens: 0,
-          lastActivity: 0,
-        });
+        byId.set(id, row(id, 0, 0, 0));
       }
     }
     if (!byId.has("main")) {
-      byId.set("main", {
-        id: "main",
-        sessionCount: 0,
-        totalTokens: 0,
-        lastActivity: 0,
-      });
+      byId.set("main", row("main", 0, 0, 0));
     }
     return [...byId.values()].sort((a, b) => b.lastActivity - a.lastActivity);
   } catch {
     const fallbackIds = configuredAgentIds.size > 0 ? [...configuredAgentIds] : ["main"];
     if (!fallbackIds.includes("main")) fallbackIds.unshift("main");
-    return fallbackIds.map((id) => ({
-      id,
-      sessionCount: 0,
-      totalTokens: 0,
-      lastActivity: 0,
-    }));
+    return fallbackIds.map((id) => row(id, 0, 0, 0));
   }
 }

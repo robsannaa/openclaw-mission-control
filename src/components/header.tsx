@@ -645,10 +645,10 @@ export function Header() {
 
   return (
     <>
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-sidebar/80 px-3 md:px-5 backdrop-blur-sm">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-white/20 dark:border-white/10 bg-white/50 dark:bg-white/[0.06] px-3 md:px-5 backdrop-blur-md shadow-sm">
         <div className="flex items-center gap-2.5 pl-10 md:pl-0">
           <span className="text-xs">🦞</span>
-          <h1 className="text-sm font-semibold text-foreground">
+          <h1 className="text-sm font-sans font-normal">
             Mission Control
           </h1>
           <GatewayStatusBadge status={gwStatus} health={gwHealth} />

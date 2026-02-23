@@ -168,6 +168,16 @@ const AGENT_GRADIENTS = [
   "from-cyan-600 to-cyan-800",
 ];
 
+const AGENT_GRAPH_COLORS = {
+  delegation: "var(--chart-2)",
+  delegationLabel: "var(--chart-2)",
+  route: "var(--chart-4)",
+  routeLabel: "var(--chart-4)",
+  workspace: "var(--chart-3)",
+  muted: "var(--chart-muted)",
+  mutedSoft: "var(--chart-tick-muted)",
+};
+
 /* ================================================================
    Custom Nodes
    ================================================================ */
@@ -530,13 +540,13 @@ function buildGraph(
         targetHandle: "parent",
         type: "default",
         animated: true,
-        style: { stroke: "#06b6d4", strokeWidth: 1.5, strokeDasharray: "5 4" },
+        style: { stroke: AGENT_GRAPH_COLORS.delegation, strokeWidth: 1.5, strokeDasharray: "5 4" },
         label: "delegates",
-        labelStyle: { fill: "#06b6d4", fontSize: 10 },
+        labelStyle: { fill: AGENT_GRAPH_COLORS.delegationLabel, fontSize: 10 },
         labelBgStyle: { fill: "var(--card)", fillOpacity: 0.9 },
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: "#06b6d4",
+          color: AGENT_GRAPH_COLORS.delegation,
           width: 14,
           height: 10,
         },
@@ -598,19 +608,19 @@ function buildGraph(
         type: "default",
         animated: sub.status === "running",
         style: {
-          stroke: sub.status === "running" ? "#06b6d4" : "#64748b",
+          stroke: sub.status === "running" ? AGENT_GRAPH_COLORS.delegation : AGENT_GRAPH_COLORS.muted,
           strokeWidth: 1.5,
           strokeDasharray: "5 4",
         },
         label: sub.status === "running" ? "runtime" : "recent",
         labelStyle: {
-          fill: sub.status === "running" ? "#22d3ee" : "#94a3b8",
+          fill: sub.status === "running" ? AGENT_GRAPH_COLORS.delegationLabel : AGENT_GRAPH_COLORS.mutedSoft,
           fontSize: 10,
         },
         labelBgStyle: { fill: "var(--card)", fillOpacity: 0.9 },
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: sub.status === "running" ? "#06b6d4" : "#64748b",
+          color: sub.status === "running" ? AGENT_GRAPH_COLORS.delegation : AGENT_GRAPH_COLORS.muted,
           width: 12,
           height: 9,
         },
@@ -653,17 +663,17 @@ function buildGraph(
         source: nodeId,
         target: `agent-${route.agentId}`,
         type: "default",
-        style: { stroke: "#0ea5e9", strokeWidth: implicitDefault ? 1.25 : 1.5 },
+        style: { stroke: AGENT_GRAPH_COLORS.route, strokeWidth: implicitDefault ? 1.25 : 1.5 },
         label: implicitDefault
           ? "default route"
           : route.accountId
             ? route.accountId
             : "all accounts",
-        labelStyle: { fill: "#38bdf8", fontSize: 10, fontWeight: 500 },
+        labelStyle: { fill: AGENT_GRAPH_COLORS.routeLabel, fontSize: 10, fontWeight: 500 },
         labelBgStyle: { fill: "var(--card)", fillOpacity: 0.85 },
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: "#0ea5e9",
+          color: AGENT_GRAPH_COLORS.route,
           width: 14,
           height: 10,
         },
@@ -699,10 +709,10 @@ function buildGraph(
           id: `ws-${a.id}-${i}`,
           source: `agent-${a.id}`,
           target: nodeId,
-          style: { stroke: "#d97706", strokeWidth: 1.5 },
+          style: { stroke: AGENT_GRAPH_COLORS.workspace, strokeWidth: 1.5 },
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: "#d97706",
+            color: AGENT_GRAPH_COLORS.workspace,
             width: 14,
             height: 10,
           },

@@ -358,7 +358,7 @@ function GatewayBadge({ collapsed }: { collapsed?: boolean }) {
           collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5"
         )}
       >
-        <div className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-black/5 dark:bg-zinc-800/80 text-sm">
+        <div className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/30 dark:bg-white/10 border border-white/20 dark:border-white/10 text-sm shadow-sm">
           🦞
           {collapsed && (
             <div
@@ -515,7 +515,7 @@ export function Sidebar() {
       {/* Sidebar — always visible on desktop, slide-in drawer on mobile */}
       <aside
         className={cn(
-          "flex h-full shrink-0 flex-col border-r border-border bg-sidebar transition-[width,transform] duration-200 ease-in-out",
+          "flex h-full shrink-0 flex-col border-r border-white/20 dark:border-white/10 bg-white/50 dark:bg-white/[0.06] backdrop-blur-md transition-[width,transform] duration-200 ease-in-out",
           collapsed ? "w-14 md:w-14" : "w-56 md:w-56",
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-xl",
           mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
