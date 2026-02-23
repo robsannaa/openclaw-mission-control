@@ -12,10 +12,15 @@ import {
   Play,
   Plug,
   Plus,
+  Bell,
+  Monitor,
+  Shield,
+  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
+import { QrLoginModal } from "@/components/qr-login-modal";
 
 /* ── Types ────────────────────────────────────────── */
 
@@ -43,6 +48,36 @@ type ChannelCatalogItem = {
   configured: boolean;
   accounts: string[];
   statuses: ChannelRuntimeStatus[];
+  dmPolicy?: string;
+  groupPolicy?: string;
+};
+
+type DmPairingRequest = {
+  channel: string;
+  code: string;
+  senderId?: string;
+  senderName?: string;
+  message?: string;
+  createdAt?: string;
+};
+
+type DevicePairingRequest = {
+  requestId: string;
+  displayName?: string;
+  platform?: string;
+  role?: string;
+  roles?: string[];
+  createdAtMs?: number;
+};
+
+type PairedDevice = {
+  deviceId: string;
+  displayName?: string;
+  platform: string;
+  role: string;
+  roles: string[];
+  createdAtMs: number;
+  approvedAtMs: number;
 };
 
 type Toast = { message: string; type: "success" | "error" };
@@ -78,39 +113,39 @@ function getPostSetupChecklist(channel: string): string[] {
       return [
         "Create/configure your app in https://discord.com/developers/applications and enable Message Content Intent.",
         "Invite the bot to your server with message permissions (or use DMs).",
-        "Start or restart the gateway: `openclaw gateway`.",
+        "The gateway restarts automatically on config changes.",
         "Send a DM to the bot (or message it in a server channel where it has access).",
-        "If DM policy is pairing, approve first contact: `openclaw pairing list discord` then `openclaw pairing approve discord <CODE>`.",
+        "If DM policy is pairing, new contacts will appear in the Pending Pairings section below for approval.",
       ];
     case "telegram":
       return [
-        "Create/verify token with https://t.me/BotFather (`/newbot`) and ensure it is configured.",
-        "Start or restart the gateway: `openclaw gateway`.",
+        "Create/verify token with https://t.me/BotFather and ensure it is configured.",
+        "The gateway restarts automatically on config changes.",
         "Open Telegram and send a message to your bot.",
-        "If DM policy is pairing, approve first contact: `openclaw pairing list telegram` then `openclaw pairing approve telegram <CODE>`.",
+        "If DM policy is pairing, new contacts will appear in the Pending Pairings section below for approval.",
         "Optional: add the bot to a group and mention it to validate group routing.",
       ];
     case "whatsapp":
       return [
-        "After QR linking, keep gateway running: `openclaw gateway`.",
+        "After QR linking, the gateway stays running automatically.",
         "Message the linked WhatsApp identity from an allowed number.",
-        "If DM policy is pairing, approve first contact: `openclaw pairing list whatsapp` then `openclaw pairing approve whatsapp <CODE>`.",
+        "If DM policy is pairing, new contacts will appear in the Pending Pairings section below for approval.",
         "For stable ops, use a dedicated WhatsApp number when possible.",
       ];
     case "slack":
       return [
-        "Open https://api.slack.com/apps and confirm Socket Mode is enabled, with valid `xapp-...` and `xoxb-...` tokens.",
+        "Open https://api.slack.com/apps and confirm Socket Mode is enabled.",
         "Confirm the Slack app is installed to your workspace and required scopes are granted.",
         "Invite the bot to a channel (or DM it directly).",
-        "Start or restart the gateway: `openclaw gateway`.",
+        "The gateway restarts automatically on config changes.",
         "Send a test message and confirm a reply in the same channel.",
       ];
     default:
       return [
-        "Start or restart gateway: `openclaw gateway`.",
+        "The gateway restarts automatically on config changes.",
         "Send a test message to this channel integration.",
-        "If pairing is enabled for this channel, approve first contact with `openclaw pairing list <channel>` and `openclaw pairing approve <channel> <CODE>`.",
-        "Check live status with `openclaw channels status`.",
+        "If pairing is enabled, new contacts will appear in the Pending Pairings section below for approval.",
+        "Channel status is shown live on this page.",
       ];
   }
 }
@@ -129,6 +164,16 @@ export function ChannelsView() {
   const [wizardRunning, setWizardRunning] = useState(false);
   const [wizardOutput, setWizardOutput] = useState("");
   const [wizardError, setWizardError] = useState("");
+
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrChannel, setQrChannel] = useState<"whatsapp" | "signal">("whatsapp");
+
+  // Pairing & Devices
+  const [dmPairings, setDmPairings] = useState<DmPairingRequest[]>([]);
+  const [devicePairings, setDevicePairings] = useState<DevicePairingRequest[]>([]);
+  const [pairedDevices, setPairedDevices] = useState<PairedDevice[]>([]);
+  const [pairingBusy, setPairingBusy] = useState<string | null>(null);
+  const [expandedChannels, setExpandedChannels] = useState<Set<string>>(new Set());
 
   const [toast, setToast] = useState<Toast | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -152,9 +197,32 @@ export function ChannelsView() {
     }
   }, [flash]);
 
+  const fetchPairings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/pairing", { cache: "no-store" });
+      const data = await res.json();
+      setDmPairings((data.dm || []) as DmPairingRequest[]);
+      setDevicePairings((data.devices || []) as DevicePairingRequest[]);
+    } catch {
+      // silently degrade
+    }
+  }, []);
+
+  const fetchDevices = useCallback(async () => {
+    try {
+      const res = await fetch("/api/devices", { cache: "no-store" });
+      const data = await res.json();
+      setPairedDevices((data.paired || []) as PairedDevice[]);
+    } catch {
+      // silently degrade
+    }
+  }, []);
+
   useEffect(() => {
     void fetchChannels();
-  }, [fetchChannels]);
+    void fetchPairings();
+    void fetchDevices();
+  }, [fetchChannels, fetchPairings, fetchDevices]);
 
   const runChannelAction = useCallback(
     async (body: Record<string, unknown>, successMsg: string) => {
@@ -177,6 +245,86 @@ export function ChannelsView() {
     },
     [fetchChannels, flash]
   );
+
+  const approveDmPairing = useCallback(
+    async (channel: string, code: string) => {
+      setPairingBusy(`dm:${channel}:${code}`);
+      try {
+        const res = await fetch("/api/pairing", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "approve-dm", channel, code }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        flash(`Approved pairing for ${channel}`);
+        await fetchPairings();
+      } catch (err) {
+        flash(String(err), "error");
+      } finally {
+        setPairingBusy(null);
+      }
+    },
+    [flash, fetchPairings]
+  );
+
+  const handleDeviceAction = useCallback(
+    async (action: "approve" | "reject" | "revoke", id: string, role?: string) => {
+      setPairingBusy(`device:${action}:${id}`);
+      try {
+        const endpoint = action === "revoke" ? "/api/devices" : "/api/pairing";
+        const body: Record<string, unknown> =
+          action === "revoke"
+            ? { action: "revoke", deviceId: id, role: role || "user" }
+            : { action: `${action}-device`, requestId: id };
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        flash(`Device ${action}d`);
+        await Promise.all([fetchPairings(), fetchDevices()]);
+      } catch (err) {
+        flash(String(err), "error");
+      } finally {
+        setPairingBusy(null);
+      }
+    },
+    [flash, fetchPairings, fetchDevices]
+  );
+
+  const setChannelPolicy = useCallback(
+    async (channel: string, field: "dmPolicy" | "groupPolicy", value: string) => {
+      setBusy(true);
+      try {
+        const res = await fetch("/api/channels", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "set-policy", channel, [field]: value }),
+        });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        flash(`${field === "dmPolicy" ? "DM" : "Group"} policy updated for ${channel}`);
+        await fetchChannels();
+      } catch (err) {
+        flash(String(err), "error");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [flash, fetchChannels]
+  );
+
+  const toggleChannelExpanded = useCallback((channel: string) => {
+    setExpandedChannels((prev) => {
+      const next = new Set(prev);
+      if (next.has(channel)) next.delete(channel);
+      else next.add(channel);
+      return next;
+    });
+  }, []);
 
   const setupCandidates = channels.filter((ch) => !ch.configured && ch.setupType !== "auto");
   const selectedWizardChannel = channels.find((ch) => ch.channel === wizardChannel) || null;
@@ -247,6 +395,15 @@ export function ChannelsView() {
       if (data.error) throw new Error(data.error);
 
       if (data.interactive) {
+        // For WhatsApp/Signal: open the QR login modal instead of
+        // telling the user to switch to the Terminal.
+        const ch = selectedWizardChannel.channel;
+        if (ch === "whatsapp" || ch === "signal") {
+          setQrChannel(ch as "whatsapp" | "signal");
+          setQrModalOpen(true);
+          setWizardRunning(false);
+          return;
+        }
         setWizardOutput(
           data.message ||
             "Interactive login is required. Run the command below in the Terminal tab."
@@ -711,7 +868,65 @@ export function ChannelsView() {
                   </div>
                 )}
 
-                {ch.setupHint && (
+                {ch.configured && (
+                  <button
+                    type="button"
+                    onClick={() => toggleChannelExpanded(ch.channel)}
+                    className="mt-2 flex items-center gap-1 text-xs text-muted-foreground/70 transition-colors hover:text-foreground/80"
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "h-3 w-3 transition-transform",
+                        expandedChannels.has(ch.channel) && "rotate-180"
+                      )}
+                    />
+                    Channel Settings
+                  </button>
+                )}
+
+                {expandedChannels.has(ch.channel) && ch.configured && (
+                  <div className="mt-3 rounded-lg border border-foreground/10 bg-muted/30 p-3 space-y-3">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <label className="flex items-center gap-2 text-xs">
+                        <Shield className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">DM Policy</span>
+                        <select
+                          value={ch.dmPolicy || "pairing"}
+                          onChange={(e) =>
+                            void setChannelPolicy(ch.channel, "dmPolicy", e.target.value)
+                          }
+                          disabled={busy}
+                          className="rounded border border-foreground/10 bg-background px-2 py-1 text-xs"
+                        >
+                          <option value="pairing">Pairing (approve first)</option>
+                          <option value="allow">Allow all</option>
+                          <option value="deny">Deny all</option>
+                        </select>
+                      </label>
+                      <label className="flex items-center gap-2 text-xs">
+                        <Shield className="h-3 w-3 text-muted-foreground" />
+                        <span className="text-muted-foreground">Group Policy</span>
+                        <select
+                          value={ch.groupPolicy || "allow"}
+                          onChange={(e) =>
+                            void setChannelPolicy(ch.channel, "groupPolicy", e.target.value)
+                          }
+                          disabled={busy}
+                          className="rounded border border-foreground/10 bg-background px-2 py-1 text-xs"
+                        >
+                          <option value="allow">Allow all</option>
+                          <option value="mention">Mention only</option>
+                          <option value="deny">Deny all</option>
+                        </select>
+                      </label>
+                    </div>
+                    <p className="text-xs text-muted-foreground/60">
+                      DM Policy controls who can message the bot directly. Group Policy controls how the bot responds in group chats.
+                    </p>
+                  </div>
+                )}
+
+                {ch.setupHint && !expandedChannels.has(ch.channel) && (
                   <p className="mt-2 text-xs text-muted-foreground/70">
                     <LinkifiedText text={ch.setupHint} />
                   </p>
@@ -724,6 +939,140 @@ export function ChannelsView() {
             )}
           </div>
         </section>
+
+        {/* ── Pending Pairings ── */}
+        {(dmPairings.length > 0 || devicePairings.length > 0) && (
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <Bell className="h-4 w-4 text-amber-400" />
+              <h2 className="text-xs font-semibold text-foreground/90">Pending Pairings</h2>
+              <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-300">
+                {dmPairings.length + devicePairings.length}
+              </span>
+            </div>
+
+            {dmPairings.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground/70">
+                  New contacts waiting for approval to message your bot.
+                </p>
+                {dmPairings.map((req) => (
+                  <div
+                    key={`${req.channel}:${req.code}`}
+                    className="flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-foreground">
+                        {req.senderName || req.senderId || "Unknown"}{" "}
+                        <span className="text-muted-foreground">on {req.channel}</span>
+                      </p>
+                      {req.message && (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground/70">
+                          &ldquo;{req.message}&rdquo;
+                        </p>
+                      )}
+                      <p className="mt-0.5 text-xs text-muted-foreground/50">
+                        Code: {req.code}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void approveDmPairing(req.channel, req.code)}
+                      disabled={pairingBusy === `dm:${req.channel}:${req.code}`}
+                      className="ml-3 shrink-0 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+                    >
+                      {pairingBusy === `dm:${req.channel}:${req.code}` ? "Approving..." : "Approve"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {devicePairings.length > 0 && (
+              <div className="mt-3 space-y-2">
+                <p className="text-xs text-muted-foreground/70">
+                  Devices requesting access to your OpenClaw instance.
+                </p>
+                {devicePairings.map((req) => (
+                  <div
+                    key={req.requestId}
+                    className="flex items-center justify-between rounded-lg border border-amber-500/20 bg-amber-500/5 p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-foreground">
+                        {req.displayName || req.requestId}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground/70">
+                        {req.platform && `${req.platform} · `}
+                        {req.role || (req.roles || []).join(", ") || "user"}
+                      </p>
+                    </div>
+                    <div className="ml-3 flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void handleDeviceAction("approve", req.requestId)}
+                        disabled={pairingBusy === `device:approve:${req.requestId}`}
+                        className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDeviceAction("reject", req.requestId)}
+                        disabled={pairingBusy === `device:reject:${req.requestId}`}
+                        className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* ── Paired Devices ── */}
+        {pairedDevices.length > 0 && (
+          <section>
+            <div className="mb-3 flex items-center gap-2">
+              <Monitor className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-xs font-semibold text-foreground/90">Paired Devices</h2>
+            </div>
+            <div className="space-y-2">
+              {pairedDevices.map((device) => (
+                <div
+                  key={device.deviceId}
+                  className="flex items-center justify-between rounded-lg border border-foreground/10 bg-card/90 p-3"
+                >
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-foreground">
+                      {device.displayName || device.deviceId}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground/70">
+                      {device.platform} · {device.role}{" "}
+                      {device.approvedAtMs > 0 && (
+                        <span>
+                          · approved {new Date(device.approvedAtMs).toLocaleDateString()}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void handleDeviceAction("revoke", device.deviceId, device.role)
+                    }
+                    disabled={pairingBusy === `device:revoke:${device.deviceId}`}
+                    className="ml-3 shrink-0 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
       {toast && (
         <div
@@ -741,6 +1090,19 @@ export function ChannelsView() {
           )}
           {toast.message}
         </div>
+      )}
+      {/* QR Login Modal for WhatsApp / Signal */}
+      {qrModalOpen && (
+        <QrLoginModal
+          channel={qrChannel}
+          account={wizardAccount || undefined}
+          onSuccess={() => {
+            setQrModalOpen(false);
+            void fetchChannels();
+            flash(`${qrChannel === "whatsapp" ? "WhatsApp" : "Signal"} login successful`);
+          }}
+          onClose={() => setQrModalOpen(false)}
+        />
       )}
       </SectionBody>
     </SectionLayout>

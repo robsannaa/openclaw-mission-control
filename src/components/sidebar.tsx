@@ -43,6 +43,7 @@ import {
   KeyRound,
   Search,
   Heart,
+  Settings2,
 } from "lucide-react";
 import { getChatUnreadCount, subscribeChatStore } from "@/lib/chat-store";
 import {
@@ -51,42 +52,51 @@ import {
   type GatewayStatus,
 } from "@/lib/gateway-status-store";
 
-const navItems: {
+type NavItem = {
   section: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   href?: string;
   tab?: string;
   isSubItem?: boolean;
-  dividerAfter?: boolean;
   comingSoon?: boolean;
-}[] = [
-  { section: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
+  group?: string;
+};
+
+const navItems: NavItem[] = [
+  // ── Core ──
+  { group: "Core", section: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/dashboard" },
   { section: "chat", label: "Chat", icon: MessageCircle, href: "/chat" },
   { section: "channels", label: "Channels", icon: Radio, href: "/channels" },
   { section: "agents", label: "Agents", icon: Users, href: "/agents" },
-  { section: "agents", label: "Subagents", icon: Users2, href: "/agents?tab=subagents", tab: "subagents", isSubItem: true, dividerAfter: true },
-  { section: "tasks", label: "Tasks", icon: ListChecks, href: "/tasks" },
+  { section: "agents", label: "Subagents", icon: Users2, href: "/agents?tab=subagents", tab: "subagents", isSubItem: true },
+  // ── Work ──
+  { group: "Work", section: "tasks", label: "Tasks", icon: ListChecks, href: "/tasks" },
   { section: "sessions", label: "Sessions", icon: MessageSquare, href: "/sessions" },
   { section: "cron", label: "Cron Jobs", icon: Clock, href: "/cron" },
   { section: "heartbeat", label: "Heartbeat", icon: Heart, href: "/heartbeat", isSubItem: true },
   { section: "calendar", label: "Calendar", icon: CalendarDays, comingSoon: true, href: "/calendar" },
-  { section: "memory", label: "Memory", icon: Brain, href: "/memory" },
+  // ── Knowledge ──
+  { group: "Knowledge", section: "memory", label: "Memory", icon: Brain, href: "/memory" },
   { section: "docs", label: "Documents", icon: FolderOpen, href: "/documents" },
-  { section: "vectors", label: "Vector DB", icon: Database, dividerAfter: true, href: "/vectors" },
-  { section: "skills", label: "Skills", icon: Wrench, href: "/skills" },
+  { section: "vectors", label: "Vector DB", icon: Database, href: "/vectors" },
+  // ── Integrations ──
+  { group: "Integrations", section: "skills", label: "Skills", icon: Wrench, href: "/skills" },
   { section: "skills", label: "ClawHub", icon: Package, href: "/skills?tab=clawhub", tab: "clawhub", isSubItem: true },
-  { section: "models", label: "Models", icon: Cpu, href: "/models" },
-  { section: "accounts", label: "Accounts & Keys", icon: KeyRound, href: "/accounts" },
   { section: "audio", label: "Audio & Voice", icon: Volume2, href: "/audio" },
   { section: "browser", label: "Browser Relay", icon: Globe, href: "/browser" },
   { section: "search", label: "Web Search", icon: Search, href: "/search" },
+  // ── Configuration ──
+  { group: "Configuration", section: "models", label: "Models", icon: Cpu, href: "/models" },
+  { section: "accounts", label: "Accounts & Keys", icon: KeyRound, href: "/accounts" },
+  { section: "permissions", label: "Permissions", icon: Shield, href: "/permissions" },
   { section: "tailscale", label: "Tailscale", icon: Waypoints, href: "/tailscale" },
-  { section: "permissions", label: "Permissions", icon: Shield, dividerAfter: true, href: "/permissions" },
-  { section: "usage", label: "Usage", icon: BarChart3, href: "/usage" },
+  { section: "settings", label: "Settings", icon: Settings2, href: "/settings" },
+  { section: "config", label: "Config", icon: Settings, href: "/config" },
+  // ── Monitoring ──
+  { group: "Monitoring", section: "usage", label: "Usage", icon: BarChart3, href: "/usage" },
   { section: "terminal", label: "Terminal", icon: SquareTerminal, href: "/terminal" },
   { section: "logs", label: "Logs", icon: Terminal, href: "/logs" },
-  { section: "config", label: "Config", icon: Settings, href: "/config" },
 ];
 
 const SIDEBAR_COLLAPSED_KEY = "sidebar_collapsed";
@@ -99,7 +109,6 @@ function deriveSectionFromPath(pathname: string): string | null {
     system: "channels",
     documents: "docs",
     memories: "memory",
-    settings: "config",
   };
   if (aliases[first]) return aliases[first];
   const known = new Set([
@@ -126,6 +135,7 @@ function deriveSectionFromPath(pathname: string): string | null {
     "terminal",
     "logs",
     "config",
+    "settings",
     "calendar",
   ]);
   return known.has(first) ? first : null;
@@ -156,14 +166,20 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
     () => 0 // SSR fallback
   );
 
+  let lastGroup: string | undefined;
+
   return (
-    <nav className={cn("flex flex-1 flex-col gap-0.5 overflow-y-auto pt-4", collapsed ? "px-2" : "px-3")}>
+    <nav className={cn("flex flex-1 flex-col gap-0.5 overflow-y-auto pt-3", collapsed ? "px-1.5" : "px-2.5")}>
       {navItems.map((item) => {
         const isSkillsParent = item.section === "skills" && item.label === "Skills";
         const isAgentsParent = item.section === "agents" && item.label === "Agents";
         if (collapsed && item.isSubItem) return null;
         if (item.isSubItem && item.section === "skills" && !showSkillsChildren) return null;
         if (item.isSubItem && item.section === "agents" && !showAgentsChildren) return null;
+
+        // Group header
+        const showGroupHeader = item.group && item.group !== lastGroup;
+        if (item.group) lastGroup = item.group;
 
         const Icon = item.icon;
         const isActive =
@@ -173,24 +189,32 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
         const showBadge = item.section === "chat" && chatUnread > 0;
         const isDisabled = item.comingSoon;
         const linkClass = cn(
-          "flex items-center gap-2.5 rounded-md py-1.5 text-xs font-medium transition-colors",
+          "group relative flex items-center gap-2.5 rounded-lg py-1.5 text-xs font-medium transition-all duration-200",
           collapsed ? "justify-center px-2" : "px-2.5",
           item.isSubItem && !collapsed && "ml-6 py-1 text-xs",
           isDisabled
-            ? "cursor-not-allowed opacity-60 text-muted-foreground dark:text-zinc-500"
+            ? "cursor-not-allowed opacity-50 text-muted-foreground"
             : isActive
-              ? "bg-violet-600/20 text-violet-700 dark:text-violet-300"
-              : "text-muted-foreground dark:text-zinc-400 hover:bg-black/5 dark:hover:bg-white/5 hover:text-zinc-900 dark:hover:text-zinc-200"
+              ? "bg-accent text-foreground font-medium"
+              : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground/80"
         );
         return (
           <div key={`${item.section}:${item.label}`}>
+            {showGroupHeader && !collapsed && (
+              <div className="mb-1.5 mt-4 first:mt-0 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+                {item.group}
+              </div>
+            )}
+            {showGroupHeader && collapsed && (
+              <div className="my-2 mx-1 border-t border-foreground/[0.06]" />
+            )}
             {isDisabled ? (
               <span className={linkClass} aria-disabled>
-                <Icon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                <Icon className="h-3.5 w-3.5 shrink-0 opacity-60" />
                 {!collapsed && (
                   <>
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    <span className="shrink-0 whitespace-nowrap rounded-full border border-violet-500/20 bg-violet-500/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-violet-400/90">
+                    <span className="shrink-0 whitespace-nowrap rounded-full border border-violet-500/20 bg-violet-500/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-violet-400/80">
                       Soon
                     </span>
                   </>
@@ -202,7 +226,7 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                   <Link
                     href={item.href || `/${item.section}`}
                     onClick={onNavigate}
-                    className="flex min-w-0 flex-1 items-center gap-3"
+                    className="flex min-w-0 flex-1 items-center gap-2.5"
                   >
                     <Icon className="h-3.5 w-3.5 shrink-0" />
                     <span className="flex-1">{item.label}</span>
@@ -218,7 +242,7 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                         setAgentsExpanded((prev) => !prev);
                       }
                     }}
-                    className="rounded p-0.5 text-muted-foreground/70 transition-colors hover:text-foreground/90"
+                    className="rounded-md p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground/80"
                     aria-label={
                       isSkillsParent
                         ? (showSkillsChildren ? "Collapse skills submenu" : "Expand skills submenu")
@@ -227,7 +251,7 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                   >
                     <ChevronRight
                       className={cn(
-                        "h-3.5 w-3.5 transition-transform",
+                        "h-3 w-3 transition-transform duration-200",
                         (isSkillsParent ? showSkillsChildren : showAgentsChildren) && "rotate-90"
                       )}
                     />
@@ -243,20 +267,17 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                   <span className="relative inline-flex shrink-0">
                     <Icon className="h-3.5 w-3.5" />
                     {collapsed && showBadge && (
-                      <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-violet-600" title={`${chatUnread} unread`} aria-hidden />
+                      <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-violet-600 ring-2 ring-sidebar" title={`${chatUnread} unread`} aria-hidden />
                     )}
                   </span>
                   {!collapsed && <span className="flex-1">{item.label}</span>}
                   {!collapsed && showBadge && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 px-1.5 text-xs font-bold text-white">
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 px-1.5 text-xs font-bold text-white shadow-sm">
                       {chatUnread > 9 ? "9+" : chatUnread}
                     </span>
                   )}
                 </Link>
               )
-            )}
-            {item.dividerAfter && (
-              <div className="my-2 border-t border-border" />
             )}
           </div>
         );
@@ -354,11 +375,12 @@ function GatewayBadge({ collapsed }: { collapsed?: boolean }) {
         type="button"
         onClick={() => setShowMenu(!showMenu)}
         className={cn(
-          "flex w-full items-center gap-2.5 rounded-lg transition-colors hover:bg-black/5 dark:hover:bg-zinc-800/40",
+          "flex w-full items-center gap-2.5 rounded-lg transition-all duration-200",
+          "hover:bg-foreground/[0.06]",
           collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5"
         )}
       >
-        <div className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white/30 dark:bg-white/10 border border-white/20 dark:border-white/10 text-sm shadow-sm">
+        <div className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.06] text-sm shadow-sm">
           🦞
           {collapsed && (
             <div
@@ -380,11 +402,11 @@ function GatewayBadge({ collapsed }: { collapsed?: boolean }) {
                   STATUS_RING[status]
                 )}
               />
-              <span className="text-xs font-medium text-muted-foreground dark:text-zinc-400">
+              <span className="text-xs font-medium text-muted-foreground">
                 Gateway
               </span>
             </div>
-            <span className="text-xs text-muted-foreground dark:text-zinc-600">
+            <span className="text-xs text-muted-foreground/60">
               {restarting ? "Restarting..." : STATUS_LABELS[status]}
             </span>
           </div>
@@ -392,12 +414,12 @@ function GatewayBadge({ collapsed }: { collapsed?: boolean }) {
       </button>
 
       {showMenu && (
-        <div className="absolute bottom-full left-0 z-50 mb-1 w-full overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-xl backdrop-blur-sm">
+        <div className="absolute bottom-full left-0 z-50 mb-1.5 w-full overflow-hidden rounded-lg glass-strong py-1">
           <button
             type="button"
             onClick={handleRestart}
             disabled={restarting}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground/70 transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground/70 transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:opacity-50"
           >
             <RefreshCw
               className={cn(
@@ -415,7 +437,7 @@ function GatewayBadge({ collapsed }: { collapsed?: boolean }) {
             <Power className="h-3.5 w-3.5" />
             Stop Gateway
           </button>
-          <div className="mx-2 my-1 h-px bg-border" />
+          <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
           <label className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left text-xs text-muted-foreground hover:text-foreground/80">
             <span>Auto-restart on changes</span>
             <button
@@ -427,23 +449,23 @@ function GatewayBadge({ collapsed }: { collapsed?: boolean }) {
                 setAutoRestartOnChanges(!autoRestartOnChanges);
               }}
               className={cn(
-                "relative h-5 w-9 shrink-0 rounded-full transition-colors",
-                autoRestartOnChanges ? "bg-violet-500" : "bg-muted"
+                "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200",
+                autoRestartOnChanges ? "bg-violet-500" : "bg-foreground/10"
               )}
             >
               <span
                 className={cn(
-                  "absolute top-0.5 block h-4 w-4 rounded-full bg-white shadow transition-transform",
+                  "absolute top-0.5 block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200",
                   autoRestartOnChanges ? "left-4" : "left-0.5"
                 )}
               />
             </button>
           </label>
-          <div className="mx-2 my-1 h-px bg-border" />
+          <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
           <div className="px-3 py-1.5">
             <span
               className={cn(
-                "inline-flex items-center gap-1 text-xs",
+                "inline-flex items-center gap-1.5 text-xs",
                 status === "online" ? "text-emerald-400" : status === "degraded" ? "text-amber-400" : "text-red-400"
               )}
             >
@@ -498,7 +520,7 @@ export function Sidebar() {
       <button
         type="button"
         onClick={() => setMobileOpen(true)}
-        className="fixed left-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-sidebar text-foreground shadow-sm md:hidden"
+        className="fixed left-3 top-3 z-50 flex h-9 w-9 items-center justify-center rounded-lg glass-strong text-foreground md:hidden"
         aria-label="Open menu"
       >
         <Menu className="h-5 w-5" />
@@ -507,7 +529,7 @@ export function Sidebar() {
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/50 md:hidden"
+          className="fixed inset-0 z-40 bg-black/40 md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -515,9 +537,11 @@ export function Sidebar() {
       {/* Sidebar — always visible on desktop, slide-in drawer on mobile */}
       <aside
         className={cn(
-          "flex h-full shrink-0 flex-col border-r border-white/20 dark:border-white/10 bg-white/50 dark:bg-white/[0.06] backdrop-blur-md transition-[width,transform] duration-200 ease-in-out",
+          "flex h-full shrink-0 flex-col transition-[width,transform] duration-200 ease-in-out",
+          "border-r border-border",
+          "bg-sidebar",
           collapsed ? "w-14 md:w-14" : "w-56 md:w-56",
-          "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-xl",
+          "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl",
           mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
         )}
       >
@@ -534,16 +558,16 @@ export function Sidebar() {
         <Suspense fallback={<div className="flex-1" />}>
           <SidebarNav onNavigate={closeMobile} collapsed={collapsed} />
         </Suspense>
-        <div className="border-t border-border">
+        <div className="border-t border-foreground/[0.06]">
           <GatewayBadge collapsed={collapsed} />
         </div>
         {/* Collapse / expand toggle — desktop only */}
-        <div className={cn("hidden border-t border-border md:block", collapsed ? "px-2 py-2" : "px-3 py-2")}>
+        <div className={cn("hidden border-t border-foreground/[0.06] md:block", collapsed ? "px-2 py-2" : "px-3 py-2")}>
           <button
             type="button"
             onClick={toggleCollapsed}
             className={cn(
-              "flex w-full items-center rounded-lg py-1.5 text-muted-foreground transition-colors hover:bg-black/5 hover:text-foreground dark:hover:bg-zinc-800/40",
+              "flex w-full items-center rounded-lg py-1.5 text-muted-foreground/60 transition-all duration-200 hover:bg-foreground/[0.06] hover:text-foreground/80",
               collapsed ? "justify-center px-0" : "gap-2 px-2"
             )}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}

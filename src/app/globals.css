@@ -50,133 +50,154 @@
 
 /* ── Light mode (default) ───────────────────────── */
 :root {
-  --radius: 0.625rem;
+  --radius: 0.5rem;
 
   /* Core backgrounds */
-  --background: #f3f6fb;
-  --foreground: #1b2430;
+  --background: #fafafa;
+  --foreground: #0a0a0a;
   --card: #ffffff;
-  --card-foreground: #1b2430;
+  --card-foreground: #0a0a0a;
   --popover: #ffffff;
-  --popover-foreground: #1b2430;
-  --primary: #2b4c7e;
-  --primary-foreground: #f8fbff;
-  --secondary: #e7edf5;
-  --secondary-foreground: #1b2430;
-  --muted: #e7edf5;
-  --muted-foreground: #64748b;
-  --accent: #e1e8f2;
-  --accent-foreground: #1b2430;
+  --popover-foreground: #0a0a0a;
+  --primary: #171717;
+  --primary-foreground: #fafafa;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #171717;
+  --muted: #f5f5f5;
+  --muted-foreground: #737373;
+  --accent: #f5f5f5;
+  --accent-foreground: #171717;
   --destructive: #dc2626;
 
   /* Borders & inputs */
-  --border: rgba(24, 38, 56, 0.12);
-  --input: rgba(24, 38, 56, 0.16);
-  --ring: rgba(43, 76, 126, 0.28);
+  --border: rgba(0, 0, 0, 0.08);
+  --input: rgba(0, 0, 0, 0.12);
+  --ring: rgba(0, 0, 0, 0.12);
 
   /* Charts */
-  --chart-1: #2b4c7e;
-  --chart-2: #2a9d8f;
-  --chart-3: #e9a03b;
-  --chart-4: #4c6ef5;
-  --chart-5: #d64550;
-  --chart-grid: rgba(43, 76, 126, 0.16);
-  --chart-tick: rgba(71, 85, 105, 0.84);
-  --chart-tick-muted: rgba(100, 116, 139, 0.74);
-  --chart-text: rgba(30, 41, 59, 0.92);
-  --chart-muted: #7a8ea8;
+  --chart-1: #2563eb;
+  --chart-2: #10b981;
+  --chart-3: #f59e0b;
+  --chart-4: #6366f1;
+  --chart-5: #ef4444;
+  --chart-grid: rgba(0, 0, 0, 0.06);
+  --chart-tick: rgba(0, 0, 0, 0.55);
+  --chart-tick-muted: rgba(0, 0, 0, 0.40);
+  --chart-text: rgba(0, 0, 0, 0.80);
+  --chart-muted: #a3a3a3;
 
   /* Sidebar */
-  --sidebar: #e9eff7;
-  --sidebar-foreground: #1b2430;
-  --sidebar-primary: #2b4c7e;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #dde6f2;
-  --sidebar-accent-foreground: #1b2430;
-  --sidebar-border: rgba(24, 38, 56, 0.12);
-  --sidebar-ring: rgba(43, 76, 126, 0.24);
+  --sidebar: #fafafa;
+  --sidebar-foreground: #0a0a0a;
+  --sidebar-primary: #171717;
+  --sidebar-primary-foreground: #fafafa;
+  --sidebar-accent: #f0f0f0;
+  --sidebar-accent-foreground: #171717;
+  --sidebar-border: rgba(0, 0, 0, 0.08);
+  --sidebar-ring: rgba(0, 0, 0, 0.08);
 
-  /* ── Semantic surface tokens ── */
-  --surface-0: #ffffff;                   /* Flat card / panel */
-  --surface-1: rgba(24, 38, 56, 0.02);      /* Subtle raised */
-  --surface-2: rgba(24, 38, 56, 0.05);      /* Elevated card */
-  --surface-3: rgba(24, 38, 56, 0.08);      /* Input / pill / tag */
-  --surface-inset: rgba(24, 38, 56, 0.04);  /* Recessed area inside a card */
-  --surface-overlay: rgba(255, 255, 255, 0.95); /* Dropdown, popover */
-  --surface-header: rgba(245, 248, 253, 0.9);   /* Header / toolbar */
+  /* Semantic surface tokens */
+  --surface-0: #ffffff;
+  --surface-1: rgba(0, 0, 0, 0.02);
+  --surface-2: rgba(0, 0, 0, 0.04);
+  --surface-3: rgba(0, 0, 0, 0.06);
+  --surface-inset: rgba(0, 0, 0, 0.03);
+  --surface-overlay: rgba(255, 255, 255, 0.97);
+  --surface-header: rgba(250, 250, 250, 0.95);
 
-  /* ── Semantic border tokens ── */
-  --border-subtle: rgba(24, 38, 56, 0.06);
-  --border-default: rgba(24, 38, 56, 0.12);
-  --border-strong: rgba(24, 38, 56, 0.18);
-  --border-accent: rgba(43, 76, 126, 0.24);
+  /* Semantic border tokens */
+  --border-subtle: rgba(0, 0, 0, 0.05);
+  --border-default: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.12);
+  --border-accent: rgba(0, 0, 0, 0.16);
 
-  /* ── Semantic text tokens ── */
-  --text-primary: #1b2430;
-  --text-secondary: #334155;
-  --text-tertiary: #64748b;
-  --text-quaternary: #94a3b8;
-  --text-placeholder: #94a3b8;
+  /* Semantic text tokens */
+  --text-primary: #0a0a0a;
+  --text-secondary: #404040;
+  --text-tertiary: #737373;
+  --text-quaternary: #a3a3a3;
+  --text-placeholder: #a3a3a3;
 
+  /* Surface system (replaces glass tokens) */
+  --glass-bg: #ffffff;
+  --glass-bg-subtle: #fafafa;
+  --glass-bg-strong: #ffffff;
+  --glass-border: rgba(0, 0, 0, 0.08);
+  --glass-border-subtle: rgba(0, 0, 0, 0.06);
+  --glass-highlight: transparent;
+  --glass-shadow: transparent;
+  --glass-shadow-strong: rgba(0, 0, 0, 0.04);
+  --glass-inner-glow: transparent;
 }
 
 /* ── Dark mode ──────────────────────────────────── */
 .dark {
-  --background: #0d1420;
-  --foreground: #e6edf8;
-  --card: #111b2a;
-  --card-foreground: #e6edf8;
-  --popover: #111b2a;
-  --popover-foreground: #e6edf8;
-  --primary: #93b3e8;
-  --primary-foreground: #0d1420;
-  --secondary: #1a2738;
-  --secondary-foreground: #e6edf8;
-  --muted: #1a2738;
-  --muted-foreground: #95a3b8;
-  --accent: #23344d;
-  --accent-foreground: #e6edf8;
+  --background: #09090b;
+  --foreground: #fafafa;
+  --card: #0a0a0a;
+  --card-foreground: #fafafa;
+  --popover: #0a0a0a;
+  --popover-foreground: #fafafa;
+  --primary: #fafafa;
+  --primary-foreground: #09090b;
+  --secondary: #1a1a1a;
+  --secondary-foreground: #fafafa;
+  --muted: #1a1a1a;
+  --muted-foreground: #a1a1aa;
+  --accent: #262626;
+  --accent-foreground: #fafafa;
   --destructive: #dc2626;
-  --border: rgba(194, 212, 240, 0.14);
-  --input: rgba(194, 212, 240, 0.18);
-  --ring: rgba(147, 179, 232, 0.42);
-  --chart-1: #7ea2e7;
-  --chart-2: #52b7a9;
-  --chart-3: #f1b355;
-  --chart-4: #8fb8ff;
-  --chart-5: #f06a75;
-  --chart-grid: rgba(147, 179, 232, 0.22);
-  --chart-tick: rgba(195, 209, 229, 0.86);
-  --chart-tick-muted: rgba(149, 163, 184, 0.76);
-  --chart-text: rgba(230, 237, 248, 0.92);
-  --chart-muted: #72839d;
-  --sidebar: #0f1826;
-  --sidebar-foreground: #e6edf8;
-  --sidebar-primary: #7ea2e7;
-  --sidebar-primary-foreground: #0d1420;
-  --sidebar-accent: #1c2b42;
-  --sidebar-accent-foreground: #e6edf8;
-  --sidebar-border: rgba(194, 212, 240, 0.14);
-  --sidebar-ring: rgba(147, 179, 232, 0.42);
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.12);
+  --ring: rgba(255, 255, 255, 0.12);
+  --chart-1: #60a5fa;
+  --chart-2: #34d399;
+  --chart-3: #fbbf24;
+  --chart-4: #a5b4fc;
+  --chart-5: #f87171;
+  --chart-grid: rgba(255, 255, 255, 0.06);
+  --chart-tick: rgba(255, 255, 255, 0.55);
+  --chart-tick-muted: rgba(255, 255, 255, 0.40);
+  --chart-text: rgba(255, 255, 255, 0.80);
+  --chart-muted: #525252;
+  --sidebar: #09090b;
+  --sidebar-foreground: #fafafa;
+  --sidebar-primary: #fafafa;
+  --sidebar-primary-foreground: #09090b;
+  --sidebar-accent: #1a1a1a;
+  --sidebar-accent-foreground: #fafafa;
+  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-ring: rgba(255, 255, 255, 0.08);
 
-  --surface-0: #111b2a;
-  --surface-1: rgba(194, 212, 240, 0.04);
-  --surface-2: rgba(194, 212, 240, 0.08);
-  --surface-3: rgba(194, 212, 240, 0.12);
-  --surface-inset: rgba(194, 212, 240, 0.06);
-  --surface-overlay: rgba(17, 27, 42, 0.97);
-  --surface-header: rgba(11, 18, 31, 0.72);
+  --surface-0: #0a0a0a;
+  --surface-1: rgba(255, 255, 255, 0.03);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-3: rgba(255, 255, 255, 0.08);
+  --surface-inset: rgba(255, 255, 255, 0.04);
+  --surface-overlay: rgba(10, 10, 10, 0.97);
+  --surface-header: rgba(9, 9, 11, 0.95);
 
-  --border-subtle: rgba(194, 212, 240, 0.08);
-  --border-default: rgba(194, 212, 240, 0.14);
-  --border-strong: rgba(194, 212, 240, 0.2);
-  --border-accent: rgba(147, 179, 232, 0.36);
+  --border-subtle: rgba(255, 255, 255, 0.05);
+  --border-default: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --border-accent: rgba(255, 255, 255, 0.16);
 
-  --text-primary: #e6edf8;
-  --text-secondary: #c3d1e5;
-  --text-tertiary: #95a3b8;
-  --text-quaternary: #72839d;
-  --text-placeholder: #72839d;
+  --text-primary: #fafafa;
+  --text-secondary: #d4d4d4;
+  --text-tertiary: #a1a1aa;
+  --text-quaternary: #71717a;
+  --text-placeholder: #71717a;
+
+  /* Surface system — dark */
+  --glass-bg: #0a0a0a;
+  --glass-bg-subtle: #111111;
+  --glass-bg-strong: #0a0a0a;
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-subtle: rgba(255, 255, 255, 0.06);
+  --glass-highlight: transparent;
+  --glass-shadow: transparent;
+  --glass-shadow-strong: rgba(0, 0, 0, 0.20);
+  --glass-inner-glow: transparent;
 }
 
 @layer base {
@@ -186,50 +207,18 @@
   body {
     @apply bg-background text-foreground text-base font-sans;
   }
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    @apply font-serif;
-  }
 }
 
-/* App background treatment */
+/* ── Background ─────────────────────────────────── */
 body {
-  position: relative;
   min-height: 100vh;
   background-color: var(--background);
-  transition: background-color 0.4s ease, background-image 0.4s ease;
 }
 
-/* Light: clean paper + slate wash */
-html:not(.dark) body {
-  background-color: #f3f6fb;
-  background-image:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.74) 0%, rgba(255, 255, 255, 0) 34%),
-    radial-gradient(130% 90% at 0% 0%, rgba(43, 76, 126, 0.12) 0%, transparent 58%),
-    radial-gradient(100% 80% at 100% 100%, rgba(42, 157, 143, 0.1) 0%, transparent 60%),
-    radial-gradient(75% 70% at 50% 18%, rgba(100, 116, 139, 0.08) 0%, transparent 62%);
-  background-attachment: fixed;
-}
-
-/* Dark: deep slate + subtle cyan/navy glow */
-.dark body {
-  background-color: #0d1420;
-  background-image:
-    linear-gradient(180deg, rgba(9, 14, 24, 0.36) 0%, rgba(9, 14, 24, 0) 30%),
-    radial-gradient(120% 92% at 4% 0%, rgba(126, 162, 231, 0.2) 0%, transparent 58%),
-    radial-gradient(95% 84% at 96% 100%, rgba(56, 136, 125, 0.16) 0%, transparent 60%),
-    radial-gradient(80% 70% at 50% 18%, rgba(35, 52, 77, 0.28) 0%, transparent 64%);
-  background-attachment: fixed;
-}
-
-/* Custom scrollbar — adapts to theme */
+/* ── Scrollbar ──────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 
 ::-webkit-scrollbar-track {
@@ -237,52 +226,58 @@ html:not(.dark) body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.12);
-  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.10);
+  border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.22);
+  background: rgba(0, 0, 0, 0.20);
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.07);
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.14);
 }
 
-/* ── Liquid glass (frosted glass + subtle border + depth) ───────────
-   Use for header, sidebar, cards. See FlyonUI liquid glass guide.   */
+/* ── Surface system — flat card utilities ───────── */
 @layer utilities {
+  /* Primary surface — cards, panels */
   .glass {
-    @apply border border-white/20 dark:border-white/10 bg-white/50 dark:bg-white/[0.06] backdrop-blur-md shadow-lg;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
   }
+
+  /* Subtle surface — nested elements, secondary panels */
   .glass-subtle {
-    @apply border border-white/15 dark:border-white/10 bg-white/40 dark:bg-white/[0.05] backdrop-blur-sm shadow-md;
+    background: var(--glass-bg-subtle);
+    border: 1px solid var(--glass-border-subtle);
+  }
+
+  /* Elevated surface — headers, overlays, dropdowns */
+  .glass-strong {
+    background: var(--glass-bg-strong);
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 1px 3px var(--glass-shadow-strong);
+  }
+
+  /* Interactive surface — hover border strengthen */
+  .glass-glow {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    transition: border-color 0.15s ease;
+  }
+
+  .glass-glow:hover {
+    border-color: var(--border-strong);
   }
 }
 
-/* ═══════════════════════════════════════════════════════════════════
-   LIGHT MODE — ACCENT COLOR ADJUSTMENTS
-   ─────────────────────────────────────────────────────────────────
-   All base theming (bg, text, border, hover) is now handled via
-   semantic Tailwind tokens in the components themselves:
-   
-     bg-card           → white in light, dark in dark
-     bg-muted          → light gray in light, dark gray in dark
-     text-foreground    → near-black in light, near-white in dark
-     text-muted-foreground → mid gray, adapts automatically
-     border-foreground/[0.06] → dark tint in light, light tint in dark
-     bg-foreground/[0.04] → subtle tint that adapts to theme
-   
-   The ONLY overrides needed here are for accent colors (violet, 
-   emerald, etc.) that need contrast tuning for light backgrounds,
-   and third-party component styles (React Flow).
-   ═══════════════════════════════════════════════════════════════════ */
+/* ── Light mode — accent color adjustments ──────── */
 
-/* ── Accent text colors — boost contrast on white backgrounds ── */
+/* Accent text colors — boost contrast on light backgrounds */
 :root:not(.dark) .text-violet-100 { color: #1e3a8a !important; }
 :root:not(.dark) .text-violet-200 { color: #1e3a8a !important; }
 :root:not(.dark) .text-violet-300 { color: #2563eb !important; }
@@ -318,11 +313,11 @@ html:not(.dark) body {
 :root:not(.dark) .text-zinc-200 { color: #3f3f46 !important; }
 :root:not(.dark) .text-zinc-300 { color: #52525b !important; }
 
-/* ── Accent hover text ── */
+/* Accent hover text */
 :root:not(.dark) .hover\:text-violet-300:hover { color: #1d4ed8 !important; }
 :root:not(.dark) .hover\:text-violet-200:hover { color: #1d4ed8 !important; }
 
-/* ── Accent backgrounds — slightly more opacity for visibility ── */
+/* Accent backgrounds — adjusted opacity for visibility */
 :root:not(.dark) .bg-violet-500\/10 { background-color: rgba(37, 99, 235, 0.08) !important; }
 :root:not(.dark) .bg-violet-500\/15 { background-color: rgba(37, 99, 235, 0.11) !important; }
 :root:not(.dark) .bg-violet-500\/20 { background-color: rgba(37, 99, 235, 0.14) !important; }
@@ -339,13 +334,13 @@ html:not(.dark) body {
 :root:not(.dark) .bg-amber-950\/40 { background-color: rgba(245, 158, 11, 0.06) !important; }
 :root:not(.dark) .bg-violet-900\/80 { background-color: rgba(29, 78, 216, 0.12) !important; }
 
-/* ── Accent hover backgrounds ── */
+/* Accent hover backgrounds */
 :root:not(.dark) .hover\:bg-violet-500\/10:hover { background-color: rgba(29, 78, 216, 0.12) !important; }
 :root:not(.dark) .hover\:bg-violet-600\/30:hover { background-color: rgba(29, 78, 216, 0.18) !important; }
 :root:not(.dark) .hover\:bg-red-500\/10:hover { background-color: rgba(220, 38, 38, 0.08) !important; }
 :root:not(.dark) .hover\:bg-red-500\/20:hover { background-color: rgba(220, 38, 38, 0.10) !important; }
 
-/* ── Accent border colors ── */
+/* Accent border colors */
 :root:not(.dark) .border-violet-500\/20 { border-color: rgba(29, 78, 216, 0.16) !important; }
 :root:not(.dark) .border-violet-500\/30 { border-color: rgba(29, 78, 216, 0.22) !important; }
 :root:not(.dark) .border-violet-500\/40 { border-color: rgba(29, 78, 216, 0.28) !important; }
@@ -356,15 +351,15 @@ html:not(.dark) body {
 :root:not(.dark) .border-red-500\/20 { border-color: rgba(220, 38, 38, 0.15) !important; }
 :root:not(.dark) .border-sky-500\/20 { border-color: rgba(14, 165, 233, 0.15) !important; }
 
-/* ── Accent fill ── */
+/* Accent fill */
 :root:not(.dark) .fill-emerald-400 { fill: #059669 !important; }
 
-/* ── React Flow internals (third-party, can't use Tailwind tokens) ── */
+/* React Flow internals */
 :root:not(.dark) .react-flow__node { color: var(--foreground); }
 :root:not(.dark) .react-flow__edge-path { stroke: rgba(0, 0, 0, 0.2); }
 :root:not(.dark) .react-flow__edge.animated path { stroke: rgba(37, 99, 235, 0.42); }
 
-/* ── Dark mode accent remap (keep violet utility classes on-brand) ── */
+/* Dark mode accent remaps */
 .dark .text-violet-100 { color: #dbeafe !important; }
 .dark .text-violet-200 { color: #bfdbfe !important; }
 .dark .text-violet-300 { color: #93c5fd !important; }
@@ -385,6 +380,6 @@ html:not(.dark) body {
 .dark .border-violet-500\/40 { border-color: rgba(96, 165, 250, 0.44) !important; }
 .dark .border-violet-500\/50 { border-color: rgba(96, 165, 250, 0.52) !important; }
 
-/* ── Gradient stops (legacy, rare) ── */
+/* Gradient stops (legacy) */
 :root:not(.dark) .from-zinc-500 { --tw-gradient-from: #a1a1aa !important; }
 :root:not(.dark) .to-zinc-600 { --tw-gradient-to: #a1a1aa !important; }

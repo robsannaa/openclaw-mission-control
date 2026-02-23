@@ -3,12 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
-  ArrowRight,
   Bot,
   Check,
   Eye,
   EyeOff,
-  Heart,
   KeyRound,
   ListOrdered,
   Loader2,
@@ -17,13 +15,16 @@ import {
   RotateCcw,
   Sparkles,
   Trash2,
+  ChevronDown,
+  Zap,
+  Tag,
 } from "lucide-react";
-import Link from "next/link";
 import { requestRestart } from "@/lib/restart-store";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ApiWarningBadge } from "@/components/ui/api-warning-badge";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
+import { getModelMeta, getFriendlyModelName, getProviderDisplayName } from "@/lib/model-metadata";
 
 type ModelInfo = {
   key: string;
@@ -312,6 +313,50 @@ function ModelSelect({
         );
       })}
     </select>
+  );
+}
+
+function AdvancedSection({
+  title,
+  icon: Icon,
+  iconColor = "text-muted-foreground",
+  badge,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  iconColor?: string;
+  badge?: React.ReactNode;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <section className="rounded-2xl border border-border overflow-hidden bg-card">
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-4 py-3 md:px-5 transition-colors hover:bg-foreground/5"
+      >
+        <div className="flex items-center gap-2">
+          <Icon className={cn("h-4 w-4", iconColor)} />
+          <h2 className="text-xs font-semibold text-foreground">{title}</h2>
+          {badge}
+        </div>
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
+        />
+      </button>
+      {open && (
+        <div className="border-t border-border px-4 py-4 md:px-5 md:py-5">
+          {children}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -1159,11 +1204,14 @@ export function ModelsView() {
     );
   }
 
+  const mainMeta = getModelMeta(mainResolved);
+  const defaultMeta = getModelMeta(defaultPrimary);
+
   return (
     <SectionLayout>
       <SectionHeader
         title="Models"
-        description="See and switch each agent's model — saved, in-use, and last session."
+        description="Choose your AI model, connect providers, and manage advanced configuration."
         actions={
           <div className="flex items-center gap-2">
             <ApiWarningBadge warning={apiWarning} degraded={apiDegraded} />
@@ -1185,44 +1233,225 @@ export function ModelsView() {
       />
 
       <SectionBody width="narrow" padding="roomy" innerClassName="space-y-6">
+        {/* ━━━ TIER 1: Your Model ━━━ */}
         <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Bot className="h-4 w-4 text-cyan-400" />
-              <h2 className="text-xs font-semibold text-foreground">Agent Models</h2>
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="h-4 w-4 text-violet-400" />
+            <h2 className="text-xs font-semibold text-foreground">Your Model</h2>
+          </div>
+
+          {/* Hero card — current model */}
+          <div className="rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 to-transparent p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-lg font-semibold text-foreground">
+                  {getFriendlyModelName(mainResolved)}
+                </p>
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <span className="rounded-md border border-foreground/10 bg-muted/50 px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                    {getProviderDisplayName(modelProvider(mainResolved))}
+                  </span>
+                  {(mainMeta || defaultMeta) && (
+                    <span className="text-xs text-muted-foreground">
+                      {(mainMeta || defaultMeta)!.contextWindow} context
+                    </span>
+                  )}
+                  {(mainMeta || defaultMeta) && (
+                    <span className="text-xs text-muted-foreground">
+                      {(mainMeta || defaultMeta)!.priceTier}
+                    </span>
+                  )}
+                </div>
+                {(mainMeta || defaultMeta) && (
+                  <p className="mt-2 text-xs text-muted-foreground/80">
+                    {(mainMeta || defaultMeta)!.description}
+                  </p>
+                )}
+              </div>
+              <StatusPill
+                tone={defaultResolved === defaultPrimary ? "good" : "warn"}
+                label={defaultResolved === defaultPrimary ? "Active" : "Fallback active"}
+              />
             </div>
-            {mainHasOverride && (
-              <StatusPill tone="warn" label="Main uses an explicit override" />
+
+            {/* Model switcher */}
+            <div className="mt-4 max-w-md">
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Switch model
+              </label>
+              <ModelSelect
+                value={defaultPrimary}
+                options={selectableOptions(defaultPrimary)}
+                disabled={Boolean(busyKey)}
+                onSelect={(next) => {
+                  void changeDefaultModel(next);
+                }}
+              />
+            </div>
+
+            {/* Fallback chain inline */}
+            {defaultFallbacks.length > 0 && (
+              <div className="mt-3">
+                <p className="text-xs text-muted-foreground mb-1.5">Fallback chain</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {defaultFallbacks.map((fallback) => (
+                    <span
+                      key={`hero:fallback:${fallback}`}
+                      className="inline-flex items-center rounded-md border border-border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+                    >
+                      {getFriendlyModelName(fallback)}
+                    </span>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Changes save immediately to <code>openclaw.json</code>. &quot;Using now&quot; comes
-            from <code>openclaw models status --agent</code>.
-          </p>
 
+          {/* Status cards — Using now / Saved / Last session (main agent) */}
           {mainAgent && (
-            <div className="mt-4 rounded-xl border border-cyan-500/25 bg-cyan-500/8 p-3">
-              <p className="uppercase tracking-wide text-muted-foreground text-xs text-cyan-700 dark:text-cyan-300">
-                Main Agent Using Now
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <p className="text-xs font-semibold text-foreground">
-                  {getModelDisplayName(mainResolved, models, aliases)}
+            <div className="mt-4 grid gap-2 md:grid-cols-3">
+              <div className="rounded-lg border border-border p-2.5 bg-muted/20">
+                <p className="uppercase tracking-wide text-muted-foreground text-xs">Using now</p>
+                <p className="mt-1 text-xs font-semibold text-foreground">
+                  {getFriendlyModelName(mainResolved)}
                 </p>
-                <StatusPill
-                  tone={mainHasOverride ? "warn" : "good"}
-                  label={mainHasOverride ? "source: main override" : "source: global default"}
-                />
-              </div>
-              {mainLive && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Last session: {getModelDisplayName(mainLive, models, aliases)}
+                  {mainHasOverride ? "From agent override" : "From global default"}
                 </p>
-              )}
+              </div>
+              <div className="rounded-lg border border-border p-2.5 bg-muted/20">
+                <p className="uppercase tracking-wide text-muted-foreground text-xs">Saved setting</p>
+                <p className="mt-1 text-xs font-semibold text-foreground">
+                  {getFriendlyModelName(mainConfigured)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border p-2.5 bg-muted/20">
+                <p className="uppercase tracking-wide text-muted-foreground text-xs">Last session</p>
+                {mainLive ? (
+                  <>
+                    <p className="mt-1 text-xs font-semibold text-foreground">
+                      {getFriendlyModelName(mainLive)}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatAgo(liveModels[mainAgent.id]?.updatedAt ?? null)}
+                    </p>
+                  </>
+                ) : (
+                  <p className="mt-1 text-xs text-muted-foreground">No session yet</p>
+                )}
+              </div>
             </div>
           )}
+        </section>
 
-          <div className="mt-4 space-y-3">
+        {/* ━━━ TIER 1: Quick Connect ━━━ */}
+        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap className="h-4 w-4 text-amber-400" />
+            <h2 className="text-xs font-semibold text-foreground">Quick Connect</h2>
+            <StatusPill
+              tone={providerAuthSummary.some((p) => p.connected) ? "good" : "warn"}
+              label={`${providerAuthSummary.filter((p) => p.connected).length}/${providerAuthSummary.length} connected`}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mb-4">
+            Connect an AI provider to start using their models. Paste your API key to get started.
+          </p>
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {providerAuthSummary.map((provider) => (
+              <div
+                key={`connect:${provider.provider}`}
+                className={cn(
+                  "rounded-xl border p-3 transition-colors",
+                  provider.connected
+                    ? "border-emerald-500/20 bg-emerald-500/5"
+                    : "border-border bg-muted/20 hover:bg-muted/30",
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-foreground">
+                    {getProviderDisplayName(provider.provider)}
+                  </p>
+                  {provider.connected ? (
+                    <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+                      <Check className="h-3 w-3" />
+                      Connected
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Not connected</span>
+                  )}
+                </div>
+                {provider.connected && provider.authKind && (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    via {provider.authKind}{provider.oauthStatus ? ` (${provider.oauthStatus})` : ""}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Inline key paste */}
+          <div className="mt-4 rounded-lg border border-border/70 bg-muted/15 p-3">
+            <p className="text-xs font-medium text-foreground mb-2">Add or update API key</p>
+            <div className="grid gap-2 md:grid-cols-[10rem_1fr_auto_auto]">
+              <select
+                value={providerForToken}
+                onChange={(e) => setProviderForToken(e.target.value)}
+                className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+              >
+                {availableProviders.map((provider) => (
+                  <option key={`quickconnect:provider:${provider}`} value={provider}>
+                    {getProviderDisplayName(provider)}
+                  </option>
+                ))}
+              </select>
+              <input
+                type={revealProviderToken ? "text" : "password"}
+                value={providerToken}
+                onChange={(e) => setProviderToken(e.target.value)}
+                placeholder="Paste API key / token"
+                className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+              />
+              <button
+                type="button"
+                onClick={() => setRevealProviderToken((prev) => !prev)}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+              >
+                {revealProviderToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void saveProviderToken();
+                }}
+                disabled={!providerToken.trim() || Boolean(busyKey)}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Save
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* ━━━ TIER 2: Advanced (collapsible) ━━━ */}
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-1">
+            Advanced Configuration
+          </p>
+
+          {/* Per-Agent Model Configuration */}
+          <AdvancedSection
+            title="Per-Agent Models"
+            icon={Bot}
+            iconColor="text-cyan-400"
+            badge={mainHasOverride ? <StatusPill tone="warn" label="Override active" /> : undefined}
+          >
+            <p className="text-xs text-muted-foreground mb-4">
+              Override the model for individual agents. Agents set to &quot;inherits default&quot; use the global model above.
+            </p>
+            <div className="space-y-3">
             {sortedAgents.map((agent) => {
               const configured = agent.modelPrimary || defaultPrimary;
               const runtime = agentStatuses[agent.id];
@@ -1386,24 +1615,23 @@ export function ModelsView() {
                 </div>
               );
             })}
-          </div>
-        </section>
+            </div>
+          </AdvancedSection>
 
-        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Plus className="h-4 w-4 text-emerald-500" />
-              <h2 className="text-xs font-semibold text-foreground">Model Catalog & Allowlist</h2>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <StatusPill tone="good" label={`${configuredAllowed.length} allowed`} />
-              <StatusPill tone="info" label={`${allModels.length} discovered`} />
-              <StatusPill tone="neutral" label={`${filteredCatalogOptions.length} filtered`} />
-            </div>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Manage <code>agents.defaults.models</code> with forms instead of manual JSON edits.
-            This controls which provider models are available in selection UIs.
+          {/* Model Catalog & Allowlist */}
+          <AdvancedSection
+            title="Model Catalog & Allowlist"
+            icon={Plus}
+            iconColor="text-emerald-500"
+            badge={
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <StatusPill tone="good" label={`${configuredAllowed.length} allowed`} />
+                <StatusPill tone="info" label={`${allModels.length} discovered`} />
+              </div>
+            }
+          >
+          <p className="text-sm text-muted-foreground">
+            Manage which provider models are available in selection UIs.
           </p>
 
           <div className="mt-3 grid gap-2 md:grid-cols-[10rem_1fr_auto_auto]">
@@ -1542,68 +1770,19 @@ export function ModelsView() {
               Add custom
             </button>
           </div>
-        </section>
+          </AdvancedSection>
 
-        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <KeyRound className="h-4 w-4 text-cyan-500" />
-              <h2 className="text-xs font-semibold text-foreground">Provider Access & Auth Order</h2>
-            </div>
-            <StatusPill
-              tone={providerAuthSummary.some((provider) => provider.connected) ? "good" : "warn"}
-              label={`${providerAuthSummary.filter((provider) => provider.connected).length}/${providerAuthSummary.length} providers connected`}
-            />
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Headless-safe controls for VPC deployments: paste provider keys and manage per-agent
-            auth profile order overrides.
+          {/* Auth Order Override */}
+          <AdvancedSection
+            title="Auth Order Override"
+            icon={ListOrdered}
+            iconColor="text-cyan-500"
+          >
+          <p className="text-sm text-muted-foreground mb-3">
+            Control which API key or auth profile is tried first when multiple credentials exist for the same provider.
           </p>
 
-          <div className="mt-3 rounded-lg border border-border/70 bg-muted/15 p-3">
-            <p className="text-xs font-semibold text-foreground">Save provider key/token</p>
-            <div className="mt-2 grid gap-2 md:grid-cols-[10rem_1fr_auto_auto]">
-              <select
-                value={providerForToken}
-                onChange={(e) => setProviderForToken(e.target.value)}
-                className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
-              >
-                {availableProviders.map((provider) => (
-                  <option key={`token:provider:${provider}`} value={provider}>
-                    {provider}
-                  </option>
-                ))}
-              </select>
-              <input
-                type={revealProviderToken ? "text" : "password"}
-                value={providerToken}
-                onChange={(e) => setProviderToken(e.target.value)}
-                placeholder="Paste API key/token"
-                className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
-              />
-              <button
-                type="button"
-                onClick={() => setRevealProviderToken((prev) => !prev)}
-                className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
-              >
-                {revealProviderToken ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                {revealProviderToken ? "Hide" : "Show"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  void saveProviderToken();
-                }}
-                disabled={!providerToken.trim() || Boolean(busyKey)}
-                className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
-              >
-                <KeyRound className="h-3.5 w-3.5" />
-                Save key
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-3 rounded-lg border border-border/70 bg-muted/15 p-3">
+          <div className="rounded-lg border border-border/70 bg-muted/15 p-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs font-semibold text-foreground">Per-agent auth order override</p>
               {orderLoading ? (
@@ -1741,22 +1920,22 @@ export function ModelsView() {
               </button>
             </div>
           </div>
-        </section>
+          </AdvancedSection>
 
-        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-violet-400" />
-              <h2 className="text-xs font-semibold text-foreground">Global Default</h2>
-            </div>
-            <StatusPill
-              tone={defaultResolved === defaultPrimary ? "good" : "warn"}
-              label={defaultResolved === defaultPrimary ? "resolves as configured" : "resolved to fallback now"}
-            />
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Saved at <code>agents.defaults.model</code> in <code>openclaw.json</code>. Agents
-            set to &quot;inherits default&quot; will use this model chain.
+          {/* Global Default & Fallback Chain */}
+          <AdvancedSection
+            title="Global Default & Fallback Chain"
+            icon={Sparkles}
+            iconColor="text-violet-400"
+            badge={
+              <StatusPill
+                tone={defaultResolved === defaultPrimary ? "good" : "warn"}
+                label={defaultResolved === defaultPrimary ? "resolves as configured" : "resolved to fallback now"}
+              />
+            }
+          >
+          <p className="text-sm text-muted-foreground">
+            The global default model chain. Agents set to &quot;inherits default&quot; will use this configuration.
           </p>
 
           <div className="mt-3 grid gap-2 md:grid-cols-2">
@@ -1840,126 +2019,98 @@ export function ModelsView() {
               </select>
             </div>
           </div>
-        </section>
+          </AdvancedSection>
 
-        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <Heart className="h-4 w-4 text-rose-400" />
-              <h2 className="text-xs font-semibold text-foreground">Heartbeat</h2>
-            </div>
-            {heartbeat?.every === "0m" || !heartbeat?.model ? (
-              <StatusPill tone="neutral" label={heartbeat?.every === "0m" ? "Off" : "Not set"} />
+          {/* Model Aliases */}
+          <AdvancedSection title="Model Aliases" icon={Tag} iconColor="text-amber-400">
+            <p className="text-sm text-muted-foreground mb-3">
+              Create short names for models. Use an alias anywhere you&apos;d use a full model key.
+            </p>
+            {Object.keys(aliases).length > 0 ? (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {Object.entries(aliases).map(([alias, target]) => (
+                  <button
+                    key={`alias:${alias}`}
+                    type="button"
+                    onClick={() => {
+                      void runAction(
+                        { action: "remove-alias", alias },
+                        `Removed alias "${alias}"`,
+                        `alias:remove:${alias}`,
+                        { restart: false },
+                      );
+                    }}
+                    disabled={Boolean(busyKey)}
+                    className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/60 disabled:opacity-50"
+                  >
+                    <span className="font-semibold text-foreground">{alias}</span>
+                    <span className="text-muted-foreground/60">&rarr;</span>
+                    <span>{getFriendlyModelName(target)}</span>
+                    <Trash2 className="h-3 w-3 ml-1" />
+                  </button>
+                ))}
+              </div>
             ) : (
-              <StatusPill tone="good" label="On" />
+              <p className="text-xs text-muted-foreground mb-3">No aliases configured.</p>
             )}
-          </div>
-
-          <div className="mt-3 rounded-lg border border-foreground/10 bg-muted/20 p-3 text-sm text-muted-foreground">
-            <p className="font-medium text-foreground/90">What is Heartbeat?</p>
-            <p className="mt-1.5 text-xs leading-relaxed">
-              Heartbeat runs your agent on a schedule (e.g. every 30m). Each run, the agent reads <code className="rounded bg-foreground/10 px-1">HEARTBEAT.md</code> in your workspace (if it exists), follows any instructions there, and can reply <code className="rounded bg-foreground/10 px-1">HEARTBEAT_OK</code> to do nothing. Shorter intervals use more tokens. Set interval to <strong>Off</strong> to disable.
-            </p>
-          </div>
-
-          <p className="mt-3 text-xs font-medium text-foreground/80">
-            Default model &amp; interval (<code className="rounded bg-foreground/10 px-1">agents.defaults.heartbeat</code>)
-          </p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            <div className="rounded-lg border border-border p-2.5 bg-muted/20">
-              <p className="uppercase tracking-wide text-muted-foreground text-xs">Current model</p>
-              <p className="mt-1 text-xs font-semibold text-foreground">
-                {heartbeat?.every === "0m"
-                  ? "— (heartbeat off)"
-                  : heartbeat?.model
-                    ? getModelDisplayName(heartbeat.model, models, aliases)
-                    : "—"}
-              </p>
-            </div>
-            <div className="rounded-lg border border-border p-2.5 bg-muted/20">
-              <p className="uppercase tracking-wide text-muted-foreground text-xs">Current interval</p>
-              <p className="mt-1 text-xs font-semibold text-foreground">
-                {heartbeat?.every === "0m"
-                  ? "Off"
-                  : heartbeat?.every || "—"}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:flex-wrap">
-            <div className="w-full max-w-md">
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Model for heartbeat runs</label>
-              <ModelSelect
-                value={heartbeat?.every === "0m" ? "" : (heartbeat?.model ?? "")}
-                options={heartbeatModelOptions}
-                disabled={Boolean(busyKey)}
-                onSelect={(next) => {
-                  const every = heartbeat?.every === "0m" ? "30m" : (heartbeat?.every ?? "1h");
-                  void changeHeartbeat({ model: next, every });
-                }}
+            <div className="grid gap-2 md:grid-cols-[1fr_1fr_auto]">
+              <input
+                type="text"
+                placeholder="Alias name (e.g. fast)"
+                id="alias-name-input"
+                className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
               />
-            </div>
-            <div className="w-full max-w-[10rem]">
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Run every</label>
               <select
-                value={heartbeat?.every ?? "1h"}
-                disabled={Boolean(busyKey)}
-                onChange={(e) => {
-                  const every = e.target.value;
-                  void changeHeartbeat({
-                    model: every === "0m" ? "" : (heartbeat?.model ?? ""),
-                    every,
-                  });
-                }}
-                className="rounded-lg border border-border bg-muted/50 w-full px-3 py-2 text-sm text-foreground outline-none transition-colors focus:border-cyan-500/40 disabled:opacity-50"
+                id="alias-target-select"
+                className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
               >
-                <option value="0m">Off</option>
-                <option value="15m">15m</option>
-                <option value="30m">30m</option>
-                <option value="1h">1h</option>
-                <option value="2h">2h</option>
-                <option value="4h">4h</option>
+                <option value="">Target model…</option>
+                {allModelOptions.filter((opt) => opt.ready || opt.authConnected).map((opt) => (
+                  <option key={`alias:target:${opt.key}`} value={opt.key}>
+                    {opt.name} · {opt.provider}
+                  </option>
+                ))}
               </select>
+              <button
+                type="button"
+                onClick={() => {
+                  const nameInput = document.getElementById("alias-name-input") as HTMLInputElement;
+                  const targetSelect = document.getElementById("alias-target-select") as HTMLSelectElement;
+                  const alias = nameInput?.value?.trim();
+                  const model = targetSelect?.value;
+                  if (!alias || !model) return;
+                  void runAction(
+                    { action: "set-alias", alias, model },
+                    `Alias "${alias}" created`,
+                    `alias:set:${alias}`,
+                    { restart: false },
+                  );
+                  if (nameInput) nameInput.value = "";
+                  if (targetSelect) targetSelect.value = "";
+                }}
+                disabled={Boolean(busyKey)}
+                className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add alias
+              </button>
             </div>
-            {busyKey === "heartbeat" && (
-              <p className="text-cyan-700 dark:text-cyan-300 text-xs self-center">Applying…</p>
-            )}
-          </div>
+          </AdvancedSection>
 
-          <div className="mt-4 flex items-center gap-2 rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2.5">
-            <Heart className="h-4 w-4 shrink-0 text-violet-400" />
-            <p className="text-xs text-muted-foreground">
-              Edit the prompt, <code className="rounded bg-foreground/10 px-1">HEARTBEAT.md</code> behavior, and per-agent overrides on the{" "}
-              <Link href="/heartbeat" className="font-medium text-violet-400 hover:underline">
-                Heartbeat
-              </Link>{" "}
-              page.
-            </p>
-            <Link
-              href="/heartbeat"
-              className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-lg border border-foreground/10 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/80 hover:text-foreground"
-            >
-              Open Heartbeat
-              <ArrowRight className="h-3 w-3" />
-            </Link>
-          </div>
-        </section>
-
-        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xs font-semibold text-foreground">Model Availability</h2>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <StatusPill tone="good" label={`${availableModels.length} ready`} />
-              <StatusPill
-                tone="info"
-                label={`${authConnectedButLimitedModels.length} auth ok (limited)`}
-              />
-              <StatusPill tone="warn" label={`${lockedModels.length} sign in required`} />
-            </div>
-          </div>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Auth labels come from <code>openclaw models status --json</code> provider auth and
-            OAuth profiles, not only from <code>models list</code>.
+          {/* Model Availability */}
+          <AdvancedSection
+            title="Model Availability"
+            icon={Check}
+            iconColor="text-emerald-400"
+            badge={
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <StatusPill tone="good" label={`${availableModels.length} ready`} />
+                <StatusPill tone="warn" label={`${lockedModels.length} need auth`} />
+              </div>
+            }
+          >
+          <p className="text-sm text-muted-foreground">
+            All discovered models with their current auth and readiness status.
           </p>
 
           {providerAuthSummary.length > 0 && (
@@ -1970,7 +2121,7 @@ export function ModelsView() {
                   <StatusPill
                     key={provider.provider}
                     tone={provider.connected ? "good" : "warn"}
-                    label={`${provider.provider} · ${
+                    label={`${getProviderDisplayName(provider.provider)} · ${
                       provider.connected
                         ? provider.authKind || provider.oauthStatus || "connected"
                         : "missing"
@@ -2008,31 +2159,33 @@ export function ModelsView() {
               );
             })}
           </div>
-        </section>
+          </AdvancedSection>
 
-        <section className="rounded-2xl border border-border p-4 md:p-5 bg-card">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xs font-semibold text-foreground">
-              Model Credentials & Auth Stores
-            </h2>
+          {/* Model Credentials & Auth Stores */}
+          <AdvancedSection
+            title="Model Credentials & Auth Stores"
+            icon={KeyRound}
+            iconColor="text-cyan-500"
+          >
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <StatusPill
                 tone={modelCredentialSummary.sourceOfTruth ? "good" : "warn"}
                 label={modelCredentialSummary.sourceOfTruth ? "gateway source-of-truth" : "partial"}
               />
-              <button
-                type="button"
-                onClick={() => setRevealModelSecrets((prev) => !prev)}
-                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
-              >
-                {revealModelSecrets ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                {revealModelSecrets ? "Hide values" : "Reveal values"}
-              </button>
             </div>
+            <button
+              type="button"
+              onClick={() => setRevealModelSecrets((prev) => !prev)}
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+            >
+              {revealModelSecrets ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              {revealModelSecrets ? "Hide values" : "Reveal values"}
+            </button>
           </div>
 
           <p className="mt-2 text-sm text-muted-foreground">
-            Unified model auth inventory (moved from Accounts & Keys): provider auth, env-backed model keys, and auth profile stores.
+            Unified model auth inventory: provider auth, env-backed model keys, and auth profile stores.
           </p>
 
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
@@ -2152,7 +2305,8 @@ export function ModelsView() {
               ))
             )}
           </div>
-        </section>
+          </AdvancedSection>
+        </div>
       </SectionBody>
 
       {toast && (

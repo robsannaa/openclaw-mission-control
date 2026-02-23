@@ -165,15 +165,6 @@ function formatAgo(ts: number | null): string {
   return `${Math.floor(ms / 86_400_000)}d ago`;
 }
 
-function formatDuration(ms: number | null): string {
-  if (!ms || ms <= 0) return "n/a";
-  const mins = Math.floor(ms / 60_000);
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 48) return `${hours}h`;
-  return `${Math.floor(hours / 24)}d`;
-}
-
 function masked(value: string): string {
   if (!value) return "";
   if (value.length <= 8) return "••••••••";
@@ -274,84 +265,6 @@ export function AccountsKeysView() {
     }
 
     return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
-  }, [data]);
-
-  const modelProviderSummary = useMemo(() => {
-    if (!data) {
-      return [] as Array<{
-        provider: string;
-        connectedAgents: string[];
-        effectiveKinds: string[];
-        labels: string[];
-        envSources: string[];
-        envValues: string[];
-        oauth: Array<{ profileId: string; status: string; remainingMs: number | null }>;
-      }>;
-    }
-    const byProvider = new Map<
-      string,
-      {
-        connectedAgents: Set<string>;
-        effectiveKinds: Set<string>;
-        labels: Set<string>;
-        envSources: Set<string>;
-        envValues: Set<string>;
-        oauth: Array<{ profileId: string; status: string; remainingMs: number | null }>;
-      }
-    >();
-
-    for (const row of data.modelAuthByAgent) {
-      for (const provider of row.providers) {
-        const key = provider.provider || "unknown";
-        if (!byProvider.has(key)) {
-          byProvider.set(key, {
-            connectedAgents: new Set<string>(),
-            effectiveKinds: new Set<string>(),
-            labels: new Set<string>(),
-            envSources: new Set<string>(),
-            envValues: new Set<string>(),
-            oauth: [],
-          });
-        }
-        const entry = byProvider.get(key)!;
-        if (provider.connected) entry.connectedAgents.add(row.agentId);
-        if (provider.effectiveKind) entry.effectiveKinds.add(provider.effectiveKind);
-        if (provider.effectiveDetail) entry.labels.add(provider.effectiveDetail);
-        for (const label of provider.labels) entry.labels.add(label);
-        if (provider.envSource) entry.envSources.add(provider.envSource);
-        if (provider.envValue) entry.envValues.add(provider.envValue);
-      }
-      for (const oauth of row.oauthProfiles) {
-        const key = oauth.provider || "unknown";
-        if (!byProvider.has(key)) {
-          byProvider.set(key, {
-            connectedAgents: new Set<string>(),
-            effectiveKinds: new Set<string>(),
-            labels: new Set<string>(),
-            envSources: new Set<string>(),
-            envValues: new Set<string>(),
-            oauth: [],
-          });
-        }
-        byProvider.get(key)!.oauth.push({
-          profileId: oauth.profileId,
-          status: oauth.status,
-          remainingMs: oauth.remainingMs,
-        });
-      }
-    }
-
-    return [...byProvider.entries()]
-      .map(([provider, entry]) => ({
-        provider,
-        connectedAgents: [...entry.connectedAgents].sort((a, b) => a.localeCompare(b)),
-        effectiveKinds: [...entry.effectiveKinds].sort((a, b) => a.localeCompare(b)),
-        labels: [...entry.labels].sort((a, b) => a.localeCompare(b)),
-        envSources: [...entry.envSources].sort((a, b) => a.localeCompare(b)),
-        envValues: [...entry.envValues].sort((a, b) => a.localeCompare(b)),
-        oauth: entry.oauth.sort((a, b) => a.profileId.localeCompare(b.profileId)),
-      }))
-      .sort((a, b) => a.provider.localeCompare(b.provider));
   }, [data]);
 
   const getEnvEditor = useCallback(
@@ -550,80 +463,17 @@ export function AccountsKeysView() {
                   <Cpu className="h-4 w-4" />
                   Model Provider Auth
                 </h2>
-                <a
-                  href="/models"
-                  className="rounded border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  Manage in Models
-                </a>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                From <code>openclaw models status --json</code>. OpenAI OAuth often appears under{" "}
-                <code>openai-codex</code> provider profiles.
+              <p className="mt-2 text-xs text-muted-foreground">
+                {data.summary.modelProvidersConnected} of {data.summary.modelProvidersTotal} providers connected
+                {data.summary.authProfiles > 0 && ` · ${data.summary.authProfiles} auth profiles`}
               </p>
-              <div className="mt-3 space-y-2">
-                {modelProviderSummary.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">
-                    No model auth providers detected yet.
-                  </p>
-                ) : null}
-                {modelProviderSummary.map((provider) => (
-                  <div
-                    key={provider.provider}
-                    className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="font-medium text-foreground">{provider.provider}</p>
-                      <p
-                        className={
-                          provider.connectedAgents.length > 0
-                            ? "text-emerald-300"
-                            : "text-amber-300"
-                        }
-                      >
-                        {provider.connectedAgents.length > 0
-                          ? `connected (${provider.connectedAgents.join(", ")})`
-                          : "not connected"}
-                      </p>
-                    </div>
-                    {provider.effectiveKinds.length > 0 && (
-                      <p className="mt-1 text-muted-foreground">
-                        auth: {provider.effectiveKinds.join(", ")}
-                      </p>
-                    )}
-                    {provider.envSources.length > 0 && (
-                      <p className="mt-1 text-muted-foreground">
-                        key source: {provider.envSources.join(", ")}
-                      </p>
-                    )}
-                    {provider.envValues.length > 0 && (
-                      <p className="mt-1 break-all text-muted-foreground">
-                        key value:{" "}
-                        <code>
-                          {provider.envValues
-                            .map((value) => renderSecret(value, revealSecrets, false))
-                            .join(", ")}
-                        </code>
-                      </p>
-                    )}
-                    {provider.labels.length > 0 && (
-                      <p className="mt-1 break-all text-muted-foreground">
-                        profiles: {provider.labels.join(" · ")}
-                      </p>
-                    )}
-                    {provider.oauth.length > 0 && (
-                      <div className="mt-1 space-y-1 text-muted-foreground">
-                        {provider.oauth.map((oauth) => (
-                          <p key={`${provider.provider}:${oauth.profileId}`}>
-                            oauth {oauth.profileId}: {oauth.status || "unknown"} · remaining{" "}
-                            {formatDuration(oauth.remainingMs)}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <a
+                href="/models"
+                className="mt-3 inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                Manage in Models →
+              </a>
             </div>
 
             <div className="rounded-xl border border-border/70 bg-card p-4">

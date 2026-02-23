@@ -39,6 +39,8 @@ type NormalizedChannel = {
   hasConfig: boolean;
   accounts: string[];
   statuses: ChannelStatusRuntime[];
+  dmPolicy?: string;
+  groupPolicy?: string;
 };
 
 type PluginListItem = {
@@ -289,6 +291,12 @@ function normalizeChannels(
       hasConfig,
       accounts: accountIds.length > 0 ? accountIds : configured ? ["default"] : [],
       statuses,
+      dmPolicy: configEntry && typeof (configEntry as Record<string, unknown>).dmPolicy === "string"
+        ? (configEntry as Record<string, unknown>).dmPolicy as string
+        : undefined,
+      groupPolicy: configEntry && typeof (configEntry as Record<string, unknown>).groupPolicy === "string"
+        ? (configEntry as Record<string, unknown>).groupPolicy as string
+        : undefined,
     });
   }
 
@@ -479,6 +487,8 @@ export async function GET(request: NextRequest) {
           configured: live?.configured ?? false,
           accounts: live?.accounts ?? [],
           statuses: live?.statuses ?? [],
+          dmPolicy: live?.dmPolicy,
+          groupPolicy: live?.groupPolicy,
         };
       });
 
@@ -500,6 +510,8 @@ export async function GET(request: NextRequest) {
           configured: c.configured,
           accounts: c.accounts,
           statuses: c.statuses,
+          dmPolicy: c.dmPolicy,
+          groupPolicy: c.groupPolicy,
         }));
 
       return NextResponse.json({ channels: [...enriched, ...extras] });
@@ -643,6 +655,22 @@ export async function POST(request: NextRequest) {
         const patchRaw = JSON.stringify({
           channels: { [channel]: { enabled: false } },
         });
+        await gatewayCall("config.patch", { raw: patchRaw, baseHash: hash, restartDelayMs: 2000 }, 15000);
+        return NextResponse.json({ ok: true });
+      }
+
+      case "set-policy": {
+        const dmPolicy = body.dmPolicy as string | undefined;
+        const groupPolicy = body.groupPolicy as string | undefined;
+        if (!dmPolicy && !groupPolicy) {
+          return NextResponse.json({ error: "dmPolicy or groupPolicy required" }, { status: 400 });
+        }
+        const configData = await gatewayCall<Record<string, unknown>>("config.get", undefined, 10000);
+        const hash = configData.hash as string;
+        const patch: Record<string, unknown> = {};
+        if (dmPolicy) patch.dmPolicy = dmPolicy;
+        if (groupPolicy) patch.groupPolicy = groupPolicy;
+        const patchRaw = JSON.stringify({ channels: { [channel]: patch } });
         await gatewayCall("config.patch", { raw: patchRaw, baseHash: hash, restartDelayMs: 2000 }, 15000);
         return NextResponse.json({ ok: true });
       }

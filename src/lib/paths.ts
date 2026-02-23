@@ -317,3 +317,13 @@ export async function getSystemSkillsDir(): Promise<string> {
   _skillsDone = true;
   return _skills;
 }
+
+// ── Gateway auth token ──────────────────────────
+
+/**
+ * Resolve the Gateway auth token for HTTP transport.
+ * Used by HttpTransport for Authorization: Bearer headers.
+ */
+export function getGatewayToken(): string {
+  return process.env.OPENCLAW_GATEWAY_TOKEN || "";
+}

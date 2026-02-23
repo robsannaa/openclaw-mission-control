@@ -30,6 +30,7 @@ import {
   Rocket,
   KeyRound,
   Bell,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionLayout } from "@/components/section-layout";
@@ -278,7 +279,7 @@ function RadialGauge({
   label,
   unit,
   color,
-  size = 80,
+  size = 88,
 }: {
   value: number;
   max: number;
@@ -288,42 +289,45 @@ function RadialGauge({
   size?: number;
 }) {
   const percent = max > 0 ? Math.min(100, (value / max) * 100) : 0;
-  const r = (size - 10) / 2;
+  const r = (size - 12) / 2;
   const circ = 2 * Math.PI * r;
   const dash = (percent / 100) * circ;
 
   return (
     <div className="flex flex-col items-center">
-      <svg width={size} height={size} className="-rotate-90">
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke="currentColor"
-          className="text-white/5"
-          strokeWidth={5}
-        />
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth={5}
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${circ}`}
-          className="transition-all duration-700 ease-out"
-        />
-      </svg>
-      <div className="absolute flex flex-col items-center justify-center" style={{ width: size, height: size }}>
-        <span className="text-xs font-bold text-foreground">
-          {Math.round(percent)}
-          <span className="text-xs text-muted-foreground">%</span>
-        </span>
+      <div className="relative">
+        <svg width={size} height={size} className="-rotate-90">
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke="currentColor"
+            className="text-foreground/[0.04]"
+            strokeWidth={5}
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            fill="none"
+            stroke={color}
+            strokeWidth={5}
+            strokeLinecap="round"
+            strokeDasharray={`${dash} ${circ}`}
+            className="transition-all duration-700 ease-out"
+            style={{}}
+          />
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-lg font-semibold tabular-nums text-foreground">
+            {Math.round(percent)}
+            <span className="text-xs text-muted-foreground/60">%</span>
+          </span>
+        </div>
       </div>
-      <p className="mt-1 text-xs font-medium text-muted-foreground">{label}</p>
-      {unit && <p className="text-xs text-muted-foreground/40">{unit}</p>}
+      <p className="mt-1.5 text-xs font-medium text-muted-foreground">{label}</p>
+      {unit && <p className="text-[11px] text-muted-foreground/40">{unit}</p>}
     </div>
   );
 }
@@ -332,7 +336,7 @@ function RadialGauge({
 
 function MiniBar({ percent, color }: { percent: number; color: string }) {
   return (
-    <div className="h-1.5 w-full rounded-full bg-foreground/5">
+    <div className="h-1.5 w-full rounded-full bg-foreground/[0.04]">
       <div
         className="h-1.5 rounded-full transition-all duration-700 ease-out"
         style={{ width: `${Math.min(100, Math.max(0, percent))}%`, backgroundColor: color }}
@@ -383,7 +387,7 @@ function MemoryCompositionBar({
 
   return (
     <div className="space-y-1.5">
-      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-foreground/5">
+      <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-foreground/[0.04]">
         {segments.map((item) => (
           <div
             key={item.key}
@@ -393,7 +397,7 @@ function MemoryCompositionBar({
           />
         ))}
       </div>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground/70">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground/60">
         {segments.map((item) => (
           <span key={`${item.key}-legend`} className="inline-flex items-center gap-1.5">
             <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: item.color }} />
@@ -410,7 +414,7 @@ function MemoryCompositionBar({
 function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; connected: boolean }) {
   if (!stats) {
     return (
-      <div className="glass rounded-xl p-6">
+      <div className="glass rounded-lg p-6">
         <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
           <Gauge className="h-4 w-4 animate-pulse" />
           Connecting to system stats stream...
@@ -441,60 +445,37 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        <h2 className="flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground">
           <Server className="h-3.5 w-3.5" /> System Monitor
         </h2>
         <div className="flex items-center gap-1.5">
-          <div
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              connected ? "bg-emerald-500 animate-pulse" : "bg-red-500"
-            )}
-          />
-          <span className="text-xs text-muted-foreground/60">
+          <span className={cn("inline-flex h-1.5 w-1.5 rounded-full", connected ? "bg-emerald-500" : "bg-red-500")} />
+          <span className="text-xs text-muted-foreground/50">
             {connected ? "LIVE" : "RECONNECTING"}
           </span>
         </div>
       </div>
 
       {/* Gauges row */}
-      <div className="glass grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 rounded-xl px-4 py-5">
+      <div className="glass grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg px-4 py-5">
         <div className="relative flex justify-center">
-          <RadialGauge
-            value={stats.cpu.usage}
-            max={100}
-            label="CPU"
-            unit={`${stats.cpu.cores} cores`}
-            color={cpuColor}
-          />
+          <RadialGauge value={stats.cpu.usage} max={100} label="CPU" unit={`${stats.cpu.cores} cores`} color={cpuColor} />
         </div>
         <div className="relative flex justify-center">
-          <RadialGauge
-            value={stats.memory.percent}
-            max={100}
-            label="Memory"
-            unit={`${formatBytesCompact(stats.memory.used)} / ${formatBytesCompact(stats.memory.total)}`}
-            color={memColor}
-          />
+          <RadialGauge value={stats.memory.percent} max={100} label="Memory" unit={`${formatBytesCompact(stats.memory.used)} / ${formatBytesCompact(stats.memory.total)}`} color={memColor} />
         </div>
         <div className="relative flex justify-center">
-          <RadialGauge
-            value={stats.disk.percent}
-            max={100}
-            label="Disk"
-            unit={`${formatBytesCompact(stats.disk.used)} / ${formatBytesCompact(stats.disk.total)}`}
-            color={diskColor}
-          />
+          <RadialGauge value={stats.disk.percent} max={100} label="Disk" unit={`${formatBytesCompact(stats.disk.used)} / ${formatBytesCompact(stats.disk.total)}`} color={diskColor} />
         </div>
       </div>
 
       {/* Detail cards grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {/* CPU details */}
-        <div className="glass-subtle rounded-xl p-3 space-y-2">
+        <div className="glass-subtle rounded-lg p-3 space-y-2">
           <div className="flex items-center gap-2">
             <Cpu className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="text-xs font-semibold text-foreground/70">CPU</span>
+            <span className="text-xs font-sans font-semibold text-foreground/70">CPU</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
@@ -519,10 +500,10 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* Memory details */}
-        <div className="glass-subtle rounded-xl p-3 space-y-2">
+        <div className="glass-subtle rounded-lg p-3 space-y-2">
           <div className="flex items-center gap-2">
             <MemoryStick className="h-3.5 w-3.5 text-violet-400" />
-            <span className="text-xs font-semibold text-foreground/70">
+            <span className="text-xs font-sans font-semibold text-foreground/70">
               Memory
               {memorySourceLabel}
             </span>
@@ -591,10 +572,10 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* Disk details */}
-        <div className="glass-subtle rounded-xl p-3 space-y-2">
+        <div className="glass-subtle rounded-lg p-3 space-y-2">
           <div className="flex items-center gap-2">
             <HardDrive className="h-3.5 w-3.5 text-blue-400" />
-            <span className="text-xs font-semibold text-foreground/70">Disk</span>
+            <span className="text-xs font-sans font-semibold text-foreground/70">Disk</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
@@ -620,10 +601,10 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* System info */}
-        <div className="glass-subtle rounded-xl p-3 space-y-2">
+        <div className="glass-subtle rounded-lg p-3 space-y-2">
           <div className="flex items-center gap-2">
             <Timer className="h-3.5 w-3.5 text-amber-400" />
-            <span className="text-xs font-semibold text-foreground/70">System</span>
+            <span className="text-xs font-sans font-semibold text-foreground/70">System</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
@@ -649,37 +630,16 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
       </div>
 
       {/* OpenClaw storage stats */}
-      <div className="glass-subtle rounded-xl p-3 space-y-2">
+      <div className="glass-subtle rounded-lg p-3 space-y-2">
         <div className="flex items-center gap-2">
           <Database className="h-3.5 w-3.5 text-pink-400" />
-          <span className="text-xs font-semibold text-foreground/70">OpenClaw Storage</span>
+          <span className="text-xs font-sans font-semibold text-foreground/70">OpenClaw Storage</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <OcStatMini
-            icon={Folder}
-            label="Workspace"
-            value={formatBytesCompact(stats.openclaw.workspaceSizeBytes)}
-            color="text-violet-400"
-          />
-          <OcStatMini
-            icon={FileText}
-            label="Files"
-            value={String(stats.openclaw.totalWorkspaceFiles)}
-            color="text-blue-400"
-          />
-          <OcStatMini
-            icon={Database}
-            label="Sessions"
-            value={String(stats.openclaw.activeSessions)}
-            sub={formatBytesCompact(stats.openclaw.sessionsSizeBytes)}
-            color="text-emerald-400"
-          />
-          <OcStatMini
-            icon={FileText}
-            label="Today's Log"
-            value={formatBytesCompact(stats.openclaw.logSizeBytes)}
-            color="text-amber-400"
-          />
+          <OcStatMini icon={Folder} label="Workspace" value={formatBytesCompact(stats.openclaw.workspaceSizeBytes)} color="text-violet-400" />
+          <OcStatMini icon={FileText} label="Files" value={String(stats.openclaw.totalWorkspaceFiles)} color="text-blue-400" />
+          <OcStatMini icon={Database} label="Sessions" value={String(stats.openclaw.activeSessions)} sub={formatBytesCompact(stats.openclaw.sessionsSizeBytes)} color="text-emerald-400" />
+          <OcStatMini icon={FileText} label="Today's Log" value={formatBytesCompact(stats.openclaw.logSizeBytes)} color="text-amber-400" />
         </div>
       </div>
     </div>
@@ -706,20 +666,20 @@ function GatewayDiagnosticsPanel({
 
   return (
     <div className="space-y-4">
-      <div className="glass rounded-xl p-4">
+      <div className="glass rounded-lg p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs text-foreground/90">Gateway Diagnostics</p>
-            <p className="text-xs text-muted-foreground/70">
-              Live snapshot from <code>openclaw gateway status --json</code> and{" "}
-              <code>openclaw doctor --non-interactive</code>.
+            <p className="text-xs font-sans font-medium text-foreground/90">Gateway Diagnostics</p>
+            <p className="text-xs text-muted-foreground/60">
+              Live snapshot from <code className="rounded bg-foreground/[0.06] px-1">gateway status</code> and{" "}
+              <code className="rounded bg-foreground/[0.06] px-1">doctor</code>.
             </p>
           </div>
           <button
             type="button"
             onClick={onRefresh}
             disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-card px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-muted/70 disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/[0.04] px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-foreground/[0.08] disabled:opacity-60"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
             Refresh
@@ -729,52 +689,42 @@ function GatewayDiagnosticsPanel({
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-2.5 py-1.5">
             <p className="text-xs uppercase tracking-wide text-red-300/80">Errors</p>
-            <p className="mt-0.5 text-sm font-semibold text-red-200">{summary.error}</p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums text-red-200">{summary.error}</p>
           </div>
           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5">
             <p className="text-xs uppercase tracking-wide text-amber-300/80">Warnings</p>
-            <p className="mt-0.5 text-sm font-semibold text-amber-200">{summary.warning}</p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums text-amber-200">{summary.warning}</p>
           </div>
           <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-2.5 py-1.5">
             <p className="text-xs uppercase tracking-wide text-blue-300/80">Signals</p>
-            <p className="mt-0.5 text-sm font-semibold text-blue-200">{summary.info}</p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums text-blue-200">{summary.info}</p>
           </div>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-          <div className="rounded-lg border border-foreground/10 bg-background/40 px-2.5 py-1.5">
-            <p className="text-xs text-muted-foreground/60">Runtime</p>
-            <p className="mt-0.5 text-xs font-medium text-foreground/90">{runtimeStatus}</p>
-          </div>
-          <div className="rounded-lg border border-foreground/10 bg-background/40 px-2.5 py-1.5">
-            <p className="text-xs text-muted-foreground/60">Bind</p>
-            <p className="mt-0.5 text-xs font-medium text-foreground/90">{bind}</p>
-          </div>
-          <div className="rounded-lg border border-foreground/10 bg-background/40 px-2.5 py-1.5">
-            <p className="text-xs text-muted-foreground/60">Port</p>
-            <p className="mt-0.5 text-xs font-medium text-foreground/90">{portLabel}</p>
-          </div>
-          <div className="rounded-lg border border-foreground/10 bg-background/40 px-2.5 py-1.5">
-            <p className="text-xs text-muted-foreground/60">RPC</p>
-            <p className="mt-0.5 text-xs font-medium text-foreground/90">{rpcLabel}</p>
-          </div>
-          <div className="rounded-lg border border-foreground/10 bg-background/40 px-2.5 py-1.5">
-            <p className="text-xs text-muted-foreground/60">Doctor</p>
-            <p className="mt-0.5 text-xs font-medium text-foreground/90">
-              {data?.doctor?.ok ? "ok" : `exit ${data?.doctor?.exitCode ?? "?"}`}
-            </p>
-          </div>
+          {[
+            { label: "Runtime", value: runtimeStatus },
+            { label: "Bind", value: bind },
+            { label: "Port", value: String(portLabel) },
+            { label: "RPC", value: rpcLabel },
+            { label: "Doctor", value: data?.doctor?.ok ? "ok" : `exit ${data?.doctor?.exitCode ?? "?"}` },
+          ].map(({ label, value }) => (
+            <div key={label} className="rounded-lg border border-foreground/[0.06] bg-foreground/[0.03] px-2.5 py-1.5">
+              <p className="text-xs text-muted-foreground/60">{label}</p>
+              <p className="mt-0.5 text-xs font-medium text-foreground/90">{value}</p>
+            </div>
+          ))}
         </div>
       </div>
 
       {error && (
-        <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-200">
+        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-200">
           {error}
         </div>
       )}
 
       {loading && !data && (
-        <div className="rounded-xl border border-foreground/10 bg-card/70 px-4 py-8 text-center text-xs text-muted-foreground/70">
+        <div className="rounded-lg border border-foreground/10 bg-card/70 px-4 py-8 text-center text-xs text-muted-foreground/70">
           <RefreshCw className="mx-auto mb-2 h-4 w-4 animate-spin" />
           Running gateway checks...
         </div>
@@ -782,8 +732,8 @@ function GatewayDiagnosticsPanel({
 
       {data && (
         <>
-          <div className="glass-subtle rounded-xl p-3">
-            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+          <div className="glass-subtle rounded-lg p-3">
+            <h3 className="mb-1.5 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground/60">
               Alerts & Recommendations
             </h3>
             <div className="space-y-1">
@@ -806,13 +756,13 @@ function GatewayDiagnosticsPanel({
                         row: "border-blue-500/20 bg-blue-500/5 text-blue-100",
                         chip: "bg-blue-500/15 text-blue-300",
                       };
-                const Icon = cfg.icon;
+                const SevIcon = cfg.icon;
                 return (
                   <div
                     key={`${item.source}-${idx}-${item.text}`}
                     className={cn("flex items-start gap-2 rounded-lg border px-2 py-1.5", cfg.row)}
                   >
-                    <Icon className="mt-0.5 h-3 w-3 shrink-0" />
+                    <SevIcon className="mt-0.5 h-3 w-3 shrink-0" />
                     <div className="min-w-0 flex-1 text-xs leading-snug">{item.text}</div>
                     <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-xs uppercase tracking-wide", cfg.chip)}>
                       {item.source === "doctor" ? "doctor" : "status"}
@@ -823,11 +773,11 @@ function GatewayDiagnosticsPanel({
             </div>
           </div>
 
-          <div className="glass-subtle rounded-xl p-3">
-            <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70">
+          <div className="glass-subtle rounded-lg p-3">
+            <h3 className="mb-1.5 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground/60">
               Doctor Output
             </h3>
-            <div className="max-h-80 overflow-y-auto rounded-lg border border-foreground/10 bg-background/40 p-2 font-mono text-xs leading-snug text-muted-foreground/90">
+            <div className="max-h-80 overflow-y-auto rounded-lg border border-foreground/[0.06] bg-foreground/[0.03] p-2 font-mono text-xs leading-snug text-muted-foreground/90">
               {(data.doctor.lines || []).slice(0, 120).map((line, idx) => (
                 <div key={`${idx}-${line}`} className="truncate">
                   {line}
@@ -858,7 +808,7 @@ function OcStatMini({
   return (
     <div className="text-center">
       <Icon className={cn("mx-auto h-3.5 w-3.5", color)} />
-      <p className="mt-1 text-sm font-semibold text-foreground/90">{value}</p>
+      <p className="mt-1 text-sm font-semibold tabular-nums text-foreground/90">{value}</p>
       <p className="text-xs text-muted-foreground/60">{label}</p>
       {sub && <p className="text-xs text-muted-foreground/40">{sub}</p>}
     </div>
@@ -880,6 +830,16 @@ export function DashboardView() {
   const [gatewayDiagError, setGatewayDiagError] = useState<string | null>(null);
   const [gatewayDiagLoading, setGatewayDiagLoading] = useState(false);
   const [pairingSummary, setPairingSummary] = useState<PairingSummary | null>(null);
+  const [onboardStatus, setOnboardStatus] = useState<{
+    installed: boolean;
+    configured: boolean;
+  } | null>(null);
+  const [onboardDismissed, setOnboardDismissed] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("mc-onboard-dismissed") === "1";
+    }
+    return false;
+  });
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const { stats: sysStats, connected: sseConnected } = useSystemStats();
@@ -923,7 +883,6 @@ export function DashboardView() {
 
   useEffect(() => {
     queueMicrotask(() => fetchLive());
-    // Also fetch system data once (channels, devices, skills)
     fetch("/api/system", { cache: "no-store" })
       .then((r) => r.json())
       .then(setSystem)
@@ -931,6 +890,10 @@ export function DashboardView() {
     fetch("/api/pairing", { cache: "no-store" })
       .then((r) => r.json())
       .then(setPairingSummary)
+      .catch(() => { });
+    fetch("/api/onboard", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => setOnboardStatus({ installed: d.installed, configured: d.configured }))
       .catch(() => { });
 
     const startLivePolling = () => {
@@ -1002,7 +965,6 @@ export function DashboardView() {
 
   const issues: Issue[] = [];
 
-  // Critical: gateway offline
   if (!isOnline) {
     issues.push({
       id: "gw-offline",
@@ -1014,7 +976,6 @@ export function DashboardView() {
     });
   }
 
-  // Critical: cron jobs with consecutive errors
   for (const job of live.cron.jobs) {
     if (job.consecutiveErrors >= 3) {
       issues.push({
@@ -1028,7 +989,6 @@ export function DashboardView() {
     }
   }
 
-  // Warning: cron jobs with missing delivery targets
   for (const job of live.cron.jobs) {
     if (job.lastError?.includes("delivery target is missing")) {
       issues.push({
@@ -1042,7 +1002,6 @@ export function DashboardView() {
     }
   }
 
-  // Warning: single cron error
   for (const job of live.cron.jobs) {
     if (job.lastStatus === "error" && (job.consecutiveErrors || 0) < 3 && !issues.find(i => i.id === `cron-err-${job.id}` || i.id === `cron-target-${job.id}`)) {
       issues.push({
@@ -1056,7 +1015,6 @@ export function DashboardView() {
     }
   }
 
-  // Warning: no channels connected
   if (system && system.stats.totalChannels === 0) {
     issues.push({
       id: "no-channels",
@@ -1068,7 +1026,6 @@ export function DashboardView() {
     });
   }
 
-  // Info: no cron jobs configured
   if (live.cron.stats.total === 0) {
     issues.push({
       id: "no-cron",
@@ -1080,54 +1037,44 @@ export function DashboardView() {
     });
   }
 
-  // Sort: critical → warning → info
   const severityOrder = { critical: 0, warning: 1, info: 2 };
   issues.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
-  // ── Newbie onboarding: show "what to do next" if system is fresh
   const isFreshSetup = live.agents.length <= 1 && live.cron.stats.total === 0;
 
   return (
     <SectionLayout>
       {/* ── Gateway status bar ────────────────────── */}
-      <div className="shrink-0 border-b border-foreground/10 bg-card/80 px-4 py-2 md:px-6">
+      <div className="shrink-0 border-b border-border bg-card px-4 py-2.5 md:px-6">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-3">
             <div className="relative flex items-center gap-1.5">
-              <div
-                className={cn(
-                  "h-2 w-2 rounded-full",
-                  isOnline ? "bg-emerald-500" : "bg-red-500"
-                )}
-              />
-              {isOnline && (
-                <div className="absolute left-0 h-2 w-2 animate-ping rounded-full bg-emerald-500/50" />
-              )}
+              <span className={cn("inline-flex h-2 w-2 rounded-full", isOnline ? "bg-emerald-500" : "bg-red-500")} />
               <span className="text-xs font-medium text-foreground/90">
                 Gateway {isOnline ? "Online" : "Offline"}
               </span>
             </div>
-            <span className="text-xs text-muted-foreground/60">
-              v{gw.version} &bull; port {gw.port} &bull; {gw.latencyMs}ms
+            <span className="text-xs text-muted-foreground/50">
+              v{gw.version} · port {gw.port} · {gw.latencyMs}ms
             </span>
           </div>
-          <span className="text-xs text-muted-foreground/60">
-            Refreshed {Math.floor((now - lastRefresh) / 1000)}s ago &bull; auto-refresh 5s
+          <span className="text-xs text-muted-foreground/40">
+            {Math.floor((now - lastRefresh) / 1000)}s ago · auto 5s
           </span>
         </div>
       </div>
 
-      <SectionBody width="content" padding="regular" innerClassName="space-y-5">
+      <SectionBody width="content" padding="regular" innerClassName="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex rounded-lg border border-foreground/10 bg-card/70 p-0.5">
+          <div className="inline-flex rounded-lg border border-border bg-muted p-1">
             <button
               type="button"
               onClick={() => setDashboardTab("overview")}
               className={cn(
-                "rounded-md px-2 py-0.5 text-xs font-medium transition-colors",
+                "rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200",
                 dashboardTab === "overview"
-                  ? "bg-violet-500/20 text-violet-200"
-                  : "text-muted-foreground/70 hover:text-foreground/80"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               Overview
@@ -1136,10 +1083,10 @@ export function DashboardView() {
               type="button"
               onClick={() => setDashboardTab("gateway")}
               className={cn(
-                "rounded-md px-2 py-0.5 text-xs font-medium transition-colors",
+                "rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200",
                 dashboardTab === "gateway"
-                  ? "bg-blue-500/20 text-blue-200"
-                  : "text-muted-foreground/70 hover:text-foreground/80"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               Gateway Diagnostics
@@ -1153,13 +1100,56 @@ export function DashboardView() {
             </button>
           </div>
           {dashboardTab === "gateway" && (
-            <span className="text-xs text-muted-foreground/70">
+            <span className="text-xs text-muted-foreground/50">
               Auto-refresh every 30s while this tab is open
             </span>
           )}
         </div>
 
-        <div className={cn("space-y-5", dashboardTab !== "overview" && "hidden")}>
+        <div className={cn("space-y-6", dashboardTab !== "overview" && "hidden")}>
+          {/* ── Onboarding banner ──────────────────────── */}
+          {onboardStatus && !onboardStatus.configured && !onboardDismissed && (
+            <div className="glass rounded-lg border-violet-500/20 bg-violet-500/10 dark:bg-violet-500/5 p-4">
+              <div className="flex items-start gap-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/15">
+                  <Rocket className="h-4.5 w-4.5 text-violet-400" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-xs font-sans font-semibold text-foreground/90">
+                    {onboardStatus.installed
+                      ? "Set up your agent"
+                      : "Install OpenClaw to get started"}
+                  </h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground/70">
+                    {onboardStatus.installed
+                      ? "Configure your AI model and API key to get your agent running."
+                      : "OpenClaw needs to be installed before Mission Control can work."}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Link
+                    href="/onboard"
+                    className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500"
+                  >
+                    {onboardStatus.installed ? "Set up" : "Install"}
+                    <ArrowRight className="h-3 w-3" />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOnboardDismissed(true);
+                      localStorage.setItem("mc-onboard-dismissed", "1");
+                    }}
+                    className="rounded-md p-1 text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+                    title="Dismiss"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ── Stat cards ─────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <StatCard
@@ -1201,26 +1191,26 @@ export function DashboardView() {
             />
           </div>
 
-          {/* ── Access & pairing (gateway token, device/DM requests) ─── */}
-          <div className="glass-subtle rounded-xl p-4">
-            <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          {/* ── Access & pairing ─── */}
+          <div className="glass-subtle rounded-lg p-4">
+            <h2 className="mb-3 flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground">
               <KeyRound className="h-3.5 w-3.5" /> Access & pairing
             </h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <p className="text-xs font-medium text-foreground/80">Gateway auth</p>
-                <p className="mt-1 text-xs text-muted-foreground/80">
+                <p className="mt-1 text-xs text-muted-foreground/70">
                   {system?.gateway?.authMode
                     ? `Mode: ${system.gateway.authMode}${system.gateway.tokenConfigured ? " · Token set" : ""}`
                     : "Not configured (open access)"}
                   {system?.gateway?.allowTailscale && " · Tailscale allowed"}
                 </p>
-                <p className="mt-2 text-xs text-muted-foreground/60">
+                <p className="mt-2 text-xs text-muted-foreground/50">
                   Set or edit the token in{" "}
                   <Link href="/config" className="text-violet-400 hover:underline">
                     Config
                   </Link>{" "}
-                  under <code className="rounded bg-foreground/10 px-1">gateway.auth.token</code>. The UI shows it redacted; to view or copy the full token, run on the gateway host: <code className="rounded bg-foreground/10 px-1">openclaw config get gateway.auth.token</code>. For remote access, paste the token when the dashboard prompts.{" "}
+                  under <code className="rounded bg-foreground/[0.06] px-1">gateway.auth.token</code>. The UI shows it redacted; to view or copy the full token, run on the gateway host: <code className="rounded bg-foreground/[0.06] px-1">openclaw config get gateway.auth.token</code>. For remote access, paste the token when the dashboard prompts.{" "}
                   <a
                     href="https://docs.openclaw.ai/web/dashboard"
                     target="_blank"
@@ -1233,13 +1223,13 @@ export function DashboardView() {
               </div>
               <div>
                 <p className="text-xs font-medium text-foreground/80">Pairing requests</p>
-                <p className="mt-1 text-xs text-muted-foreground/80">
+                <p className="mt-1 text-xs text-muted-foreground/70">
                   {(pairingSummary?.total ?? 0) > 0
                     ? `${pairingSummary?.total ?? 0} pending (device + DM) — use the bell in the header to approve or reject.`
                     : "No pending requests. New device or DM pairing will show in the header bell."}
                 </p>
                 {(pairingSummary?.total ?? 0) > 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground/60">
+                  <p className="mt-2 text-xs text-muted-foreground/50">
                     Click the <Bell className="inline h-3 w-3" /> icon in the top bar to manage.
                   </p>
                 )}
@@ -1250,10 +1240,10 @@ export function DashboardView() {
           {/* ── Top Issues Now ─────────────────────────── */}
           {issues.length > 0 && (
             <div>
-              <h2 className="mb-2.5 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h2 className="mb-3 flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                 <Shield className="h-3.5 w-3.5" />
                 Top Issues
-                <span className="ml-1 rounded-full bg-foreground/10 px-1.5 py-0.5 text-xs font-medium">
+                <span className="ml-1 rounded-full bg-foreground/[0.08] px-1.5 py-0.5 text-xs font-medium">
                   {issues.length}
                 </span>
               </h2>
@@ -1290,7 +1280,7 @@ export function DashboardView() {
                     <div
                       key={issue.id}
                       className={cn(
-                        "glass-subtle flex items-start gap-3 rounded-xl p-3.5",
+                        "glass-subtle flex items-start gap-3 rounded-lg p-4",
                         severityCfg.border,
                         severityCfg.bg
                       )}
@@ -1305,14 +1295,14 @@ export function DashboardView() {
                             {severityCfg.badgeLabel}
                           </span>
                         </div>
-                        <p className="mt-0.5 text-xs text-muted-foreground/70 line-clamp-2">
+                        <p className="mt-0.5 text-xs text-muted-foreground/60 line-clamp-2">
                           {issue.detail}
                         </p>
                       </div>
                       {issue.fixLabel && issue.fixHref && (
                         <a
                           href={issue.fixHref}
-                          className="flex shrink-0 items-center gap-1 rounded-lg border border-foreground/10 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground/70 transition-colors hover:bg-muted/80 hover:text-foreground"
+                          className="flex shrink-0 items-center gap-1 rounded-lg border border-foreground/10 bg-foreground/[0.04] px-2.5 py-1.5 text-xs font-medium text-foreground/70 transition-all duration-200 hover:bg-foreground/[0.08] hover:text-foreground"
                         >
                           {issue.fixLabel}
                           <ArrowRight className="h-3 w-3" />
@@ -1325,18 +1315,18 @@ export function DashboardView() {
             </div>
           )}
 
-          {/* ── Getting Started (newbie rails) ────────── */}
+          {/* ── Getting Started ────────── */}
           {isFreshSetup && issues.length === 0 && (
-            <div className="glass-subtle rounded-xl border border-violet-500/20 bg-violet-500/10 dark:bg-violet-500/5 p-5">
+            <div className="glass rounded-lg border-violet-500/20 bg-violet-500/10 dark:bg-violet-500/5 p-5">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-violet-500/15">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/15">
                   <Rocket className="h-5 w-5 text-violet-400" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-semibold text-foreground/90">
+                  <h3 className="text-xs font-sans font-semibold text-foreground/90">
                     Welcome to Mission Control
                   </h3>
-                  <p className="mt-1 text-xs text-muted-foreground/70">
+                  <p className="mt-1 text-xs text-muted-foreground/60">
                     Your OpenClaw agent is running. Here are some things to try:
                   </p>
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1349,13 +1339,13 @@ export function DashboardView() {
                       <a
                         key={item.href}
                         href={item.href}
-                        className="flex items-center gap-2.5 rounded-lg border border-foreground/10 bg-card/80 px-3 py-2.5 transition-colors hover:border-violet-500/20 hover:bg-violet-500/5"
+                        className="glass-subtle flex items-center gap-2.5 rounded-lg px-3 py-2.5 transition-all duration-200 hover:border-violet-500/20 hover:bg-violet-500/5"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium text-foreground/80">{item.label}</p>
-                          <p className="text-xs text-muted-foreground/60">{item.desc}</p>
+                          <p className="text-xs text-muted-foreground/50">{item.desc}</p>
                         </div>
-                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+                        <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/30" />
                       </a>
                     ))}
                   </div>
@@ -1368,45 +1358,38 @@ export function DashboardView() {
           <div className="grid gap-5 lg:grid-cols-2">
             {/* Agents */}
             <div>
-              <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h2 className="mb-3 flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                 <Bot className="h-3.5 w-3.5" /> Agents
               </h2>
               <div className="space-y-2.5">
                 {live.agents.map((agent) => (
-                  <div
-                    key={agent.id}
-                    className="glass rounded-xl p-4"
-                  >
+                  <div key={agent.id} className="glass-glow rounded-lg p-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10 text-base">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-500/10 text-base">
                         {agent.emoji || (agent.id === "main" ? "🦞" : "🤖")}
                       </div>
                       <div className="flex-1">
-                        <p className="text-xs font-semibold text-foreground capitalize">
+                        <p className="text-sm font-medium text-foreground capitalize">
                           {agent.name || agent.id}
                         </p>
-                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground/60">
                           <span>{agent.sessionCount} session{agent.sessionCount !== 1 ? "s" : ""}</span>
                           <span>{formatTokens(agent.totalTokens)} tokens</span>
                           <span>Active {formatAgo(agent.lastActivity)}</span>
                         </div>
                       </div>
-                      <div
-                        className={cn(
-                          "h-2 w-2 rounded-full",
-                          now - agent.lastActivity < 300000
-                            ? "bg-emerald-500"
-                            : "bg-zinc-600"
-                        )}
-                      />
+                      <span className={cn(
+                        "inline-flex h-2 w-2 rounded-full",
+                        now - agent.lastActivity < 300000 ? "bg-emerald-500" : "bg-muted-foreground/30"
+                      )} />
                     </div>
                     {/* Token usage bar */}
                     <div className="mt-3">
-                      <div className="flex justify-between text-xs text-muted-foreground/60">
+                      <div className="flex justify-between text-xs text-muted-foreground/50">
                         <span>Token usage</span>
                         <span>{formatTokens(agent.totalTokens)}</span>
                       </div>
-                      <div className="mt-1 h-1.5 rounded-full bg-muted">
+                      <div className="mt-1 h-1.5 rounded-full bg-foreground/[0.04]">
                         <div
                           className="h-1.5 rounded-full bg-violet-500/60 transition-all duration-1000"
                           style={{
@@ -1422,14 +1405,14 @@ export function DashboardView() {
               {/* Models */}
               {system?.models && system.models.length > 0 && (
                 <div className="mt-4">
-                  <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  <h3 className="mb-2 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground/50">
                     Model Aliases
                   </h3>
                   <div className="flex flex-wrap gap-1.5">
                     {system.models.map((m) => (
                       <span
                         key={m.id}
-                        className="rounded-md border border-foreground/5 bg-card/80 px-2 py-1 text-xs text-muted-foreground"
+                        className="rounded-lg border border-foreground/[0.06] bg-foreground/[0.03] px-2 py-1 text-xs text-muted-foreground"
                       >
                         {m.alias && (
                           <span className="mr-1 text-violet-400">/{m.alias}</span>
@@ -1444,7 +1427,7 @@ export function DashboardView() {
 
             {/* Cron countdowns */}
             <div>
-              <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h2 className="mb-3 flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" /> Cron Schedules
               </h2>
               <div className="space-y-2.5">
@@ -1452,10 +1435,7 @@ export function DashboardView() {
                   const progress = cronProgress(job);
                   const countdown = formatCountdown(job.nextRunAtMs);
                   return (
-                    <div
-                      key={job.id}
-                      className="glass rounded-xl p-4"
-                    >
+                    <div key={job.id} className="glass-glow rounded-lg p-4">
                       <div className="flex items-center gap-2.5">
                         <div
                           className={cn(
@@ -1471,21 +1451,20 @@ export function DashboardView() {
                           <p className="text-sm font-medium text-foreground/90">
                             {job.name}
                           </p>
-                          <p className="text-xs text-muted-foreground/60">
+                          <p className="text-xs text-muted-foreground/50">
                             {job.scheduleDisplay}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-sm font-mono font-medium text-foreground/70">
+                          <p className="text-sm font-semibold tabular-nums text-foreground/80">
                             {countdown}
                           </p>
-                          <p className="text-xs text-muted-foreground/60">
+                          <p className="text-xs text-muted-foreground/50">
                             ran {formatAgo(job.lastRunAtMs || 0)} ({formatDuration(job.lastDurationMs)})
                           </p>
                         </div>
                       </div>
-                      {/* Progress bar */}
-                      <div className="mt-2.5 h-1.5 rounded-full bg-muted">
+                      <div className="mt-2.5 h-1.5 rounded-full bg-foreground/[0.04]">
                         <div
                           className={cn(
                             "h-1.5 rounded-full transition-all duration-1000",
@@ -1496,7 +1475,6 @@ export function DashboardView() {
                           style={{ width: `${progress}%` }}
                         />
                       </div>
-                      {/* Error message */}
                       {job.lastError && (
                         <p className="mt-2 flex items-center gap-1 text-xs text-red-400">
                           <AlertCircle className="h-3 w-3" />
@@ -1516,7 +1494,7 @@ export function DashboardView() {
           {/* ── Recent cron run results ─────────────── */}
           {live.cronRuns.length > 0 && (
             <div>
-              <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h2 className="mb-3 flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground">
                 <Zap className="h-3.5 w-3.5" /> Recent Cron Results
               </h2>
               <div className="space-y-1.5">
@@ -1525,7 +1503,7 @@ export function DashboardView() {
                     type="button"
                     key={`${run.jobId}-${run.ts}-${i}`}
                     onClick={() => openCronJob(run.jobId)}
-                    className="w-full glass-subtle rounded-lg px-4 py-2.5 text-left transition-colors hover:border-violet-500/25 hover:bg-violet-500/5"
+                    className="w-full glass-subtle rounded-lg px-4 py-2.5 text-left transition-all duration-200 hover:border-violet-500/20 hover:bg-violet-500/5"
                   >
                     <div className="flex items-center gap-2">
                       {run.status === "ok" ? (
@@ -1537,13 +1515,13 @@ export function DashboardView() {
                         {formatAgo(run.ts)}
                       </span>
                       {run.durationMs && (
-                        <span className="text-xs text-muted-foreground/60">
+                        <span className="text-xs text-muted-foreground/50">
                           {formatDuration(run.durationMs)}
                         </span>
                       )}
                     </div>
                     {run.summary && (
-                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground/70">
                         {run.summary.replace(/[*#|_]/g, "").substring(0, 200)}
                       </p>
                     )}
@@ -1558,10 +1536,10 @@ export function DashboardView() {
 
           {/* ── Live activity log ───────────────────── */}
           <div>
-            <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <h2 className="mb-3 flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground">
               <Radio className="h-3.5 w-3.5" /> Gateway Log
             </h2>
-            <div className="glass-subtle rounded-xl p-1">
+            <div className="glass-subtle rounded-lg p-1">
               <div className="max-h-80 overflow-y-auto font-mono text-xs leading-5">
                 {live.logEntries.map((entry, i) => {
                   const isError =
@@ -1579,10 +1557,10 @@ export function DashboardView() {
                         "flex gap-2 rounded px-2 py-0.5",
                         isError
                           ? "bg-red-500/5 text-red-400"
-                          : "hover:bg-foreground/5"
+                          : "hover:bg-foreground/[0.03]"
                       )}
                     >
-                      <span className="shrink-0 text-muted-foreground/60">{time}</span>
+                      <span className="shrink-0 text-muted-foreground/40">{time}</span>
                       <span
                         className={cn(
                           "shrink-0 w-24 truncate",
@@ -1590,19 +1568,19 @@ export function DashboardView() {
                             ? "text-amber-500"
                             : isWs
                               ? "text-blue-500"
-                              : "text-muted-foreground"
+                              : "text-muted-foreground/60"
                         )}
                       >
                         [{entry.source}]
                       </span>
-                      <span className="min-w-0 truncate text-muted-foreground">
+                      <span className="min-w-0 truncate text-muted-foreground/70">
                         {entry.message}
                       </span>
                     </div>
                   );
                 })}
                 {live.logEntries.length === 0 && (
-                  <p className="px-2 py-4 text-center text-muted-foreground/60">
+                  <p className="px-2 py-4 text-center text-muted-foreground/50">
                     No recent log entries
                   </p>
                 )}
@@ -1646,25 +1624,25 @@ function StatCard({
   return (
     <div
       className={cn(
-        "glass rounded-xl p-3",
-        onClick && "cursor-pointer transition-colors hover:border-white/30 dark:hover:border-white/20"
+        "glass-glow rounded-lg p-4",
+        onClick && "cursor-pointer"
       )}
       onClick={onClick}
     >
-      <div className="flex items-center gap-2.5">
-        <div className={cn("rounded-lg p-1.5", color)}>
+      <div className="flex items-center gap-3">
+        <div className={cn("rounded-lg p-2", color)}>
           <Icon className="h-4 w-4" />
         </div>
         <div>
-          <p className="text-xs font-semibold text-foreground">{value}</p>
-          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-xl font-semibold tabular-nums text-foreground">{value}</p>
+          <p className="text-xs text-muted-foreground/60">{label}</p>
         </div>
       </div>
       {alert && (
         alertHref ? (
           <a
             href={alertHref}
-            className="mt-1.5 flex items-center gap-1 text-xs text-red-400 transition-colors hover:text-red-300 group"
+            className="mt-2 flex items-center gap-1 text-xs text-red-400 transition-colors hover:text-red-300 group"
             onClick={(e) => e.stopPropagation()}
           >
             <AlertCircle className="h-3 w-3" />
@@ -1672,7 +1650,7 @@ function StatCard({
             <span className="text-red-500/50 group-hover:text-red-400">&rarr;</span>
           </a>
         ) : (
-          <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400">
+          <p className="mt-2 flex items-center gap-1 text-xs text-red-400">
             <AlertCircle className="h-3 w-3" />
             {alert}
           </p>

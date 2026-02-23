@@ -99,6 +99,10 @@ const WebSearchView = dynamic(
   () => import("@/components/web-search-view").then((m) => m.WebSearchView),
   { loading: () => <SectionLoading /> }
 );
+const SettingsView = dynamic(
+  () => import("@/components/settings-view").then((m) => m.SettingsView),
+  { loading: () => <SectionLoading /> }
+);
 
 export type DashboardSection =
   | "dashboard"
@@ -125,7 +129,8 @@ export type DashboardSection =
   | "tailscale"
   | "browser"
   | "calendar"
-  | "search";
+  | "search"
+  | "settings";
 
 function SectionContent({ section }: { section: DashboardSection }) {
   switch (section) {
@@ -182,6 +187,8 @@ function SectionContent({ section }: { section: DashboardSection }) {
       );
     case "search":
       return <WebSearchView />;
+    case "settings":
+      return <SettingsView />;
     default:
       return <DashboardView />;
   }

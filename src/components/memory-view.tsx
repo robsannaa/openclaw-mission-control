@@ -238,6 +238,7 @@ export function MemoryView() {
   const [search, setSearch] = useState("");
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "unsaved" | null>(null);
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
+  const [reindexingAll, setReindexingAll] = useState(false);
   const [collapsedPeriods, setCollapsedPeriods] = useState<Set<string>>(new Set());
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasInitializedCollapse = useRef(false);
@@ -688,6 +689,30 @@ export function MemoryView() {
     }
   }, [ensuringIndex, fetchMemoryData]);
 
+  const reindexAllMemory = useCallback(async () => {
+    if (reindexingAll) return;
+    setReindexingAll(true);
+    try {
+      const res = await fetch("/api/memory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "index-memory", force: true }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        await fetchMemoryData();
+        setActionMsg({ ok: true, msg: "Full memory reindex completed" });
+      } else {
+        setActionMsg({ ok: false, msg: data.error || "Reindex failed" });
+      }
+    } catch {
+      setActionMsg({ ok: false, msg: "Reindex failed" });
+    } finally {
+      setReindexingAll(false);
+      setTimeout(() => setActionMsg(null), 3000);
+    }
+  }, [fetchMemoryData, reindexingAll]);
+
   useEffect(() => {
     void fetchMemoryData(true);
   }, [fetchMemoryData]);
@@ -838,32 +863,44 @@ export function MemoryView() {
 
   const tabBar = (
     <div className="shrink-0 border-b border-foreground/10 bg-card/50 px-3 py-2">
-      <div className="inline-flex rounded-lg border border-foreground/10 bg-card p-1">
+      <div className="flex items-center justify-between gap-2">
+        <div className="inline-flex rounded-lg border border-foreground/10 bg-card p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("journal")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              activeTab === "journal"
+                ? "bg-violet-500/15 text-violet-300"
+                : "text-muted-foreground hover:text-foreground/80"
+            )}
+          >
+            <Brain className="h-3.5 w-3.5" />
+            Memory Files
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("graph")}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+              activeTab === "graph"
+                ? "bg-sky-500/15 text-sky-300"
+                : "text-muted-foreground hover:text-foreground/80"
+            )}
+          >
+            <GitBranch className="h-3.5 w-3.5" />
+            Knowledge Graph
+          </button>
+        </div>
         <button
           type="button"
-          onClick={() => setActiveTab("journal")}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-            activeTab === "journal"
-              ? "bg-violet-500/15 text-violet-300"
-              : "text-muted-foreground hover:text-foreground/80"
-          )}
+          onClick={() => void reindexAllMemory()}
+          disabled={reindexingAll}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/5 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 disabled:opacity-50"
+          title="Re-index all memory files into the vector store"
         >
-          <Brain className="h-3.5 w-3.5" />
-          Memory Files
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("graph")}
-          className={cn(
-            "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-            activeTab === "graph"
-              ? "bg-sky-500/15 text-sky-300"
-              : "text-muted-foreground hover:text-foreground/80"
-          )}
-        >
-          <GitBranch className="h-3.5 w-3.5" />
-          Knowledge Graph
+          <RefreshCw className={cn("h-3 w-3", reindexingAll && "animate-spin")} />
+          {reindexingAll ? "Reindexing..." : "Reindex All"}
         </button>
       </div>
     </div>
