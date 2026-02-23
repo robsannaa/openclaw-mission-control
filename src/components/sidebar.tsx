@@ -72,7 +72,7 @@ const navItems: {
   { section: "heartbeat", label: "Heartbeat", icon: Heart, href: "/heartbeat", isSubItem: true },
   { section: "calendar", label: "Calendar", icon: CalendarDays, comingSoon: true, href: "/calendar" },
   { section: "memory", label: "Memory", icon: Brain, href: "/memory" },
-  { section: "docs", label: "Docs", icon: FolderOpen, href: "/docs" },
+  { section: "docs", label: "Documents", icon: FolderOpen, href: "/documents" },
   { section: "vectors", label: "Vector DB", icon: Database, dividerAfter: true, href: "/vectors" },
   { section: "skills", label: "Skills", icon: Wrench, href: "/skills" },
   { section: "skills", label: "ClawHub", icon: Package, href: "/skills?tab=clawhub", tab: "clawhub", isSubItem: true },

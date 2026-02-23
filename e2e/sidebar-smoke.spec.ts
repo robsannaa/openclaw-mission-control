@@ -11,7 +11,7 @@ const SIDEBAR_LINKS: Array<{ href: string; urlPattern: RegExp }> = [
   { href: "/cron", urlPattern: /\/cron(?:\?|$)/ },
   { href: "/heartbeat", urlPattern: /\/heartbeat(?:\?|$)/ },
   { href: "/memory", urlPattern: /\/memory(?:\?|$)/ },
-  { href: "/docs", urlPattern: /\/docs(?:\?|$)/ },
+  { href: "/documents", urlPattern: /\/documents(?:\?|$)/ },
   { href: "/vectors", urlPattern: /\/vectors(?:\?|$)/ },
   { href: "/skills", urlPattern: /\/skills(?:\?|$)/ },
   { href: "/skills?tab=clawhub", urlPattern: /\/skills\?tab=clawhub(?:&|$)/ },

@@ -13,6 +13,8 @@ type CliAgent = {
   name?: string;
   identityName?: string;
   identityEmoji?: string;
+  identityTheme?: string;
+  identityAvatar?: string;
   identitySource?: string;
   workspace: string;
   agentDir: string;
@@ -38,6 +40,9 @@ type AgentFull = {
   bindings: string[];
   channels: string[];
   identitySnippet: string | null;
+  identityTheme: string | null;
+  identityAvatar: string | null;
+  identitySource: string | null;
   subagents: string[];
   runtimeSubagents: Array<{
     sessionKey: string;
@@ -288,12 +293,31 @@ export async function GET() {
     for (const id of agentIds) {
       const cli = cliById.get(id);
       const cfg = configMap.get(id) || {};
+      const identityCfg =
+        cfg.identity && typeof cfg.identity === "object"
+          ? (cfg.identity as Record<string, unknown>)
+          : {};
+      const identityTheme =
+        (typeof cli?.identityTheme === "string" && cli.identityTheme) ||
+        (typeof identityCfg.theme === "string" ? identityCfg.theme : null);
+      const identityAvatar =
+        (typeof cli?.identityAvatar === "string" && cli.identityAvatar) ||
+        (typeof identityCfg.avatar === "string" ? identityCfg.avatar : null);
+      const identitySource =
+        (typeof cli?.identitySource === "string" && cli.identitySource) || null;
 
       // Name / emoji — strip markdown template hints like "_(or ...)"
       const rawName =
-        cli?.identityName || (cfg.name as string) || cli?.name || id;
+        cli?.identityName ||
+        (typeof identityCfg.name === "string" ? identityCfg.name : null) ||
+        (cfg.name as string) ||
+        cli?.name ||
+        id;
       const name = rawName.replace(/\s*_\(.*?\)_?\s*/g, "").trim() || rawName;
-      const rawEmoji = cli?.identityEmoji || "🤖";
+      const rawEmoji =
+        cli?.identityEmoji ||
+        (typeof identityCfg.emoji === "string" ? identityCfg.emoji : null) ||
+        "🤖";
       const emoji = rawEmoji.replace(/\s*_\(.*?\)_?\s*/g, "").trim() || rawEmoji;
 
       // Model — prefer config-level names over CLI's resolved provider model IDs
@@ -399,6 +423,9 @@ export async function GET() {
         bindings,
         channels,
         identitySnippet,
+        identityTheme,
+        identityAvatar,
+        identitySource,
         subagents,
         runtimeSubagents,
         status,
@@ -492,6 +519,10 @@ export async function POST(request: NextRequest) {
           (body.workspace as string)?.trim() ||
           join(getOpenClawHome(), `workspace-${name}`);
         args.push("--workspace", workspace);
+        const agentDir = (body.agentDir as string)?.trim();
+        if (agentDir) {
+          args.push("--agent-dir", agentDir);
+        }
 
         // Model (optional — inherits default if not set)
         if (body.model) {
@@ -559,7 +590,14 @@ export async function POST(request: NextRequest) {
           console.warn("Agent create: config patch failed", patchErr);
         }
 
-        return NextResponse.json({ ok: true, action, name, workspace, ...result });
+        return NextResponse.json({
+          ok: true,
+          action,
+          name,
+          workspace,
+          agentDir: agentDir || undefined,
+          ...result,
+        });
       }
 
       case "update": {
@@ -625,6 +663,28 @@ export async function POST(request: NextRequest) {
           }
         }
 
+        // Update display name shown in dashboard/config
+        if ("displayName" in body) {
+          const displayName = String(body.displayName || "").trim();
+          if (displayName) agent.name = displayName;
+          else delete agent.name;
+        }
+
+        // Update default marker
+        if ("default" in body) {
+          if (body.default === true) {
+            agent.default = true;
+            for (let i = 0; i < agentsList.length; i++) {
+              if (i !== agentIdx) {
+                const peer = agentsList[i] as Record<string, unknown>;
+                if ("default" in peer) delete peer.default;
+              }
+            }
+          } else if (body.default === false && agent.default === true) {
+            delete agent.default;
+          }
+        }
+
         // Update bindings
         if ("bindings" in body) {
           const newBindings = (body.bindings || []) as string[];
@@ -652,6 +712,100 @@ export async function POST(request: NextRequest) {
         await writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
 
         return NextResponse.json({ ok: true, action: "update", id });
+      }
+
+      case "set-identity": {
+        const id = String(body.id || "").trim();
+        if (!id) {
+          return NextResponse.json(
+            { error: "Agent ID is required" },
+            { status: 400 }
+          );
+        }
+
+        const args = ["agents", "set-identity", "--agent", id, "--json"];
+        let hasExplicitIdentityField = false;
+
+        const name = String(body.name || "").trim();
+        if (name) {
+          args.push("--name", name);
+          hasExplicitIdentityField = true;
+        }
+        const emoji = String(body.emoji || "").trim();
+        if (emoji) {
+          args.push("--emoji", emoji);
+          hasExplicitIdentityField = true;
+        }
+        const theme = String(body.theme || "").trim();
+        if (theme) {
+          args.push("--theme", theme);
+          hasExplicitIdentityField = true;
+        }
+        const avatar = String(body.avatar || "").trim();
+        if (avatar) {
+          args.push("--avatar", avatar);
+          hasExplicitIdentityField = true;
+        }
+
+        const fromIdentity = body.fromIdentity === true;
+        if (fromIdentity) {
+          args.push("--from-identity");
+        }
+
+        const workspace = String(body.workspace || "").trim();
+        if (workspace) {
+          args.push("--workspace", workspace);
+        }
+
+        const identityFile = String(body.identityFile || "").trim();
+        if (identityFile) {
+          args.push("--identity-file", identityFile);
+        }
+
+        if (!fromIdentity && !hasExplicitIdentityField) {
+          return NextResponse.json(
+            { error: "Provide identity fields or enable fromIdentity." },
+            { status: 400 }
+          );
+        }
+
+        const output = await runCli(args, 30000);
+        let result: Record<string, unknown> = {};
+        try {
+          result = parseJsonFromCliOutput<Record<string, unknown>>(
+            output,
+            "openclaw agents set-identity --json"
+          );
+        } catch {
+          result = { raw: output };
+        }
+        return NextResponse.json({ ok: true, action, id, ...result });
+      }
+
+      case "delete": {
+        const id = String(body.id || "").trim();
+        if (!id) {
+          return NextResponse.json(
+            { error: "Agent ID is required" },
+            { status: 400 }
+          );
+        }
+
+        const force = body.force !== false;
+        const args = ["agents", "delete", id, "--json"];
+        if (force) args.push("--force");
+
+        const output = await runCli(args, 30000);
+        let result: Record<string, unknown> = {};
+        try {
+          result = parseJsonFromCliOutput<Record<string, unknown>>(
+            output,
+            "openclaw agents delete --json"
+          );
+        } catch {
+          result = { raw: output };
+        }
+        return NextResponse.json({ ok: true, action, id, ...result });
       }
 
       default:

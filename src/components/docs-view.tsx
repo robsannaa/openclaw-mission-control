@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   Search,
   FileText,
@@ -108,6 +109,23 @@ function sortTypeKeys(a: string, b: string): number {
   const bv = bi === -1 ? Number.MAX_SAFE_INTEGER : bi;
   if (av !== bv) return av - bv;
   return a.localeCompare(b);
+}
+
+function normalizeWorkspaceQuery(value: string | null): string | null {
+  if (!value) return null;
+  const normalized = value.replace(/\\/g, "/").replace(/\/+$/, "").trim();
+  if (!normalized) return null;
+  const parts = normalized.split("/").filter(Boolean);
+  return parts[parts.length - 1] || null;
+}
+
+function normalizePathQuery(pathValue: string | null, workspaceValue: string | null): string | null {
+  if (!pathValue) return null;
+  const cleanPath = pathValue.replace(/\\/g, "/").replace(/^\/+/, "").trim();
+  if (!cleanPath) return null;
+  if (cleanPath.startsWith("workspace")) return cleanPath;
+  const ws = normalizeWorkspaceQuery(workspaceValue);
+  return ws ? `${ws}/${cleanPath}` : cleanPath;
 }
 
 /* ── JSON Viewer ──────────────────────────────── */
@@ -356,6 +374,13 @@ function JsonViewer({
 /* ── component ─────────────────────────────────── */
 
 export function DocsView() {
+  const searchParams = useSearchParams();
+  const requestedWorkspace = searchParams.get("workspace");
+  const requestedPath = searchParams.get("path");
+  const requestedDocPath = useMemo(
+    () => normalizePathQuery(requestedPath, requestedWorkspace),
+    [requestedPath, requestedWorkspace]
+  );
   const [docs, setDocs] = useState<Doc[]>([]);
   const [allTags, setAllTags] = useState<string[]>([]);
   const [allExts, setAllExts] = useState<string[]>([]);
@@ -382,19 +407,41 @@ export function DocsView() {
   const [confirmDelete, setConfirmDelete] = useState<Doc | null>(null);
   const [actionMsg, setActionMsg] = useState<{ ok: boolean; msg: string } | null>(null);
   const ctxRef = useRef<HTMLDivElement>(null);
+  const deepLinkedDocRef = useRef<string | null>(null);
 
   const fetchDocs = useCallback(() => {
     setLoading(true);
     fetch("/api/docs")
       .then((r) => r.json())
       .then((data) => {
-        setDocs(data.docs || []);
+        const nextDocs = (data.docs || []) as Doc[];
+        setDocs(nextDocs);
         setAllTags([...(data.tags || [])].sort(sortTypeKeys));
         setAllExts(data.extensions || []);
+
+        if (
+          requestedDocPath &&
+          deepLinkedDocRef.current !== requestedDocPath
+        ) {
+          const target = nextDocs.find((doc) => doc.path === requestedDocPath);
+          if (target) {
+            deepLinkedDocRef.current = requestedDocPath;
+            setSelected(target);
+            setSaveStatus(null);
+            setContent(null);
+            fetch(`/api/docs?path=${encodeURIComponent(target.path)}`)
+              .then((resp) => resp.json())
+              .then((payload) => {
+                setContent(payload.content ?? "");
+                setWords(payload.words ?? 0);
+              })
+              .catch(() => setContent("Failed to load."));
+          }
+        }
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  }, [requestedDocPath]);
 
   useEffect(() => {
     queueMicrotask(() => fetchDocs());
@@ -472,7 +519,7 @@ export function DocsView() {
     [selected, saveContent]
   );
 
-  const loadDoc = (doc: Doc) => {
+  const loadDoc = useCallback((doc: Doc) => {
     // Flush any pending save
     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
     setSelected(doc);
@@ -485,7 +532,7 @@ export function DocsView() {
         setWords(data.words ?? 0);
       })
       .catch(() => setContent("Failed to load."));
-  };
+  }, []);
 
   /* ── file operations ────────────────────────────── */
 

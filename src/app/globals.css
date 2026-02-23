@@ -7,7 +7,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-mono);
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-baskervville);
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -173,8 +174,15 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground text-base;
-    font-family: var(--font-geist-mono), ui-monospace, "SF Mono", Monaco, "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    @apply bg-background text-foreground text-base font-sans;
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-serif;
   }
 }
 
@@ -400,5 +408,4 @@ body > * {
 /* ── Gradient stops (legacy, rare) ── */
 :root:not(.dark) .from-zinc-500 { --tw-gradient-from: #a1a1aa !important; }
 :root:not(.dark) .to-zinc-600 { --tw-gradient-to: #a1a1aa !important; }
-
 

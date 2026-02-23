@@ -4,15 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Bug,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   CircleX,
   Copy,
   ExternalLink,
   Globe,
   Play,
-  Plug,
   RefreshCw,
   RotateCw,
   Square,
+  Sparkles,
 } from "lucide-react";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 
@@ -27,8 +29,11 @@ type RelaySnapshot = {
     cdpUrl?: string;
     detectedBrowser?: string | null;
     detectedExecutablePath?: string | null;
+    chosenBrowser?: string | null;
+    userDataDir?: string | null;
     detectError?: string | null;
     attachOnly?: boolean;
+    headless?: boolean;
     color?: string;
   } | null;
   profiles?: Array<{
@@ -81,6 +86,26 @@ type RelayPostResponse = {
   error?: string;
 };
 
+type RelayAction = "install-extension" | "start" | "stop" | "restart" | "open-test-tab" | "snapshot-test";
+
+type PrimaryAction = {
+  action: RelayAction;
+  label: string;
+  hint: string;
+  payload?: Record<string, unknown>;
+};
+
+type BrowserMode = "extension" | "managed" | "remote";
+
+type BrowserModeHealth = {
+  ready: boolean;
+  needsExtension: boolean;
+  installed: boolean;
+  running: boolean;
+  cdpReady: boolean;
+  tabConnected: boolean;
+};
+
 function formatObject(value: unknown): string {
   if (typeof value === "string") return value;
   try {
@@ -105,18 +130,143 @@ function statusPill(label: string, ok: boolean) {
   );
 }
 
+function actionSuccessMessage(action: RelayAction, mode: BrowserMode): string {
+  switch (action) {
+    case "install-extension":
+      return mode === "extension"
+        ? "Extension files are ready. In Chrome, open Extensions and load the unpacked extension."
+        : "Extension files are ready. They are only needed when using extension relay mode.";
+    case "start":
+      if (mode === "extension") {
+        return "Relay started. Open a tab and click the OpenClaw extension icon to connect it.";
+      }
+      if (mode === "remote") {
+        return "Remote browser connection started. If remote Chrome is reachable, control is ready.";
+      }
+      return "Browser profile started. Open any page to begin controlling it.";
+    case "stop":
+      return "Relay stopped.";
+    case "restart":
+      if (mode === "extension") {
+        return "Relay reconnected. If tabs still do not appear, click the extension icon in Chrome.";
+      }
+      if (mode === "remote") {
+        return "Remote connection refreshed. Verify the remote CDP endpoint is reachable from OpenClaw.";
+      }
+      return "Browser profile reconnected.";
+    case "open-test-tab":
+      return mode === "extension"
+        ? "Opened a test tab. Click the OpenClaw extension icon in that tab."
+        : "Opened a test tab in the selected browser profile.";
+    case "snapshot-test":
+      return "Connection test completed. If no errors appeared, browser control is ready.";
+    default:
+      return "Action completed.";
+  }
+}
+
+function humanizeRelayError(
+  rawError: string,
+  snapshot: RelaySnapshot | null,
+  mode: BrowserMode
+): string {
+  const err = rawError.toLowerCase();
+  if (err.includes("econnrefused") || err.includes("connect") || err.includes("cdp")) {
+    if (mode === "remote") {
+      return "Could not reach remote CDP endpoint. Check node host/VPC networking, then retry reconnect.";
+    }
+    return "Could not reach Chrome debugging endpoint. Start or reconnect relay, then try again.";
+  }
+  if (err.includes("extension") || err.includes("manifest")) {
+    if (mode !== "extension") {
+      return "Browser setup check failed. Open advanced diagnostics for details and retry.";
+    }
+    return "Browser extension is missing or not loaded yet. Install/repair extension and load it in Chrome.";
+  }
+  if (err.includes("tab") || err.includes("target")) {
+    return mode === "extension"
+      ? "No connected tab found. Open any tab and click the OpenClaw extension icon once."
+      : "No controllable tab found. Open a tab in the selected profile, then test again.";
+  }
+  if (mode === "extension" && !snapshot?.extension.installed) {
+    return "Extension is not installed yet. Install extension first.";
+  }
+  return rawError;
+}
+
+function toText(value: unknown, fallback = ""): string {
+  if (typeof value === "string") return value;
+  if (value == null) return fallback;
+  return String(value);
+}
+
+function tabTitle(tab: Record<string, unknown>): string {
+  return toText(tab.title, toText(tab.url, toText(tab.targetId, "Browser tab")));
+}
+
+function tabUrl(tab: Record<string, unknown>): string {
+  return toText(tab.url, "");
+}
+
+function tabId(tab: Record<string, unknown>, idx: number): string {
+  return toText(tab.targetId, toText(tab.id, `tab-${idx}`));
+}
+
+function prettyHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
+
+function isLoopbackHost(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "127.0.0.1" || host === "localhost" || host === "::1";
+  } catch {
+    return false;
+  }
+}
+
+function inferBrowserMode(snapshot: RelaySnapshot | null, selectedProfile: string): BrowserMode {
+  if (!snapshot) return "managed";
+  const effectiveProfile = selectedProfile || snapshot.status?.profile || "";
+  const profileMeta = (snapshot.profiles || []).find((p) => p.name === effectiveProfile);
+  const cdpUrl = profileMeta?.cdpUrl || snapshot.status?.cdpUrl || "";
+  const remoteByUrl = Boolean(cdpUrl) && !isLoopbackHost(cdpUrl);
+  if (profileMeta?.isRemote || remoteByUrl) return "remote";
+  if (!snapshot.status) {
+    return profileMeta?.name.toLowerCase() === "chrome" ? "extension" : "managed";
+  }
+  if (snapshot.status?.userDataDir || snapshot.status?.chosenBrowser) return "managed";
+  if (snapshot.status?.attachOnly) return "extension";
+  if (!snapshot.status?.userDataDir && !snapshot.status?.chosenBrowser) return "extension";
+  return "managed";
+}
+
+function computeModeHealth(snapshot: RelaySnapshot | null, mode: BrowserMode): BrowserModeHealth {
+  const installed = Boolean(snapshot?.health.installed);
+  const running = Boolean(snapshot?.health.running);
+  const cdpReady = Boolean(snapshot?.health.cdpReady);
+  const tabConnected = Boolean(snapshot?.health.tabConnected);
+  const needsExtension = mode === "extension";
+  const ready = running && cdpReady && tabConnected && (!needsExtension || installed);
+  return { ready, needsExtension, installed, running, cdpReady, tabConnected };
+}
+
 export function BrowserRelayView() {
   const [loading, setLoading] = useState(true);
   const [snapshot, setSnapshot] = useState<RelaySnapshot | null>(null);
   const [profile, setProfile] = useState<string>("");
-  const [docsUrl, setDocsUrl] = useState(
-    "https://docs.openclaw.ai/tools/browser#chrome-extension-relay-use-your-existing-chrome"
-  );
+  const [docsUrl, setDocsUrl] = useState("https://docs.openclaw.ai/tools/browser");
   const [testUrl, setTestUrl] = useState("https://example.com");
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [actionOutput, setActionOutput] = useState("");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const load = useCallback(
     async (silent = false) => {
@@ -142,7 +292,8 @@ export function BrowserRelayView() {
           if (first) setProfile(first);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        const raw = err instanceof Error ? err.message : String(err);
+        setError(raw);
       } finally {
         if (!silent) setLoading(false);
       }
@@ -167,7 +318,7 @@ export function BrowserRelayView() {
   }, [load]);
 
   const runAction = useCallback(
-    async (action: string, payload?: Record<string, unknown>) => {
+    async (action: RelayAction, payload?: Record<string, unknown>) => {
       setActionBusy(action);
       setError(null);
       setNotice(null);
@@ -186,15 +337,20 @@ export function BrowserRelayView() {
           throw new Error(data.error || `HTTP ${res.status}`);
         }
         if (data.snapshot) setSnapshot(data.snapshot);
+        const noticeMode = inferBrowserMode(
+          data.snapshot || snapshot,
+          profile || data.snapshot?.status?.profile || snapshot?.status?.profile || ""
+        );
         setActionOutput(formatObject(data.result || ""));
-        setNotice(`Action "${action}" completed.`);
+        setNotice(actionSuccessMessage(action, noticeMode));
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+        const raw = err instanceof Error ? err.message : String(err);
+        setError(raw);
       } finally {
         setActionBusy(null);
       }
     },
-    [profile]
+    [profile, snapshot]
   );
 
   const copyPath = useCallback(async () => {
@@ -208,28 +364,194 @@ export function BrowserRelayView() {
     }
   }, [snapshot]);
 
+  const copyTabUrl = useCallback(async (url: string) => {
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      setNotice("Page URL copied.");
+    } catch {
+      setError("Failed to copy URL.");
+    }
+  }, []);
+
   const activeTabs = snapshot?.tabs || [];
   const selectedProfile = profile || snapshot?.status?.profile || "";
-  const topIssues = useMemo(() => {
-    const issues: string[] = [];
-    if (!snapshot) return issues;
-    if (!snapshot.extension.installed) {
-      issues.push("Extension is not installed. Run Install Extension and load unpacked in Chrome.");
+  const mode = useMemo<BrowserMode>(
+    () => inferBrowserMode(snapshot, selectedProfile),
+    [selectedProfile, snapshot]
+  );
+  const modeHealth = useMemo(() => computeModeHealth(snapshot, mode), [snapshot, mode]);
+  const modeLabel =
+    mode === "extension"
+      ? "Extension relay"
+      : mode === "remote"
+        ? "Remote CDP"
+        : "Managed profile";
+  const setupDocsUrl = useMemo(() => {
+    if (mode === "extension") {
+      return (
+        docsUrl || "https://docs.openclaw.ai/tools/browser#chrome-extension-relay-use-your-existing-chrome"
+      );
     }
-    if (!snapshot.health.running) {
-      issues.push("Relay is not attached to a tab. Click the OpenClaw extension icon on an active tab.");
+    if (mode === "remote") {
+      return "https://docs.openclaw.ai/concepts/browser-profiles";
     }
-    if (!snapshot.health.cdpReady) {
-      issues.push("CDP is not ready. Check Chrome launch flags and profile settings.");
+    return "https://docs.openclaw.ai/tools/browser";
+  }, [docsUrl, mode]);
+  const friendlyError = useMemo(
+    () => (error ? humanizeRelayError(error, snapshot, mode) : null),
+    [error, mode, snapshot]
+  );
+
+  const setupSteps = useMemo(() => {
+    if (mode === "extension") {
+      return [
+        {
+          key: "extension",
+          title: "Install OpenClaw extension",
+          hint: "Install/repair extension and load it as an unpacked extension in Chrome.",
+          done: modeHealth.installed,
+        },
+        {
+          key: "connect",
+          title: "Connect an active tab",
+          hint: "Open any page and click the OpenClaw extension icon once.",
+          done: modeHealth.running && modeHealth.tabConnected,
+        },
+        {
+          key: "verify",
+          title: "Verify browser control",
+          hint: "Run connection test to confirm relay + CDP + tab connectivity.",
+          done: modeHealth.ready,
+        },
+      ];
     }
-    if (!snapshot.health.tabConnected) {
-      issues.push("No connected tabs detected for this profile.");
+    if (mode === "remote") {
+      return [
+        {
+          key: "remote",
+          title: "Connect remote CDP endpoint",
+          hint: "Ensure the remote browser endpoint is reachable from OpenClaw (node host/VPC).",
+          done: modeHealth.running && modeHealth.cdpReady,
+        },
+        {
+          key: "tab",
+          title: "Open a target tab",
+          hint: "Open a page in the remote browser profile or use Open Setup Tab.",
+          done: modeHealth.tabConnected,
+        },
+        {
+          key: "verify",
+          title: "Verify browser control",
+          hint: "Run connection test to confirm remote CDP + tab access.",
+          done: modeHealth.ready,
+        },
+      ];
     }
-    if (snapshot.errors.status) issues.push(`Status error: ${snapshot.errors.status}`);
-    if (snapshot.errors.tabs) issues.push(`Tabs error: ${snapshot.errors.tabs}`);
-    if (snapshot.extension.error) issues.push(`Extension error: ${snapshot.extension.error}`);
-    return issues.slice(0, 4);
-  }, [snapshot]);
+    return [
+      {
+        key: "start",
+        title: "Start managed browser profile",
+        hint: "Start the selected OpenClaw browser profile.",
+        done: modeHealth.running,
+      },
+      {
+        key: "tab",
+        title: "Open a target tab",
+        hint: "Open a page in the managed profile or use Open Setup Tab.",
+        done: modeHealth.tabConnected,
+      },
+      {
+        key: "verify",
+        title: "Verify browser control",
+        hint: "Run connection test to confirm profile + CDP + tab connectivity.",
+        done: modeHealth.ready,
+      },
+    ];
+  }, [mode, modeHealth]);
+
+  const primaryAction = useMemo<PrimaryAction | null>(() => {
+    if (!snapshot) return null;
+    if (mode === "extension" && !modeHealth.installed) {
+      return {
+        action: "install-extension",
+        label: "Install Extension",
+        hint: "First run setup: install extension files for Chrome.",
+      };
+    }
+    if (!modeHealth.running) {
+      return {
+        action: "start",
+        label: mode === "remote" ? "Connect Remote Browser" : "Start Browser Profile",
+        hint:
+          mode === "remote"
+            ? "Connect to remote CDP endpoint configured for this profile."
+            : "Start selected profile so OpenClaw can control tabs.",
+      };
+    }
+    if (!modeHealth.cdpReady) {
+      return {
+        action: "restart",
+        label: mode === "remote" ? "Reconnect Remote CDP" : "Reconnect Relay",
+        hint:
+          mode === "remote"
+            ? "Refresh remote CDP connectivity when endpoint is stale or unreachable."
+            : "Reconnect CDP if browser debug channel is stale.",
+      };
+    }
+    if (!modeHealth.tabConnected) {
+      return {
+        action: "open-test-tab",
+        label: "Open Setup Tab",
+        hint:
+          mode === "extension"
+            ? "Opens a tab where you can click the extension icon to connect."
+            : "Opens a test tab in this profile so browser control has a live target.",
+        payload: { url: testUrl },
+      };
+    }
+    return {
+      action: "snapshot-test",
+      label: "Test Browser Connection",
+      hint: "Runs a quick browser snapshot test to verify everything is ready.",
+    };
+  }, [mode, modeHealth, snapshot, testUrl]);
+
+  const guidance = useMemo(() => {
+    const notes: string[] = [];
+    if (!snapshot) return notes;
+    if (mode === "extension" && !modeHealth.installed) {
+      notes.push("Install extension first, then open Chrome extensions and load unpacked.");
+    }
+    if (mode === "extension" && (snapshot.profiles || []).some((p) => p.isRemote)) {
+      notes.push("For headless/VPC usage, switch Browser profile to a remote CDP profile (no extension click needed).");
+    }
+    if (mode === "extension" && (!modeHealth.running || !modeHealth.tabConnected)) {
+      notes.push("Open any browser tab and click the OpenClaw extension icon once to attach.");
+    }
+    if (mode !== "extension" && !modeHealth.tabConnected) {
+      notes.push("No extension click required. Open a tab in this profile or use Open Setup Tab.");
+    }
+    if (!modeHealth.cdpReady) {
+      notes.push(
+        mode === "remote"
+          ? "CDP is not ready. Verify remote endpoint reachability (host, port, token/proxy), then reconnect."
+          : "CDP is not ready. Try Reconnect Relay and ensure selected browser profile is running."
+      );
+    }
+    if (snapshot.errors.status) {
+      notes.push("Relay status check failed. Use Refresh and verify browser process is alive.");
+    }
+    if (mode === "extension" && snapshot.extension.error) {
+      notes.push("Extension diagnostics reported an issue. Use Install Extension to repair.");
+    }
+    if (mode !== "extension" && modeHealth.installed) {
+      notes.push("Extension is optional in this mode; it is only required for extension relay profiles.");
+    }
+    return notes.slice(0, 4);
+  }, [mode, modeHealth, snapshot]);
+
+  const primaryTab = activeTabs[0] || null;
 
   return (
     <SectionLayout>
@@ -240,43 +562,104 @@ export function BrowserRelayView() {
             Browser Relay
           </span>
         }
-        description="Debug Chrome extension relay connectivity and run browser control actions."
+        description="Guided setup for extension relay, managed profiles, and remote CDP."
         descriptionClassName="text-sm text-muted-foreground"
         actions={
-          <button
-            type="button"
-            onClick={() => void load()}
-            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
-            disabled={loading || actionBusy !== null}
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((prev) => !prev)}
+              className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
+            >
+              {showAdvanced ? (
+                <>
+                  <ChevronUp className="h-3.5 w-3.5" />
+                  Hide Advanced
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  Show Advanced
+                </>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
+              disabled={loading || actionBusy !== null}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
+          </div>
         }
       />
 
       <SectionBody width="narrow" className="space-y-4">
         <div className="rounded-xl border border-border/70 bg-card p-4">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium text-foreground">Relay health</p>
-            <div className="flex flex-wrap gap-2">
-              {loading && !snapshot ? (
-                <>
-                  <span className="h-6 w-24 animate-pulse rounded-full bg-muted" />
-                  <span className="h-6 w-24 animate-pulse rounded-full bg-muted" />
-                </>
-              ) : (
-                <>
-                  {statusPill("Extension", Boolean(snapshot?.health.installed))}
-                  {statusPill("Running", Boolean(snapshot?.health.running))}
-                  {statusPill("CDP Ready", Boolean(snapshot?.health.cdpReady))}
-                  {statusPill("Tab Connected", Boolean(snapshot?.health.tabConnected))}
-                  {statusPill("Relay Ready", Boolean(snapshot?.health.relayReady))}
-                </>
-              )}
-            </div>
+            <p className="text-sm font-medium text-foreground">Quick Start</p>
+            {snapshot && statusPill("Ready", modeHealth.ready)}
           </div>
 
+          <div className="space-y-2">
+            {setupSteps.map((step, idx) => (
+              <div
+                key={step.key}
+                className="rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2"
+              >
+                <p className="text-xs font-medium text-foreground/90">
+                  {idx + 1}. {step.title}
+                  <span className={step.done ? "ml-2 text-emerald-400" : "ml-2 text-zinc-400"}>
+                    {step.done ? "Done" : "Pending"}
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground/70">{step.hint}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                primaryAction &&
+                void runAction(primaryAction.action, primaryAction.payload)
+              }
+              className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-500/15 disabled:opacity-60"
+              disabled={loading || actionBusy !== null || !primaryAction}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              {actionBusy && primaryAction?.action === actionBusy
+                ? "Working..."
+                : primaryAction?.label || "Run Next Step"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void runAction("open-test-tab", { url: testUrl })}
+              className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
+              disabled={loading || actionBusy !== null}
+            >
+              <Globe className="h-3.5 w-3.5" />
+              Open Setup Tab
+            </button>
+            <a
+              href={setupDocsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
+            >
+              Setup Guide <ExternalLink className="h-3 w-3" />
+            </a>
+          </div>
+          {primaryAction && (
+            <p className="mt-2 text-xs text-muted-foreground/70">{primaryAction.hint}</p>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-border/70 bg-card p-4">
+          <p className="mb-3 text-sm font-medium text-foreground">Current Status</p>
           {loading && !snapshot ? (
             <div className="space-y-2">
               <div className="h-4 w-64 animate-pulse rounded bg-muted" />
@@ -285,53 +668,13 @@ export function BrowserRelayView() {
             </div>
           ) : (
             <div className="space-y-1 text-sm text-muted-foreground">
-              <p>Profile: <code>{selectedProfile || "default"}</code></p>
-              <p>CDP URL: <code>{snapshot?.status?.cdpUrl || "unknown"}</code></p>
+              <p>Browser profile: <code>{selectedProfile || "default"}</code></p>
               <p>Browser: <code>{snapshot?.status?.detectedBrowser || "unknown"}</code></p>
-              <p>Executable: <code>{snapshot?.status?.detectedExecutablePath || "unknown"}</code></p>
-              <p>Attach-only mode: <code>{snapshot?.status?.attachOnly ? "yes" : "no"}</code></p>
               <p>Connected tabs: <code>{activeTabs.length}</code></p>
+              <p>Connection mode: <code>{modeLabel}</code></p>
+              <p>CDP endpoint: <code>{snapshot?.status?.cdpUrl || "unknown"}</code></p>
             </div>
           )}
-        </div>
-
-        <div className="rounded-xl border border-border/70 bg-card p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-medium text-foreground">Extension</p>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => void runAction("install-extension")}
-                className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
-                disabled={loading || actionBusy !== null}
-              >
-                {actionBusy === "install-extension" ? "Installing..." : "Install / Repair"}
-              </button>
-              <button
-                type="button"
-                onClick={() => void copyPath()}
-                className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
-                disabled={loading || !snapshot?.extension.path}
-              >
-                <Copy className="h-3 w-3" />
-                Copy Path
-              </button>
-              <a
-                href={docsUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
-              >
-                Docs <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          </div>
-
-          <div className="space-y-1 text-sm text-muted-foreground">
-            <p>Path: <code>{snapshot?.extension.path || "unknown"}</code></p>
-            <p>Resolved path: <code>{snapshot?.extension.resolvedPath || "unknown"}</code></p>
-            <p>Manifest: <code>{snapshot?.extension.manifestName || "unknown"}</code> {snapshot?.extension.manifestVersion ? `(${snapshot.extension.manifestVersion})` : ""}</p>
-          </div>
         </div>
 
         <div className="rounded-xl border border-border/70 bg-card p-4">
@@ -339,7 +682,7 @@ export function BrowserRelayView() {
 
           <div className="mb-3 grid gap-2 md:grid-cols-2">
             <label className="space-y-1 md:min-w-56 md:max-w-56">
-              <span className="text-xs text-muted-foreground">Profile</span>
+              <span className="text-xs text-muted-foreground">Browser profile</span>
               <select
                 value={selectedProfile}
                 onChange={(e) => setProfile(e.target.value)}
@@ -354,7 +697,7 @@ export function BrowserRelayView() {
               </select>
             </label>
             <label className="space-y-1 md:min-w-56 md:max-w-56">
-              <span className="text-xs text-muted-foreground">Test URL</span>
+              <span className="text-xs text-muted-foreground">Quick-open URL</span>
               <input
                 value={testUrl}
                 onChange={(e) => setTestUrl(e.target.value)}
@@ -372,15 +715,8 @@ export function BrowserRelayView() {
               className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
               disabled={loading || actionBusy !== null}
             >
-              <Play className="h-3.5 w-3.5" /> Start
-            </button>
-            <button
-              type="button"
-              onClick={() => void runAction("stop")}
-              className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
-              disabled={loading || actionBusy !== null}
-            >
-              <Square className="h-3.5 w-3.5" /> Stop
+              <Play className="h-3.5 w-3.5" />{" "}
+              {mode === "remote" ? "Connect Remote Browser" : "Start Browser Profile"}
             </button>
             <button
               type="button"
@@ -388,15 +724,16 @@ export function BrowserRelayView() {
               className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
               disabled={loading || actionBusy !== null}
             >
-              <RotateCw className="h-3.5 w-3.5" /> Restart
+              <RotateCw className="h-3.5 w-3.5" />{" "}
+              {mode === "remote" ? "Reconnect Remote CDP" : "Reconnect Relay"}
             </button>
             <button
               type="button"
-              onClick={() => void runAction("open-test-tab", { url: testUrl })}
+              onClick={() => void runAction("stop")}
               className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
               disabled={loading || actionBusy !== null}
             >
-              <Globe className="h-3.5 w-3.5" /> Open Test Tab
+              <Square className="h-3.5 w-3.5" /> Stop Relay
             </button>
             <button
               type="button"
@@ -404,56 +741,138 @@ export function BrowserRelayView() {
               className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
               disabled={loading || actionBusy !== null}
             >
-              <Bug className="h-3.5 w-3.5" /> Snapshot Test
+              <Bug className="h-3.5 w-3.5" /> Test Browser Connection
             </button>
           </div>
-
-          {actionOutput && (
-            <pre className="mt-3 max-h-52 overflow-auto rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
-              {actionOutput}
-            </pre>
-          )}
         </div>
 
         <div className="rounded-xl border border-border/70 bg-card p-4">
-          <p className="mb-3 text-sm font-medium text-foreground">Connected tabs</p>
+          <p className="mb-3 text-sm font-medium text-foreground">Connected Tabs</p>
           {activeTabs.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No connected tabs for this profile.</p>
+            <p className="text-xs text-muted-foreground">
+              {mode === "extension"
+                ? "No connected tabs yet. Open any tab and click the OpenClaw extension icon."
+                : "No connected tabs yet. Open a tab in this profile or use Open Setup Tab."}
+            </p>
           ) : (
-            <div className="space-y-2">
-              {activeTabs.slice(0, 20).map((tab, i) => (
-                <div key={`${String(tab.targetId || tab.id || i)}`} className="rounded-md border border-border/60 bg-background/50 px-3 py-2 text-xs">
-                  <p className="font-medium text-foreground">{String(tab.title || tab.url || tab.targetId || "Tab")}</p>
-                  <p className="mt-1 text-muted-foreground">{String(tab.url || "")}</p>
+            <div className="space-y-3">
+              {primaryTab && (
+                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2">
+                  <p className="text-xs font-semibold text-emerald-300">Primary connected tab</p>
+                  <p className="mt-1 text-sm text-foreground/90">{tabTitle(primaryTab)}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{tabUrl(primaryTab)}</p>
+                  {tabUrl(primaryTab) && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      <span className="rounded border border-foreground/10 bg-background/60 px-2 py-1 text-xs text-muted-foreground">
+                        {prettyHost(tabUrl(primaryTab))}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void copyTabUrl(tabUrl(primaryTab))}
+                        className="inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-xs hover:bg-muted"
+                      >
+                        <Copy className="h-3 w-3" /> Copy URL
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+              {activeTabs.slice(1, 10).map((tab, i) => (
+                <div
+                  key={`${tabId(tab, i + 1)}`}
+                  className="rounded-md border border-border/60 bg-background/50 px-3 py-2 text-xs"
+                >
+                  <p className="font-medium text-foreground">{tabTitle(tab)}</p>
+                  <p className="mt-1 text-muted-foreground">{tabUrl(tab)}</p>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {topIssues.length > 0 && (
+        {guidance.length > 0 && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
             <div className="mb-2 inline-flex items-center gap-1 text-sm font-medium text-amber-200">
-              <Plug className="h-4 w-4" />
-              Quick diagnostics
+              <Sparkles className="h-4 w-4" />
+              What to do next
             </div>
             <ul className="space-y-1 text-xs text-amber-100">
-              {topIssues.map((issue, i) => (
-                <li key={`${issue}-${i}`}>- {issue}</li>
+              {guidance.map((note, i) => (
+                <li key={`${note}-${i}`}>- {note}</li>
               ))}
             </ul>
           </div>
         )}
 
-        {error && (
+        {friendlyError && (
           <div className="rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">
-            {error}
+            {friendlyError}
+            {showAdvanced && error && friendlyError !== error && (
+              <p className="mt-2 text-[11px] text-red-100/70">Raw error: {error}</p>
+            )}
           </div>
         )}
 
         {notice && (
           <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
             {notice}
+          </div>
+        )}
+
+        {showAdvanced && (
+          <div className="rounded-xl border border-border/70 bg-card p-4">
+            <p className="mb-3 text-sm font-medium text-foreground">Advanced Diagnostics</p>
+            <div className="mb-3 flex flex-wrap gap-2">
+              {statusPill("Extension", Boolean(snapshot?.health.installed))}
+              {statusPill("Running", Boolean(snapshot?.health.running))}
+              {statusPill("CDP Ready", Boolean(snapshot?.health.cdpReady))}
+              {statusPill("Tab Connected", Boolean(snapshot?.health.tabConnected))}
+              {statusPill("Relay Ready", modeHealth.ready)}
+            </div>
+
+            <div className="space-y-1 text-sm text-muted-foreground">
+              <p>CDP URL: <code>{snapshot?.status?.cdpUrl || "unknown"}</code></p>
+              <p>Executable: <code>{snapshot?.status?.detectedExecutablePath || "unknown"}</code></p>
+              <p>Extension path: <code>{snapshot?.extension.path || "unknown"}</code></p>
+              <p>Resolved path: <code>{snapshot?.extension.resolvedPath || "unknown"}</code></p>
+              <p>
+                Manifest: <code>{snapshot?.extension.manifestName || "unknown"}</code>{" "}
+                {snapshot?.extension.manifestVersion ? `(${snapshot.extension.manifestVersion})` : ""}
+              </p>
+            </div>
+
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void runAction("install-extension")}
+                className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
+                disabled={loading || actionBusy !== null}
+              >
+                {actionBusy === "install-extension" ? "Installing..." : "Install / Repair Extension"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void copyPath()}
+                className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
+                disabled={loading || !snapshot?.extension.path}
+              >
+                <Copy className="h-3 w-3" /> Copy Extension Path
+              </button>
+            </div>
+
+            {(snapshot?.errors.status || snapshot?.errors.tabs || snapshot?.extension.error) && (
+              <div className="mt-3 rounded-md border border-amber-500/20 bg-amber-500/5 p-2 text-xs text-amber-200/90">
+                {snapshot?.errors.status && <p>Status error: {snapshot.errors.status}</p>}
+                {snapshot?.errors.tabs && <p>Tabs error: {snapshot.errors.tabs}</p>}
+                {snapshot?.extension.error && <p>Extension error: {snapshot.extension.error}</p>}
+              </div>
+            )}
+
+            {actionOutput && (
+              <pre className="mt-3 max-h-52 overflow-auto rounded-md border border-border bg-background p-2 text-xs text-muted-foreground">
+                {actionOutput}
+              </pre>
+            )}
           </div>
         )}
       </SectionBody>

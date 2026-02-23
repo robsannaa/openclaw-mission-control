@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Baskervville, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 import { Header, AgentChatPanel } from "@/components/header";
@@ -8,9 +8,15 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ChatNotificationToast } from "@/components/chat-notification-toast";
 import { RestartAnnouncementBar } from "@/components/restart-announcement-bar";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+});
+
+const baskervville = Baskervville({
+  variable: "--font-baskervville",
+  subsets: ["latin"],
+  weight: "400",
 });
 
 const geistMono = Geist_Mono({
@@ -94,7 +100,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
       </head>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-mono antialiased`}
+        className={`${inter.variable} ${baskervville.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider>
           <KeyboardShortcuts />

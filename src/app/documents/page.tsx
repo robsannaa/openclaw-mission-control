@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { RouteSectionView } from "@/components/route-section-view";
 
 export default function DocumentsPage() {
-  redirect("/docs");
+  return <RouteSectionView section="docs" />;
 }

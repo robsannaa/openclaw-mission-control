@@ -76,6 +76,9 @@ type Agent = {
   bindings: string[];
   channels: string[];
   identitySnippet: string | null;
+  identityTheme: string | null;
+  identityAvatar: string | null;
+  identitySource: string | null;
   subagents: string[];
   runtimeSubagents: Array<{
     sessionKey: string;
@@ -2248,6 +2251,7 @@ function AddAgentModal({
   const [fallbacks, setFallbacks] = useState<string[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [workspace, setWorkspace] = useState("");
+  const [agentDir, setAgentDir] = useState("");
   const [setAsDefault, setSetAsDefault] = useState(false);
   const [subagents, setSubagents] = useState<string[]>([]);
   const [bindings, setBindings] = useState<string[]>([]);
@@ -2299,6 +2303,7 @@ function AddAgentModal({
           default: setAsDefault || undefined,
           subagents: subagents.length > 0 ? subagents : undefined,
           workspace: workspace.trim() || undefined,
+          agentDir: agentDir.trim() || undefined,
           bindings: bindings.length > 0 ? bindings : undefined,
         }),
       });
@@ -2318,7 +2323,7 @@ function AddAgentModal({
       setError(String(err));
     }
     setBusy(false);
-  }, [name, displayName, model, fallbacks, setAsDefault, subagents, workspace, bindings, onCreated, onClose]);
+  }, [name, displayName, model, fallbacks, setAsDefault, subagents, workspace, agentDir, bindings, onCreated, onClose]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
@@ -2452,6 +2457,22 @@ function AddAgentModal({
                   />
                   <p className="mt-1 text-xs text-muted-foreground/40">
                     Defaults to <code>~/.openclaw/workspace-{name || "<name>"}</code>
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-muted-foreground/70">
+                    Custom agent state directory
+                  </label>
+                  <input
+                    type="text"
+                    value={agentDir}
+                    onChange={(e) => setAgentDir(e.target.value)}
+                    placeholder={`~/.openclaw/agents/${name || "<name>"}/agent`}
+                    className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs font-mono text-foreground/80 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                    disabled={busy}
+                  />
+                  <p className="mt-1 text-xs text-muted-foreground/40">
+                    Matches <code>openclaw agents add --agent-dir</code>
                   </p>
                 </div>
                 <label className="flex cursor-pointer items-center gap-2">
@@ -2595,6 +2616,15 @@ function EditAgentModal({
   const [fallbacks, setFallbacks] = useState<string[]>(agent.fallbackModels);
   const [subagents, setSubagents] = useState<string[]>(agent.subagents);
   const [bindings, setBindings] = useState<string[]>(initialBindings);
+  const [displayName, setDisplayName] = useState(agent.name);
+  const [setAsDefault, setSetAsDefault] = useState(agent.isDefault);
+  const [identityName, setIdentityName] = useState(agent.name);
+  const [identityEmoji, setIdentityEmoji] = useState(agent.emoji);
+  const [identityTheme, setIdentityTheme] = useState(agent.identityTheme || "");
+  const [identityAvatar, setIdentityAvatar] = useState(agent.identityAvatar || "");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -2683,8 +2713,7 @@ function EditAgentModal({
     );
   }, []);
 
-  /* ── Save ── */
-  const handleSave = useCallback(async () => {
+  const handleLoadIdentityFromWorkspace = useCallback(async () => {
     setBusy(true);
     setError(null);
     try {
@@ -2692,13 +2721,84 @@ function EditAgentModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "update",
+          action: "set-identity",
           id: agent.id,
-          model: model || null,
-          fallbacks: fallbacks.length > 0 ? fallbacks : [],
-          subagents,
-          bindings,
+          fromIdentity: true,
+          workspace: agent.workspace,
         }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `Failed (HTTP ${res.status})`);
+      }
+      requestRestart("Agent identity was updated from IDENTITY.md.");
+      setSuccess(true);
+      setTimeout(() => {
+        onSaved();
+        onClose();
+      }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }, [agent.id, agent.workspace, onClose, onSaved]);
+
+  const handleDelete = useCallback(async () => {
+    if (deleteConfirmText.trim() !== agent.id) {
+      setError(`Type "${agent.id}" to confirm delete.`);
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "delete",
+          id: agent.id,
+          force: true,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || `Failed (HTTP ${res.status})`);
+      }
+      requestRestart("Agent deleted — restart to clean up routes and sessions.");
+      onSaved();
+      onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
+    }
+  }, [agent.id, deleteConfirmText, onClose, onSaved]);
+
+  /* ── Save ── */
+  const handleSave = useCallback(async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const updateBody: Record<string, unknown> = {
+        action: "update",
+        id: agent.id,
+        model: model || null,
+        fallbacks: fallbacks.length > 0 ? fallbacks : [],
+        subagents,
+        bindings,
+      };
+      if (displayName !== agent.name) {
+        updateBody.displayName = displayName;
+      }
+      if (setAsDefault !== agent.isDefault) {
+        updateBody.default = setAsDefault;
+      }
+
+      const res = await fetch("/api/agents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updateBody),
       });
       const data = await res.json();
       if (!res.ok || data.error) {
@@ -2706,6 +2806,47 @@ function EditAgentModal({
         setBusy(false);
         return;
       }
+
+      const identityBody: Record<string, unknown> = {
+        action: "set-identity",
+        id: agent.id,
+      };
+      let hasIdentityChanges = false;
+      const nextIdentityName = identityName.trim();
+      const nextIdentityEmoji = identityEmoji.trim();
+      const nextIdentityTheme = identityTheme.trim();
+      const nextIdentityAvatar = identityAvatar.trim();
+      if (nextIdentityName && nextIdentityName !== agent.name) {
+        identityBody.name = nextIdentityName;
+        hasIdentityChanges = true;
+      }
+      if (nextIdentityEmoji && nextIdentityEmoji !== agent.emoji) {
+        identityBody.emoji = nextIdentityEmoji;
+        hasIdentityChanges = true;
+      }
+      if (nextIdentityTheme && nextIdentityTheme !== (agent.identityTheme || "")) {
+        identityBody.theme = nextIdentityTheme;
+        hasIdentityChanges = true;
+      }
+      if (nextIdentityAvatar && nextIdentityAvatar !== (agent.identityAvatar || "")) {
+        identityBody.avatar = nextIdentityAvatar;
+        hasIdentityChanges = true;
+      }
+
+      if (hasIdentityChanges) {
+        const identityRes = await fetch("/api/agents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(identityBody),
+        });
+        const identityData = await identityRes.json();
+        if (!identityRes.ok || identityData.error) {
+          setError(identityData.error || `Identity update failed (HTTP ${identityRes.status})`);
+          setBusy(false);
+          return;
+        }
+      }
+
       setSuccess(true);
       requestRestart("Agent settings updated — restart to pick up changes.");
       setTimeout(() => {
@@ -2716,17 +2857,37 @@ function EditAgentModal({
       setError(String(err));
     }
     setBusy(false);
-  }, [agent.id, model, fallbacks, subagents, bindings, onSaved, onClose]);
+  }, [
+    agent.emoji,
+    agent.id,
+    agent.identityAvatar,
+    agent.identityTheme,
+    agent.isDefault,
+    agent.name,
+    bindings,
+    displayName,
+    fallbacks,
+    identityAvatar,
+    identityEmoji,
+    identityName,
+    identityTheme,
+    model,
+    onClose,
+    onSaved,
+    setAsDefault,
+    subagents,
+  ]);
 
   const sc = STATUS_COLORS[agent.status] || STATUS_COLORS.unknown;
   const otherAgents = allAgents.filter((a) => a.id !== agent.id);
+  const mutating = busy || deleting;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
         onClick={() => {
-          if (!busy) onClose();
+          if (!mutating) onClose();
         }}
       />
 
@@ -2771,7 +2932,7 @@ function EditAgentModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={busy}
+            disabled={mutating}
             className="rounded p-1 text-muted-foreground/60 hover:text-foreground/70 disabled:opacity-40"
           >
             <X className="h-4 w-4" />
@@ -2780,6 +2941,89 @@ function EditAgentModal({
 
         {/* ── Scrollable form ── */}
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
+          {/* 1. Identity + default */}
+          <div className="space-y-3 rounded-lg border border-foreground/10 bg-foreground/[0.02] p-3">
+            <label className="block text-xs font-semibold text-foreground/70">
+              Display Name (dashboard label)
+              <input
+                type="text"
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder={agent.id}
+                className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                disabled={mutating}
+              />
+            </label>
+
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="block text-xs font-semibold text-foreground/70">
+                Identity name
+                <input
+                  type="text"
+                  value={identityName}
+                  onChange={(e) => setIdentityName(e.target.value)}
+                  placeholder={agent.name}
+                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                  disabled={mutating}
+                />
+              </label>
+              <label className="block text-xs font-semibold text-foreground/70">
+                Identity emoji
+                <input
+                  type="text"
+                  value={identityEmoji}
+                  onChange={(e) => setIdentityEmoji(e.target.value)}
+                  placeholder={agent.emoji}
+                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                  disabled={mutating}
+                />
+              </label>
+              <label className="block text-xs font-semibold text-foreground/70">
+                Identity theme
+                <input
+                  type="text"
+                  value={identityTheme}
+                  onChange={(e) => setIdentityTheme(e.target.value)}
+                  placeholder={agent.identityTheme || "default"}
+                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                  disabled={mutating}
+                />
+              </label>
+              <label className="block text-xs font-semibold text-foreground/70">
+                Identity avatar (path/url/data URI)
+                <input
+                  type="text"
+                  value={identityAvatar}
+                  onChange={(e) => setIdentityAvatar(e.target.value)}
+                  placeholder={agent.identityAvatar || "avatars/agent.png"}
+                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                  disabled={mutating}
+                />
+              </label>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground/80">
+                <input
+                  type="checkbox"
+                  checked={setAsDefault}
+                  onChange={(e) => setSetAsDefault(e.target.checked)}
+                  disabled={mutating}
+                  className="h-3.5 w-3.5 rounded border-foreground/20 text-violet-600 focus:ring-violet-500/30"
+                />
+                Set as default agent
+              </label>
+              <button
+                type="button"
+                onClick={handleLoadIdentityFromWorkspace}
+                disabled={mutating}
+                className="rounded-lg border border-foreground/10 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/5 disabled:opacity-40"
+              >
+                Load from IDENTITY.md
+              </button>
+            </div>
+          </div>
+
           {/* 1. Primary Model */}
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
@@ -2975,6 +3219,69 @@ function EditAgentModal({
             </code>
           </div>
 
+          <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2.5">
+            <p className="text-xs font-semibold text-red-300">Danger Zone</p>
+            <p className="mt-1 text-xs text-red-200/80">
+              Delete this agent and prune workspace/state (CLI parity: <code>openclaw agents delete</code>).
+            </p>
+            {!confirmDelete ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmDelete(true);
+                  setDeleteConfirmText("");
+                  setError(null);
+                }}
+                disabled={mutating}
+                className="mt-2 rounded-lg border border-red-500/40 px-3 py-1.5 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/10 disabled:opacity-40"
+              >
+                Delete Agent…
+              </button>
+            ) : (
+              <div className="mt-2 space-y-2">
+                <p className="text-xs text-red-200/80">
+                  Type <code>{agent.id}</code> to confirm.
+                </p>
+                <input
+                  type="text"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder={agent.id}
+                  className="w-full rounded-lg border border-red-500/30 bg-black/20 px-3 py-2 text-xs text-red-100 placeholder:text-red-200/40 focus:border-red-400/60 focus:outline-none"
+                  disabled={mutating}
+                />
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={mutating || deleteConfirmText.trim() !== agent.id}
+                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-red-500 disabled:opacity-40"
+                  >
+                    {deleting ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Deleting…
+                      </span>
+                    ) : (
+                      "Confirm Delete"
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmDelete(false);
+                      setDeleteConfirmText("");
+                    }}
+                    disabled={mutating}
+                    className="rounded-lg border border-red-500/20 px-3 py-1.5 text-xs text-red-200/80 transition-colors hover:bg-red-500/10 disabled:opacity-40"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Error */}
           {error && (
             <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
@@ -2997,7 +3304,7 @@ function EditAgentModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={busy}
+            disabled={mutating}
             className="rounded-lg border border-foreground/10 px-4 py-2 text-xs text-muted-foreground transition-colors hover:bg-foreground/5 disabled:opacity-40"
           >
             Cancel
@@ -3005,7 +3312,7 @@ function EditAgentModal({
           <button
             type="button"
             onClick={handleSave}
-            disabled={busy || success}
+            disabled={mutating || success}
             className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
           >
             {busy ? (
@@ -3038,14 +3345,125 @@ type WorkspaceFileEntry = {
   ext: string;
 };
 
+type WorkspaceFileCategoryKey =
+  | "foundational"
+  | "skills"
+  | "memory"
+  | "config"
+  | "source"
+  | "content"
+  | "other";
+
+type WorkspaceFileCategory = {
+  key: WorkspaceFileCategoryKey;
+  label: string;
+  hint: string;
+  files: WorkspaceFileEntry[];
+};
+
+const FOUNDATIONAL_WORKSPACE_FILES = new Set([
+  "AGENTS.MD",
+  "SOUL.MD",
+  "TOOLS.MD",
+  "IDENTITY.MD",
+  "USER.MD",
+  "HEARTBEAT.MD",
+  "BOOTSTRAP.MD",
+  "BOOT.MD",
+  "MEMORY.MD",
+  "SYSTEM.MD",
+]);
+
+const SOURCE_EXTENSIONS = new Set([
+  ".ts",
+  ".tsx",
+  ".js",
+  ".jsx",
+  ".mjs",
+  ".cjs",
+  ".py",
+  ".go",
+  ".rs",
+  ".java",
+  ".kt",
+  ".swift",
+  ".rb",
+  ".php",
+  ".cpp",
+  ".c",
+  ".h",
+  ".hpp",
+  ".cs",
+  ".sh",
+]);
+
+const CONFIG_EXTENSIONS = new Set([
+  ".json",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".ini",
+  ".env",
+  ".conf",
+  ".config",
+]);
+
+function baseName(pathValue: string): string {
+  const parts = pathValue.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || pathValue;
+}
+
+function classifyWorkspaceFile(file: WorkspaceFileEntry): WorkspaceFileCategoryKey {
+  const rel = file.relativePath.replace(/\\/g, "/");
+  const lower = rel.toLowerCase();
+  const name = baseName(rel);
+  const upperName = name.toUpperCase();
+
+  if (FOUNDATIONAL_WORKSPACE_FILES.has(upperName)) return "foundational";
+  if (
+    lower.includes("/skills/") ||
+    lower.endsWith("/skill.md") ||
+    lower.endsWith("/skill.json") ||
+    upperName === "SKILL.MD"
+  ) {
+    return "skills";
+  }
+  if (
+    lower.includes("/memory/") ||
+    lower.includes("/journal/") ||
+    /^\d{4}-\d{2}-\d{2}/.test(name)
+  ) {
+    return "memory";
+  }
+  if (
+    CONFIG_EXTENSIONS.has(file.ext) ||
+    lower.includes("/config/") ||
+    lower.endsWith("openclaw.json") ||
+    lower.endsWith("package.json")
+  ) {
+    return "config";
+  }
+  if (SOURCE_EXTENSIONS.has(file.ext)) return "source";
+  if (
+    file.ext === ".md" ||
+    file.ext === ".txt" ||
+    file.ext === ".rst" ||
+    file.ext === ".adoc" ||
+    file.ext === ".html"
+  ) {
+    return "content";
+  }
+  return "other";
+}
+
 function WorkspaceFilesModal({
   workspacePath,
   onClose,
-  onOpenDocs,
+  onOpenDocument,
 }: {
   workspacePath: string;
   onClose: () => void;
-  onOpenDocs: (workspacePath: string) => void;
+  onOpenDocument: (workspacePath: string, relativePath?: string | null) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -3098,6 +3516,68 @@ function WorkspaceFilesModal({
     if (!q) return files;
     return files.filter((f) => f.relativePath.toLowerCase().includes(q));
   }, [files, search]);
+
+  const categorizedFiles = useMemo(() => {
+    const buckets: Record<WorkspaceFileCategoryKey, WorkspaceFileEntry[]> = {
+      foundational: [],
+      skills: [],
+      memory: [],
+      config: [],
+      source: [],
+      content: [],
+      other: [],
+    };
+    for (const file of filteredFiles) {
+      buckets[classifyWorkspaceFile(file)].push(file);
+    }
+
+    const order: Array<Omit<WorkspaceFileCategory, "files">> = [
+      {
+        key: "foundational",
+        label: "Foundational",
+        hint: "USER.md, SOUL.md, AGENTS.md and core identity files",
+      },
+      {
+        key: "skills",
+        label: "Skills",
+        hint: "Skill specs and skill-related files",
+      },
+      {
+        key: "memory",
+        label: "Memory & Journal",
+        hint: "Memory files, journals, and chronological notes",
+      },
+      {
+        key: "config",
+        label: "Config",
+        hint: "Configuration and runtime metadata",
+      },
+      {
+        key: "source",
+        label: "Source Code",
+        hint: "Executable/source files in this workspace",
+      },
+      {
+        key: "content",
+        label: "Documents & Notes",
+        hint: "Markdown/text docs and narrative content",
+      },
+      {
+        key: "other",
+        label: "Other",
+        hint: "Everything else",
+      },
+    ];
+
+    return order
+      .map((meta) => ({
+        ...meta,
+        files: [...buckets[meta.key]].sort((a, b) =>
+          a.relativePath.localeCompare(b.relativePath)
+        ),
+      }))
+      .filter((group) => group.files.length > 0);
+  }, [filteredFiles]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
@@ -3163,20 +3643,43 @@ function WorkspaceFilesModal({
               No files match this filter.
             </p>
           ) : (
-            <div className="space-y-1.5">
-              {filteredFiles.map((file) => (
-                <div
-                  key={file.relativePath}
-                  className="rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2"
-                >
-                  <p className="truncate text-xs font-medium text-foreground/80">
-                    {file.relativePath}
-                  </p>
-                  <p className="mt-0.5 text-xs text-muted-foreground/60">
-                    {file.ext || "(no ext)"} · {formatBytes(file.size)} ·{" "}
-                    {formatAgo(file.mtime)}
-                  </p>
-                </div>
+            <div className="space-y-3">
+              {categorizedFiles.map((group) => (
+                <section key={group.key} className="space-y-1.5">
+                  <div className="sticky top-0 z-[1] rounded-lg border border-foreground/10 bg-card/95 px-2.5 py-1.5 backdrop-blur-sm">
+                    <p className="text-xs font-semibold text-foreground/80">
+                      {group.label}{" "}
+                      <span className="text-muted-foreground/60">
+                        ({group.files.length})
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-muted-foreground/50">
+                      {group.hint}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    {group.files.map((file) => (
+                      <button
+                        key={file.relativePath}
+                        type="button"
+                        onClick={() => {
+                          onOpenDocument(workspacePath, file.relativePath);
+                          onClose();
+                        }}
+                        className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-left transition-colors hover:border-violet-500/20 hover:bg-violet-500/5"
+                        title="Open in Documents"
+                      >
+                        <p className="truncate text-xs font-medium text-foreground/80">
+                          {file.relativePath}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground/60">
+                          {file.ext || "(no ext)"} · {formatBytes(file.size)} ·{" "}
+                          {formatAgo(file.mtime)}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </section>
               ))}
             </div>
           )}
@@ -3193,12 +3696,12 @@ function WorkspaceFilesModal({
           <button
             type="button"
             onClick={() => {
-              onOpenDocs(workspacePath);
+              onOpenDocument(workspacePath, null);
               onClose();
             }}
             className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500"
           >
-            Open in Docs
+            Open Workspace in Documents
             <ExternalLink className="h-3 w-3" />
           </button>
         </div>
@@ -3234,10 +3737,21 @@ export function AgentsView() {
     setSelectedWorkspacePath(workspacePath);
   }, []);
 
-  const openDocsForWorkspace = useCallback((workspacePath: string) => {
+  const openDocumentForWorkspace = useCallback((workspacePath: string, relativePath?: string | null) => {
+    const normalizedWorkspacePath = workspacePath.replace(/\\/g, "/");
+    const workspaceName =
+      normalizedWorkspacePath.split("/").filter(Boolean).pop() || "workspace";
     const params = new URLSearchParams();
-    params.set("workspace", workspacePath);
-    router.push(`/docs?${params.toString()}`);
+    params.set("workspace", workspaceName);
+    if (relativePath) {
+      const normalizedRelativePath = relativePath
+        .replace(/\\/g, "/")
+        .replace(/^\/+/, "");
+      if (normalizedRelativePath) {
+        params.set("path", `${workspaceName}/${normalizedRelativePath}`);
+      }
+    }
+    router.push(`/documents?${params.toString()}`);
   }, [router]);
 
   const fetchAgents = useCallback(async () => {
@@ -3517,7 +4031,7 @@ export function AgentsView() {
         <WorkspaceFilesModal
           workspacePath={selectedWorkspacePath}
           onClose={() => setSelectedWorkspacePath(null)}
-          onOpenDocs={openDocsForWorkspace}
+          onOpenDocument={openDocumentForWorkspace}
         />
       )}
     </SectionLayout>
