@@ -131,7 +131,7 @@ function formatAgo(ts?: number): string {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
-export function PermissionsView() {
+export function PermissionsView({ embedded = false }: { embedded?: boolean } = {}) {
   const [snapshot, setSnapshot] = useState<PermissionSnapshot | null>(null);
   const [agents, setAgents] = useState<AgentItem[]>([]);
   const [pairedDevices, setPairedDevices] = useState<PairedDevice[]>([]);
@@ -365,8 +365,8 @@ export function PermissionsView() {
     );
   }, [mutate, editSecurity, editAsk, editAskFallback]);
 
-  return (
-    <SectionLayout>
+  const content = (
+    <>
       <SectionHeader
         title={
           <span className="flex items-center gap-2 text-sm">
@@ -415,10 +415,15 @@ export function PermissionsView() {
             </button>
           </div>
         }
-        className="bg-card/60"
+        className={cn("bg-card/60", embedded && "border-b border-foreground/10")}
       />
 
-      <SectionBody width="wide" padding="compact" innerClassName="space-y-4">
+      <SectionBody
+        width="wide"
+        padding="compact"
+        innerClassName="space-y-4"
+        className={embedded ? "overflow-visible" : undefined}
+      >
         {initialLoading && (
           <>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
@@ -1059,6 +1064,16 @@ export function PermissionsView() {
         </>
         )}
       </SectionBody>
-    </SectionLayout>
+    </>
   );
+
+  if (embedded) {
+    return (
+      <div className="overflow-hidden rounded-2xl border border-foreground/10 bg-card/40">
+        {content}
+      </div>
+    );
+  }
+
+  return <SectionLayout>{content}</SectionLayout>;
 }

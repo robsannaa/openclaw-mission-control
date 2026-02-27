@@ -74,6 +74,10 @@ require_cmd() {
 require_cmd node
 require_cmd npm
 
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  warn "Running setup as root/sudo can cause permission and native dependency issues. Prefer a normal user shell."
+fi
+
 if ! command -v openclaw >/dev/null 2>&1; then
   warn "openclaw CLI was not found in PATH. Mission Control can still start, but data loading may fail."
 fi
@@ -85,11 +89,31 @@ fi
 
 cd "$ROOT_DIR"
 
+check_lightningcss() {
+  node -e 'require("lightningcss")' >/dev/null 2>&1
+}
+
 log "Installing dependencies..."
 if [[ -f package-lock.json ]]; then
-  npm ci --no-audit --no-fund
+  npm ci --include=optional --no-audit --no-fund
 else
-  npm install --no-audit --no-fund
+  npm install --include=optional --no-audit --no-fund
+fi
+
+if ! check_lightningcss; then
+  warn "lightningcss native package was not detected. Retrying install with optional dependencies..."
+  npm install --include=optional --no-audit --no-fund --no-save lightningcss
+fi
+
+if ! check_lightningcss; then
+  cat >&2 <<'EOF'
+[error] lightningcss native dependency is missing (required by Tailwind/Next build).
+Try:
+  1) rm -rf node_modules package-lock.json
+  2) npm install --include=optional
+  3) rerun ./setup.sh (without sudo)
+EOF
+  exit 1
 fi
 
 if [[ "$DEV_MODE" -eq 0 ]]; then

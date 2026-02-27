@@ -27,6 +27,7 @@ const SECTION_TO_PATH: Record<string, string> = {
   logs: "/logs",
   usage: "/usage",
   terminal: "/terminal",
+  security: "/security",
   permissions: "/permissions",
   tailscale: "/tailscale",
   browser: "/browser",

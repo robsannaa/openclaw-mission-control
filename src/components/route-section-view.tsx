@@ -83,8 +83,8 @@ const TerminalView = dynamic(
   () => import("@/components/terminal-view").then((m) => m.TerminalView),
   { loading: () => <SectionLoading /> }
 );
-const PermissionsView = dynamic(
-  () => import("@/components/permissions-view").then((m) => m.PermissionsView),
+const SecurityView = dynamic(
+  () => import("@/components/security-view").then((m) => m.SecurityView),
   { loading: () => <SectionLoading /> }
 );
 const TailscaleView = dynamic(
@@ -133,6 +133,7 @@ export type DashboardSection =
   | "logs"
   | "usage"
   | "terminal"
+  | "security"
   | "permissions"
   | "tailscale"
   | "browser"
@@ -180,8 +181,10 @@ function SectionContent({ section }: { section: DashboardSection }) {
       return <UsageView />;
     case "terminal":
       return <TerminalView />;
+    case "security":
+      return <SecurityView initialTab="audit" />;
     case "permissions":
-      return <PermissionsView />;
+      return <SecurityView initialTab="permissions" />;
     case "tailscale":
       return <TailscaleView />;
     case "browser":

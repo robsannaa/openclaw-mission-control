@@ -33,7 +33,7 @@ import {
   BarChart3,
   Menu,
   X,
-  Shield,
+  ShieldCheck,
   Package,
   ChevronRight,
   ChevronLeft,
@@ -88,7 +88,7 @@ const navItems: NavItem[] = [
   // ── Configuration ──
   { group: "Configuration", section: "models", label: "Models", icon: Cpu, href: "/models" },
   { section: "accounts", label: "Accounts & Keys", icon: KeyRound, href: "/accounts" },
-  { section: "permissions", label: "Permissions", icon: Shield, href: "/permissions" },
+  { section: "security", label: "Security", icon: ShieldCheck, href: "/security" },
   { section: "hooks", label: "Hooks", icon: Webhook, href: "/hooks" },
   { section: "tailscale", label: "Tailscale", icon: Waypoints, href: "/tailscale" },
   { section: "settings", label: "Settings", icon: Settings2, href: "/settings" },
@@ -109,6 +109,7 @@ function deriveSectionFromPath(pathname: string): string | null {
     system: "channels",
     documents: "docs",
     memories: "memory",
+    permissions: "security",
   };
   if (aliases[first]) return aliases[first];
   const known = new Set([
@@ -130,6 +131,7 @@ function deriveSectionFromPath(pathname: string): string | null {
     "browser",
     "search",
     "tailscale",
+    "security",
     "permissions",
     "hooks",
     "usage",
@@ -166,11 +168,9 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
     () => 0 // SSR fallback
   );
 
-  let lastGroup: string | undefined;
-
   return (
     <nav className={cn("flex flex-1 flex-col gap-0.5 overflow-y-auto pt-3", collapsed ? "px-1.5" : "px-2.5")}>
-      {navItems.map((item) => {
+      {navItems.map((item, index) => {
         const isSkillsParent = item.section === "skills" && item.label === "Skills";
         const isAgentsParent = item.section === "agents" && item.label === "Agents";
         if (collapsed && item.isSubItem) return null;
@@ -178,8 +178,8 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
         if (item.isSubItem && item.section === "agents" && !showAgentsChildren) return null;
 
         // Group header
-        const showGroupHeader = item.group && item.group !== lastGroup;
-        if (item.group) lastGroup = item.group;
+        const previousGroup = index > 0 ? navItems[index - 1]?.group : undefined;
+        const showGroupHeader = item.group && item.group !== previousGroup;
 
         const Icon = item.icon;
         const isActive =
