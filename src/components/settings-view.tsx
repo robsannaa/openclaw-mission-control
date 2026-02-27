@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useCallback, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 import {
@@ -16,6 +16,12 @@ import {
   Trash2,
   RotateCcw,
   Check,
+  Clock,
+  Globe,
+  AlertTriangle,
+  ShieldAlert,
+  RefreshCw,
+  Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -56,11 +62,70 @@ type SystemData = {
   stats?: Record<string, number>;
 };
 
+type SettingsData = {
+  timezone: string;
+  configHash: string;
+};
+
+type ResetScope = "config" | "credentials" | "sessions" | "all";
+
+/* ── Timezone list ───────────────────────────────── */
+
+const COMMON_TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Anchorage",
+  "Pacific/Honolulu",
+  "America/Toronto",
+  "America/Vancouver",
+  "America/Sao_Paulo",
+  "America/Argentina/Buenos_Aires",
+  "America/Mexico_City",
+  "Europe/London",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Rome",
+  "Europe/Madrid",
+  "Europe/Amsterdam",
+  "Europe/Zurich",
+  "Europe/Stockholm",
+  "Europe/Warsaw",
+  "Europe/Moscow",
+  "Europe/Istanbul",
+  "Africa/Cairo",
+  "Africa/Lagos",
+  "Africa/Johannesburg",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Asia/Bangkok",
+  "Asia/Singapore",
+  "Asia/Hong_Kong",
+  "Asia/Shanghai",
+  "Asia/Tokyo",
+  "Asia/Seoul",
+  "Australia/Sydney",
+  "Australia/Melbourne",
+  "Australia/Perth",
+  "Pacific/Auckland",
+  "UTC",
+];
+
+function getLocalTimezone(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  } catch {
+    return "UTC";
+  }
+}
+
 /* ── Component ────────────────────────────────────── */
 
 export function SettingsView() {
   const [onboard, setOnboard] = useState<OnboardData | null>(null);
   const [system, setSystem] = useState<SystemData | null>(null);
+  const [settings, setSettings] = useState<SettingsData | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Theme — hydration-safe
@@ -89,16 +154,151 @@ export function SettingsView() {
     }
   }, []);
 
+  // Timezone state
+  const [tzSearch, setTzSearch] = useState("");
+  const [tzSaving, setTzSaving] = useState(false);
+  const [tzSaved, setTzSaved] = useState(false);
+  const [tzDropdownOpen, setTzDropdownOpen] = useState(false);
+  const [selectedTz, setSelectedTz] = useState("");
+
+  // Reset state
+  const [resetScope, setResetScope] = useState<ResetScope | null>(null);
+  const [resetPreview, setResetPreview] = useState<string | null>(null);
+  const [resetPreviewLoading, setResetPreviewLoading] = useState(false);
+  const [resetExecuting, setResetExecuting] = useState(false);
+  const [resetResult, setResetResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  // Gateway restart
+  const [restarting, setRestarting] = useState(false);
+  const [restartResult, setRestartResult] = useState<string | null>(null);
+
+  // Toast
+  const [toast, setToast] = useState<{ message: string; type: "ok" | "err" } | null>(null);
+  const showToast = useCallback((message: string, type: "ok" | "err") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
+
   useEffect(() => {
     Promise.all([
       fetch("/api/onboard", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
       fetch("/api/system", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
-    ]).then(([onboardRes, systemRes]) => {
+      fetch("/api/settings", { cache: "no-store" }).then((r) => r.json()).catch(() => null),
+    ]).then(([onboardRes, systemRes, settingsRes]) => {
       setOnboard(onboardRes);
       setSystem(systemRes);
+      setSettings(settingsRes);
+      if (settingsRes?.timezone) {
+        setSelectedTz(settingsRes.timezone);
+      } else {
+        setSelectedTz(getLocalTimezone());
+      }
       setLoading(false);
     });
   }, []);
+
+  // Timezone save handler
+  const handleSaveTimezone = useCallback(async (tz: string) => {
+    setTzSaving(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "set-timezone", timezone: tz }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+      setSelectedTz(tz);
+      setTzSaved(true);
+      showToast(`Timezone set to ${tz}`, "ok");
+      setTimeout(() => setTzSaved(false), 2000);
+    } catch (err) {
+      showToast(`Failed to save timezone: ${err}`, "err");
+    } finally {
+      setTzSaving(false);
+      setTzDropdownOpen(false);
+    }
+  }, [showToast]);
+
+  // Reset preview handler
+  const handleResetPreview = useCallback(async (scope: ResetScope) => {
+    setResetScope(scope);
+    setResetPreview(null);
+    setResetResult(null);
+    setResetPreviewLoading(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset-preview", scope }),
+      });
+      const json = await res.json();
+      setResetPreview(json.output || "No preview available.");
+    } catch (err) {
+      setResetPreview(`Error: ${err}`);
+    } finally {
+      setResetPreviewLoading(false);
+    }
+  }, []);
+
+  // Reset execute handler
+  const handleResetExecute = useCallback(async () => {
+    if (!resetScope) return;
+    setResetExecuting(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset-execute", scope: resetScope }),
+      });
+      const json = await res.json();
+      if (json.ok) {
+        setResetResult({ ok: true, message: json.output || "Reset complete." });
+        showToast("Reset completed successfully", "ok");
+      } else {
+        setResetResult({ ok: false, message: json.error || "Reset failed." });
+        showToast("Reset failed", "err");
+      }
+    } catch (err) {
+      setResetResult({ ok: false, message: String(err) });
+      showToast("Reset failed", "err");
+    } finally {
+      setResetExecuting(false);
+    }
+  }, [resetScope, showToast]);
+
+  // Gateway restart handler
+  const handleRestartGateway = useCallback(async () => {
+    setRestarting(true);
+    setRestartResult(null);
+    try {
+      const res = await fetch("/api/gateway", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "restart" }),
+      });
+      const json = await res.json();
+      if (json.ok || json.status === "restarting") {
+        setRestartResult("Gateway is restarting...");
+        showToast("Gateway restart initiated", "ok");
+      } else {
+        setRestartResult(`Failed: ${json.error || "Unknown error"}`);
+        showToast("Gateway restart failed", "err");
+      }
+    } catch (err) {
+      setRestartResult(`Error: ${err}`);
+      showToast("Gateway restart failed", "err");
+    } finally {
+      setRestarting(false);
+    }
+  }, [showToast]);
+
+  // Filtered timezone list
+  const filteredTimezones = tzSearch
+    ? COMMON_TIMEZONES.filter((tz) =>
+        tz.toLowerCase().includes(tzSearch.toLowerCase()),
+      )
+    : COMMON_TIMEZONES;
 
   if (loading) {
     return (
@@ -110,14 +310,29 @@ export function SettingsView() {
   }
 
   const gw = system?.gateway;
+  const localTz = getLocalTimezone();
 
   return (
     <SectionLayout>
       <SectionHeader
-        title="Settings"
+        title={<span className="font-serif font-bold text-base">Settings</span>}
         description="Manage preferences, gateway configuration, and diagnostics."
       />
       <SectionBody width="content" padding="regular" innerClassName="space-y-4 pb-8">
+        {/* Toast */}
+        {toast && (
+          <div
+            className={cn(
+              "fixed bottom-4 right-4 z-50 rounded-lg border px-4 py-2.5 text-xs font-medium shadow-lg transition-all",
+              toast.type === "ok"
+                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                : "border-red-500/20 bg-red-500/10 text-red-400",
+            )}
+          >
+            {toast.message}
+          </div>
+        )}
+
         {/* ── General ──────────────────────────────── */}
         <SettingsSection
           title="General"
@@ -131,7 +346,7 @@ export function SettingsView() {
             description="Choose light, dark, or follow your system preference."
           >
             {mounted ? (
-              <div className="inline-flex rounded-lg border border-foreground/10 bg-card/70 p-0.5">
+              <div className="inline-flex rounded-lg border border-border bg-muted p-0.5">
                 {(
                   [
                     { value: "light", icon: Sun, label: "Light" },
@@ -149,8 +364,8 @@ export function SettingsView() {
                       className={cn(
                         "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
                         active
-                          ? "bg-violet-500/20 text-violet-300"
-                          : "text-muted-foreground/70 hover:text-foreground/80",
+                          ? "bg-card text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
                       )}
                     >
                       <Icon className="h-3 w-3" />
@@ -162,6 +377,102 @@ export function SettingsView() {
             ) : (
               <div className="h-7 w-40 animate-pulse rounded-lg bg-muted" />
             )}
+          </SettingRow>
+
+          {/* Timezone */}
+          <SettingRow
+            label="Timezone"
+            description={`Used for scheduling, cron jobs, and time displays. ${selectedTz === localTz ? "Matches your browser." : `Browser: ${localTz}`}`}
+          >
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setTzDropdownOpen(!tzDropdownOpen)}
+                disabled={tzSaving}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                  tzSaved
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                    : "border-foreground/10 bg-card text-foreground/70 hover:bg-muted/80 hover:text-foreground",
+                )}
+              >
+                {tzSaving ? (
+                  <span className="flex items-center gap-1">
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                  </span>
+                ) : tzSaved ? (
+                  <>
+                    <Check className="h-3 w-3" />
+                    Saved
+                  </>
+                ) : (
+                  <>
+                    <Globe className="h-3 w-3" />
+                    {selectedTz.replace(/_/g, " ").split("/").pop() || selectedTz}
+                  </>
+                )}
+              </button>
+
+              {tzDropdownOpen && (
+                <>
+                  {/* Backdrop to close dropdown */}
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setTzDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 top-full z-50 mt-1 w-64 rounded-lg border border-border bg-card shadow-lg">
+                    <div className="border-b border-border p-2">
+                      <div className="flex items-center gap-2 rounded-md border border-border bg-muted px-2 py-1.5">
+                        <Search className="h-3 w-3 text-muted-foreground" />
+                        <input
+                          type="text"
+                          value={tzSearch}
+                          onChange={(e) => setTzSearch(e.target.value)}
+                          placeholder="Search timezones..."
+                          className="flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto py-1">
+                      {/* Auto-detect option */}
+                      <button
+                        type="button"
+                        onClick={() => handleSaveTimezone(localTz)}
+                        className={cn(
+                          "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted",
+                          selectedTz === localTz && "text-emerald-400",
+                        )}
+                      >
+                        <Clock className="h-3 w-3 text-muted-foreground" />
+                        <span className="flex-1">Auto-detect ({localTz.split("/").pop()})</span>
+                        {selectedTz === localTz && <Check className="h-3 w-3" />}
+                      </button>
+                      <div className="my-1 border-t border-border" />
+                      {filteredTimezones.map((tz) => (
+                        <button
+                          key={tz}
+                          type="button"
+                          onClick={() => handleSaveTimezone(tz)}
+                          className={cn(
+                            "flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors hover:bg-muted",
+                            selectedTz === tz && "text-emerald-400",
+                          )}
+                        >
+                          <span className="flex-1">{tz.replace(/_/g, " ")}</span>
+                          {selectedTz === tz && <Check className="h-3 w-3" />}
+                        </button>
+                      ))}
+                      {filteredTimezones.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-muted-foreground/50">No matching timezones</p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </SettingRow>
 
           {/* Auto-restart */}
@@ -294,6 +605,43 @@ export function SettingsView() {
           >
             <Badge label={gw?.mode || "local"} color="blue" />
           </SettingRow>
+
+          <SettingRow
+            label="Restart gateway"
+            description="Restart the gateway process. This briefly interrupts active sessions."
+          >
+            <button
+              type="button"
+              onClick={handleRestartGateway}
+              disabled={restarting}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                restarting
+                  ? "border-foreground/10 bg-foreground/5 text-muted-foreground cursor-wait"
+                  : restartResult
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                    : "border-amber-500/20 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20",
+              )}
+            >
+              {restarting ? (
+                <span className="flex items-center gap-1">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
+              ) : restartResult ? (
+                <>
+                  <Check className="h-3 w-3" />
+                  Restarting
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-3 w-3" />
+                  Restart
+                </>
+              )}
+            </button>
+          </SettingRow>
         </SettingsSection>
 
         {/* ── Notifications & Chat ─────────────────── */}
@@ -365,6 +713,139 @@ export function SettingsView() {
               )}
             </button>
           </SettingRow>
+        </SettingsSection>
+
+        {/* ── Reset & Maintenance ─────────────────── */}
+        <SettingsSection
+          title="Reset & Maintenance"
+          icon={ShieldAlert}
+          iconColor="text-red-400"
+        >
+          <p className="text-xs text-muted-foreground/60 -mt-1 mb-3">
+            Reset different parts of your OpenClaw installation. Each action shows a preview of what will be affected before executing.
+          </p>
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            {(
+              [
+                {
+                  scope: "config" as ResetScope,
+                  label: "Reset Configuration",
+                  desc: "Restores openclaw.json to defaults. Keeps credentials and sessions.",
+                  color: "amber",
+                },
+                {
+                  scope: "credentials" as ResetScope,
+                  label: "Reset Credentials",
+                  desc: "Removes saved API keys and auth profiles. You'll need to re-enter them.",
+                  color: "amber",
+                },
+                {
+                  scope: "sessions" as ResetScope,
+                  label: "Clear Sessions",
+                  desc: "Removes all session history and JSONL files. Frees disk space.",
+                  color: "amber",
+                },
+                {
+                  scope: "all" as ResetScope,
+                  label: "Full Reset",
+                  desc: "Removes everything: config, credentials, and sessions. Like a fresh install.",
+                  color: "red",
+                },
+              ] as const
+            ).map((item) => (
+              <button
+                key={item.scope}
+                type="button"
+                onClick={() => handleResetPreview(item.scope)}
+                className={cn(
+                  "rounded-lg border p-3 text-left transition-colors",
+                  resetScope === item.scope
+                    ? item.color === "red"
+                      ? "border-red-500/30 bg-red-500/5"
+                      : "border-amber-500/30 bg-amber-500/5"
+                    : "border-foreground/10 hover:bg-foreground/[0.03]",
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className={cn(
+                    "h-3.5 w-3.5",
+                    item.color === "red" ? "text-red-400" : "text-amber-400",
+                  )} />
+                  <p className="text-xs font-medium text-foreground/90">{item.label}</p>
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground/60">{item.desc}</p>
+              </button>
+            ))}
+          </div>
+
+          {/* Reset preview + confirm */}
+          {resetScope && (
+            <div className="mt-3 rounded-lg border border-foreground/10 bg-card p-4">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="text-xs font-semibold text-foreground/90">
+                  {resetScope === "all" ? "Full Reset" : `Reset: ${resetScope}`} — Preview
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResetScope(null);
+                    setResetPreview(null);
+                    setResetResult(null);
+                  }}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {resetPreviewLoading ? (
+                <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-0.5">
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                  </span>
+                  Running preview...
+                </div>
+              ) : resetPreview ? (
+                <div className="mt-3 max-h-40 overflow-y-auto rounded-md border border-foreground/[0.06] bg-muted/50 p-2.5 font-mono text-xs text-muted-foreground/80 leading-5">
+                  {resetPreview.split("\n").map((line, i) => (
+                    <div key={i}>{line || "\u00A0"}</div>
+                  ))}
+                </div>
+              ) : null}
+
+              {resetResult ? (
+                <div className={cn(
+                  "mt-3 rounded-md border p-2.5 text-xs",
+                  resetResult.ok
+                    ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
+                    : "border-red-500/20 bg-red-500/10 text-red-400",
+                )}>
+                  {resetResult.message}
+                </div>
+              ) : resetPreview && !resetPreviewLoading ? (
+                <div className="mt-3 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleResetExecute}
+                    disabled={resetExecuting}
+                    className={cn(
+                      "rounded-lg border px-4 py-2 text-xs font-medium transition-colors",
+                      resetScope === "all"
+                        ? "border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                        : "border-amber-500/30 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20",
+                      resetExecuting && "cursor-wait opacity-60",
+                    )}
+                  >
+                    {resetExecuting ? "Executing..." : `Confirm ${resetScope === "all" ? "Full " : ""}Reset`}
+                  </button>
+                  <p className="text-xs text-muted-foreground/50">This action cannot be undone.</p>
+                </div>
+              ) : null}
+            </div>
+          )}
         </SettingsSection>
 
         {/* ── About & Diagnostics ──────────────────── */}

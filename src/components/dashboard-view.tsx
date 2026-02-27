@@ -681,7 +681,15 @@ function GatewayDiagnosticsPanel({
             disabled={loading}
             className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/[0.04] px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-foreground/[0.08] disabled:opacity-60"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+            {loading ? (
+              <span className="inline-flex items-center gap-1">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+              </span>
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
             Refresh
           </button>
         </div>
@@ -725,7 +733,11 @@ function GatewayDiagnosticsPanel({
 
       {loading && !data && (
         <div className="rounded-lg border border-foreground/10 bg-card/70 px-4 py-8 text-center text-xs text-muted-foreground/70">
-          <RefreshCw className="mx-auto mb-2 h-4 w-4 animate-spin" />
+          <span className="mx-auto mb-2 inline-flex items-center gap-1">
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+          </span>
           Running gateway checks...
         </div>
       )}
@@ -944,7 +956,11 @@ export function DashboardView() {
   if (!live) {
     return (
       <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
-        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+        <span className="mr-2 inline-flex items-center gap-1">
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+        </span>
         Connecting to system...
       </div>
     );

@@ -1,6 +1,5 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type LoadingStateProps = {
@@ -9,10 +8,10 @@ type LoadingStateProps = {
   size?: "sm" | "md" | "lg";
 };
 
-const sizeClass: Record<NonNullable<LoadingStateProps["size"]>, string> = {
-  sm: "h-3.5 w-3.5",
-  md: "h-4.5 w-4.5",
-  lg: "h-6 w-6",
+const dotSize: Record<NonNullable<LoadingStateProps["size"]>, string> = {
+  sm: "h-1 w-1",
+  md: "h-1.5 w-1.5",
+  lg: "h-2 w-2",
 };
 
 export function InlineSpinner({
@@ -22,32 +21,30 @@ export function InlineSpinner({
   className?: string;
   size?: LoadingStateProps["size"];
 }) {
+  const dot = dotSize[size || "sm"];
   return (
-    <Loader2
-      className={cn(
-        "animate-spin text-muted-foreground/70",
-        sizeClass[size || "sm"],
-        className
-      )}
-    />
+    <span className={cn("inline-flex items-center gap-1", className)}>
+      <span className={cn(dot, "animate-bounce rounded-full bg-current [animation-delay:0ms]")} />
+      <span className={cn(dot, "animate-bounce rounded-full bg-current [animation-delay:150ms]")} />
+      <span className={cn(dot, "animate-bounce rounded-full bg-current [animation-delay:300ms]")} />
+    </span>
   );
 }
 
 export function LoadingState({
-  label = "Loading...",
+  label,
   className,
   size = "md",
 }: LoadingStateProps) {
   return (
     <div
       className={cn(
-        "flex flex-1 items-center justify-center gap-2 text-sm text-muted-foreground/70",
+        "flex flex-1 items-center justify-center gap-2.5 text-sm text-muted-foreground/70",
         className
       )}
     >
       <InlineSpinner size={size} />
-      <span>{label}</span>
+      {label && <span>{label}</span>}
     </div>
   );
 }
-

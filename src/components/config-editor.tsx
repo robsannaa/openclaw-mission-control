@@ -23,7 +23,6 @@ import {
   Info,
   Code,
   Settings2,
-  Loader2,
   GripVertical,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -1887,7 +1886,11 @@ export function ConfigEditor() {
             className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
           >
             {saving ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+              </span>
             ) : (
               <Save className="h-3.5 w-3.5" />
             )}

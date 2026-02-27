@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/dashboard",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Mission Control — open-source OpenClaw GUI and AI agent dashboard for managing local AI agents, models, memory, and skills",
   "keywords": [
     "openclaw",
@@ -59,7 +59,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
-    "recharts": "^3.7.0",
+    "recharts": "^2.15.4",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^2.6.0",
     "turndown": "^7.2.2"

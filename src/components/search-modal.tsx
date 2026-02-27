@@ -7,7 +7,7 @@ import {
   useCallback,
 } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, Brain, Loader2 } from "lucide-react";
+import { Search, Brain } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /* ── types ────────────────────────────────────────── */
@@ -157,7 +157,11 @@ export function SearchModal({ open, onClose }: Props) {
           {/* Search input */}
           <div className="flex min-w-0 items-center gap-3 border-b border-foreground/10 px-4 py-3 sm:px-6">
             {loading ? (
-              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-violet-400" />
+              <span className="inline-flex shrink-0 items-center gap-0.5">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" />
+              </span>
             ) : (
               <Search className="h-5 w-5 shrink-0 text-muted-foreground" />
             )}
@@ -198,7 +202,11 @@ export function SearchModal({ open, onClose }: Props) {
             {/* Loading state */}
             {loading && results.length === 0 && searched && (
               <div className="flex items-center justify-center gap-2 px-4 py-10 text-sm text-muted-foreground sm:px-6">
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
                 Searching vector memory...
               </div>
             )}

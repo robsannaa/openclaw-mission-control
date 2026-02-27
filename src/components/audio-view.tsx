@@ -19,7 +19,6 @@ import {
   Waves,
   Zap,
   Globe,
-  Loader2,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -227,7 +226,11 @@ function ProviderCard({
               className="rounded-lg bg-foreground/10 px-3 py-1.5 text-xs font-medium text-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50"
             >
               {loading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
               ) : (
                 "Set Active"
               )}
@@ -617,7 +620,11 @@ function TtsTestPanel({
       >
         {testing ? (
           <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+            </span>
             Generating audio...
           </>
         ) : (
@@ -790,7 +797,11 @@ function TalkModeSection({
                   >
                     {testingTalk ? (
                       <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span className="inline-flex items-center gap-0.5">
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                          <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                        </span>
                         Sending…
                       </>
                     ) : (
@@ -823,7 +834,11 @@ function TalkModeSection({
             >
               {enabling ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span className="inline-flex items-center gap-0.5">
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                    <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                  </span>
                   Enabling…
                 </>
               ) : (

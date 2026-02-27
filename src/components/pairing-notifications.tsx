@@ -11,7 +11,6 @@ import {
   MessageCircle,
   Check,
   X,
-  Loader2,
   Clock,
   Monitor,
   Globe,
@@ -158,7 +157,11 @@ function DmRequestCard({
           className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
         >
           {busy ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+            </span>
           ) : (
             <ShieldCheck className="h-3 w-3" />
           )}
@@ -226,7 +229,11 @@ function DeviceRequestCard({
           className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
         >
           {busy ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+            </span>
           ) : (
             <ShieldCheck className="h-3 w-3" />
           )}
@@ -238,7 +245,11 @@ function DeviceRequestCard({
           className="flex flex-1 items-center justify-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 py-1.5 text-xs font-medium text-red-400 transition-colors hover:bg-red-500/15 disabled:opacity-50"
         >
           {busy ? (
-            <Loader2 className="h-3 w-3 animate-spin" />
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+            </span>
           ) : (
             <ShieldX className="h-3 w-3" />
           )}

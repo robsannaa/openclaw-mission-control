@@ -12,7 +12,6 @@ import {
   Check,
   ListChecks,
   FileJson,
-  Loader2,
   Rocket,
   Bot,
   Brain,
@@ -923,7 +922,11 @@ function BoardOnboarding({
         <div className="relative">
           <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-violet-500/10">
             {initStep < 3 ? (
-              <Loader2 className="h-9 w-9 animate-spin text-violet-400" />
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" />
+                <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" />
+              </span>
             ) : (
               <CheckCircle className="h-9 w-9 text-emerald-400" />
             )}
@@ -1189,7 +1192,11 @@ function StepIndicator({
         {isDone ? (
           <CheckCircle className="h-5 w-5 text-emerald-400" />
         ) : isActive ? (
-          <Loader2 className="h-5 w-5 animate-spin text-violet-400" />
+          <span className="inline-flex items-center gap-0.5">
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" />
+          </span>
         ) : (
           <div className="h-2 w-2 rounded-full bg-zinc-600" />
         )}

@@ -14,7 +14,7 @@ import {
   getAutoRestartServerSnapshot,
 } from "@/lib/auto-restart-preference";
 import { notifyGatewayRestarting } from "@/lib/gateway-status-store";
-import { AlertTriangle, RefreshCw, X, Loader2 } from "lucide-react";
+import { AlertTriangle, RefreshCw, X } from "lucide-react";
 
 /**
  * Global announcement bar shown when a config change requires a gateway restart.
@@ -89,7 +89,11 @@ export function RestartAnnouncementBar() {
       >
         {restarting ? (
           <>
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+            </span>
             Restarting...
           </>
         ) : (

@@ -15,7 +15,6 @@ import {
   ChevronRight,
   X,
   Check,
-  Loader2,
   Send,
   Cpu,
   Zap,
@@ -1520,7 +1519,11 @@ function CreateCronForm({
             >
               {submitting ? (
                 <>
-                  <Loader2 className="h-3 w-3 animate-spin" /> Creating...
+                  <span className="inline-flex items-center gap-0.5">
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                  </span> Creating...
                 </>
               ) : (
                 <>
@@ -1942,7 +1945,11 @@ export function CronView() {
                     title="Run now"
                   >
                     {actionLoading === `run-${job.id}` ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span className="inline-flex items-center gap-0.5">
+                        <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                        <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                        <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                      </span>
                     ) : (
                       <Play className="h-3.5 w-3.5" />
                     )}
@@ -2044,7 +2051,11 @@ export function CronView() {
                           Run output
                           {runOutput[job.id].status === "running" && (
                             <span className="flex items-center gap-1 text-emerald-400/80">
-                              <Loader2 className="h-3 w-3 animate-spin" />
+                              <span className="inline-flex items-center gap-0.5">
+                              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                            </span>
                               Running…
                             </span>
                           )}
@@ -2298,18 +2309,25 @@ export function CronView() {
                         disabled={runsLoading === job.id}
                         className="flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground"
                       >
-                        <RefreshCw
-                          className={cn(
-                            "h-2.5 w-2.5",
-                            runsLoading === job.id && "animate-spin"
-                          )}
-                        />
+                        {runsLoading === job.id ? (
+                          <span className="inline-flex items-center gap-0.5">
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                          </span>
+                        ) : (
+                          <RefreshCw className="h-2.5 w-2.5" />
+                        )}
                         Refresh
                       </button>
                     </div>
                     {runsLoading === job.id && jobRuns.length === 0 ? (
                       <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground/60">
-                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span className="inline-flex items-center gap-0.5">
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                        </span>
                         Loading runs...
                       </div>
                     ) : jobRuns.length === 0 ? (

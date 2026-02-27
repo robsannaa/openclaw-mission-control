@@ -7,6 +7,7 @@ import { KeyboardShortcuts } from "@/components/keyboard-shortcuts";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ChatNotificationToast } from "@/components/chat-notification-toast";
 import { RestartAnnouncementBar } from "@/components/restart-announcement-bar";
+import { SetupGate } from "@/components/setup-gate";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -103,19 +104,21 @@ export default function RootLayout({
         className={`${inter.variable} ${baskervville.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider>
-          <KeyboardShortcuts />
-          <div className="flex h-screen overflow-hidden">
-            <Sidebar />
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-              <Header />
-              <RestartAnnouncementBar />
-              <main className="flex flex-1 overflow-hidden">
-                {children}
-              </main>
+          <SetupGate>
+            <KeyboardShortcuts />
+            <div className="flex h-screen overflow-hidden">
+              <Sidebar />
+              <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+                <Header />
+                <RestartAnnouncementBar />
+                <main className="flex flex-1 overflow-hidden">
+                  {children}
+                </main>
+              </div>
             </div>
-          </div>
-          <AgentChatPanel />
-          <ChatNotificationToast />
+            <AgentChatPanel />
+            <ChatNotificationToast />
+          </SetupGate>
         </ThemeProvider>
       </body>
     </html>

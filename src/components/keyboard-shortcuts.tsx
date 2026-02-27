@@ -32,9 +32,12 @@ export function KeyboardShortcuts() {
     };
   }, []);
 
+  // Unregister any stale service workers — this dashboard doesn't need offline caching
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const reg of regs) reg.unregister();
+      });
     }
   }, []);
 

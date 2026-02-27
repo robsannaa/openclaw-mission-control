@@ -12,8 +12,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   Search,
-  Pause,
-  Play,
+  Power,
   Zap,
   Send,
   ChevronDown,
@@ -315,7 +314,11 @@ export function AgentChatPanel() {
         {chat.sending && (
           <div className="flex justify-start">
             <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-foreground/10 bg-foreground/5 px-3.5 py-2.5 shadow-sm">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-400" />
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" />
+              </span>
               <span className="text-xs text-muted-foreground/60">Agent is thinking...</span>
             </div>
           </div>
@@ -348,7 +351,11 @@ export function AgentChatPanel() {
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
           >
             {chat.sending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+              </span>
             ) : (
               <Send className="h-3.5 w-3.5" />
             )}
@@ -364,38 +371,40 @@ export function AgentChatPanel() {
   return createPortal(panel, portalRoot);
 }
 
-/* ── Pause/Resume Gateway ───────────────────────── */
+/* ── Gateway Power Toggle ──────────────────────── */
 
-function usePauseState() {
-  const [paused, setPaused] = useState(false);
+function useGatewayPower() {
   const [busy, setBusy] = useState(false);
+  const { status } = useGatewayStatusStore();
+
+  const isAlive = status === "online" || status === "degraded";
 
   const toggle = useCallback(async () => {
     setBusy(true);
-    // Immediately notify the status badge to switch to "loading" and fast-poll
     notifyGatewayRestarting();
     try {
-      if (paused) {
-        await fetch("/api/gateway", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "restart" }),
-        });
-      } else {
+      if (isAlive) {
+        // Gateway is running → kill it
         await fetch("/api/gateway", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "stop" }),
         });
+      } else {
+        // Gateway is dead → spin it up
+        await fetch("/api/gateway", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "restart" }),
+        });
       }
-      setPaused(!paused);
     } catch {
       // ignore
     }
     setBusy(false);
-  }, [paused]);
+  }, [isAlive]);
 
-  return { paused, busy, toggle };
+  return { isAlive, busy: busy || status === "loading", toggle };
 }
 
 /* ── Gateway Status Hook ───────────────────────── */
@@ -544,10 +553,10 @@ function GatewayStatusBadge({
 
       {/* Popover */}
       {showPopover && (
-        <div className="absolute z-50 left-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-xl border border-foreground/10 bg-card/95 shadow-2xl backdrop-blur-sm">
+        <div className="absolute left-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-xl border border-border bg-popover/95 shadow-2xl backdrop-blur-sm animate-enter">
           {/* Header */}
-          <div className={cn("flex items-center gap-2.5 px-3.5 py-3 border-b border-foreground/10", cfg.bg)}>
-            <Icon className={cn("h-3.5 w-3.5", cfg.text, status === "loading" && "animate-spin")} />
+          <div className={cn("flex items-center gap-2.5 px-3.5 py-3 border-b border-border", cfg.bg)}>
+            <Icon className={cn("h-3.5 w-3.5", cfg.text, status === "loading" && "animate-pulse")} />
             <div>
               <p className={cn("text-xs font-semibold", cfg.text)}>
                 Gateway {cfg.label}
@@ -594,7 +603,7 @@ function GatewayStatusBadge({
 
           {/* Error info */}
           {!!health?.error && (
-            <div className="border-t border-foreground/10 px-3.5 py-2.5">
+            <div className="border-t border-border px-3.5 py-2.5">
               <p className="text-xs leading-relaxed text-red-400">
                 {String(health.error)}
               </p>
@@ -602,9 +611,9 @@ function GatewayStatusBadge({
           )}
 
           {/* Footer hint */}
-          <div className="border-t border-foreground/10 px-3.5 py-2">
+          <div className="border-t border-border px-3.5 py-2">
             <p className="text-xs text-muted-foreground/50">
-              Polling every 12s · Click Pause above to stop gateway
+              Polling every 12s · Use the power button to control gateway
             </p>
           </div>
         </div>
@@ -627,7 +636,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 export function Header() {
   const [searchOpen, setSearchOpen] = useState(false);
   const chat = useChatState();
-  const { paused, busy: pauseBusy, toggle: togglePause } = usePauseState();
+  const { isAlive, busy: powerBusy, toggle: togglePower } = useGatewayPower();
   const { status: gwStatus, health: gwHealth } = useGatewayStatus();
 
   // Global Cmd+K / Ctrl+K shortcut
@@ -645,7 +654,7 @@ export function Header() {
 
   return (
     <>
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-white/20 dark:border-white/10 bg-white/50 dark:bg-white/[0.06] px-3 md:px-5 backdrop-blur-md shadow-sm">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-[var(--surface-header)] px-3 md:px-5 backdrop-blur-md shadow-sm">
         <div className="flex items-center gap-2.5 pl-10 md:pl-0">
           <span className="text-xs">🦞</span>
           <h1 className="text-sm font-sans font-normal">
@@ -676,7 +685,11 @@ export function Header() {
               </span>
             )}
             {chat.sending && !chat.open && (
-              <Loader2 className="h-3 w-3 animate-spin text-violet-400" />
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1 w-1 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" />
+              </span>
             )}
           </button>
 
@@ -698,25 +711,34 @@ export function Header() {
 
           {/* ── System controls ── */}
 
-          {/* Pause / Resume */}
-          <button
-            type="button"
-            onClick={togglePause}
-            disabled={pauseBusy}
-            className={cn(
-              "flex h-8 items-center gap-1.5 rounded-lg border px-2 md:px-3 text-xs transition-colors disabled:opacity-50",
-              paused
-                ? "border-amber-500/20 bg-amber-500/10 text-amber-400 hover:bg-amber-500/20"
-                : "border-foreground/10 bg-card text-muted-foreground hover:bg-muted/80"
-            )}
-          >
-            {paused ? (
-              <Play className="h-3.5 w-3.5" />
-            ) : (
-              <Pause className="h-3.5 w-3.5" />
-            )}
-            <span className="hidden sm:inline">{paused ? "Resume" : "Pause"}</span>
-          </button>
+          {/* Gateway power toggle */}
+          <div className="group relative">
+            <button
+              type="button"
+              onClick={togglePower}
+              disabled={powerBusy}
+              className={cn(
+                "flex h-8 items-center gap-1.5 rounded-lg border px-2 md:px-3 text-xs font-medium transition-colors disabled:opacity-50",
+                isAlive
+                  ? "border-red-500/20 bg-red-500/10 text-red-400 hover:bg-red-500/20"
+                  : "border-emerald-500/20 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
+              )}
+            >
+              {powerBusy ? (
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
+              ) : (
+                <Power className="h-3.5 w-3.5" />
+              )}
+              <span className="hidden sm:inline">{isAlive ? "Kill" : "Start"}</span>
+            </button>
+            <div className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 whitespace-nowrap rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-muted-foreground opacity-0 shadow-sm transition-opacity group-hover:opacity-100">
+              {isAlive ? "Emergency stop — kill the gateway" : "Start the gateway"}
+            </div>
+          </div>
 
           {/* Pairing Notifications */}
           <PairingNotifications />

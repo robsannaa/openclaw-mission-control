@@ -4,6 +4,8 @@ import { join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
 import { runCliJson } from "@/lib/openclaw-cli";
 import { fetchGatewaySessions } from "@/lib/gateway-sessions";
+import { estimateCostUsd } from "@/lib/model-metadata";
+import { appendSessionSnapshots, aggregateHistory } from "@/lib/usage-history";
 
 const OPENCLAW_HOME = getOpenClawHome();
 export const dynamic = "force-dynamic";
@@ -18,15 +20,19 @@ type SessionEntry = {
   sessionId: string;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   totalTokens: number;
   totalTokensFresh: boolean;
   model: string;
+  fullModel: string;
   contextTokens: number;
   thinkingLevel?: string;
   systemSent?: boolean;
   abortedLastRun?: boolean;
   percentUsed?: number;
   remainingTokens?: number;
+  estimatedCostUsd: number | null;
 };
 
 type ModelStatusData = {
@@ -141,7 +147,18 @@ export async function GET() {
     // 2. Read sessions from gateway source of truth
     const allSessions: SessionWithAgent[] = [];
     const liveSessions = await fetchGatewaySessions(12000).catch(() => []);
+
+    // Fire-and-forget CSV snapshot (never blocks response)
+    appendSessionSnapshots(liveSessions).catch(() => {});
+
     for (const s of liveSessions) {
+      const cost = estimateCostUsd(
+        s.fullModel,
+        s.inputTokens,
+        s.outputTokens,
+        s.cacheReadTokens,
+        s.cacheWriteTokens,
+      );
       allSessions.push({
         key: s.key,
         kind: s.kind,
@@ -150,9 +167,12 @@ export async function GET() {
         sessionId: s.sessionId,
         inputTokens: s.inputTokens,
         outputTokens: s.outputTokens,
+        cacheReadTokens: s.cacheReadTokens,
+        cacheWriteTokens: s.cacheWriteTokens,
         totalTokens: s.totalTokens,
         totalTokensFresh: s.totalTokensFresh,
         model: s.model,
+        fullModel: s.fullModel,
         contextTokens: s.contextTokens,
         thinkingLevel: s.thinkingLevel,
         systemSent: s.systemSent,
@@ -163,6 +183,7 @@ export async function GET() {
         remainingTokens: s.contextTokens
           ? s.contextTokens - s.totalTokens
           : undefined,
+        estimatedCostUsd: cost,
         agentId: s.agentId || "unknown",
       });
     }
@@ -174,14 +195,18 @@ export async function GET() {
     // By model
     const byModel: Record<string, {
       model: string;
+      fullModel: string;
       sessions: number;
       inputTokens: number;
       outputTokens: number;
+      cacheReadTokens: number;
+      cacheWriteTokens: number;
       totalTokens: number;
       contextTokens: number;
       agents: Set<string>;
       lastUsed: number;
       avgPercentUsed: number;
+      estimatedCostUsd: number | null;
     }> = {};
 
     // By agent
@@ -190,10 +215,13 @@ export async function GET() {
       sessions: number;
       inputTokens: number;
       outputTokens: number;
+      cacheReadTokens: number;
+      cacheWriteTokens: number;
       totalTokens: number;
       contextTokens: number;
       models: Set<string>;
       lastUsed: number;
+      estimatedCostUsd: number | null;
     }> = {};
 
     // Time buckets (last 24h, 7d, 30d, all time)
@@ -208,12 +236,20 @@ export async function GET() {
     let grandTotalInput = 0;
     let grandTotalOutput = 0;
     let grandTotalTokens = 0;
+    let grandTotalCacheRead = 0;
+    let grandTotalCacheWrite = 0;
+    let grandTotalCostUsd = 0;
+    let staleSessions = 0;
     let peakSession: (SessionEntry & { agentId: string }) | null = null;
 
     for (const s of allSessions) {
       grandTotalInput += s.inputTokens;
       grandTotalOutput += s.outputTokens;
       grandTotalTokens += s.totalTokens;
+      grandTotalCacheRead += s.cacheReadTokens;
+      grandTotalCacheWrite += s.cacheWriteTokens;
+      if (s.estimatedCostUsd != null) grandTotalCostUsd += s.estimatedCostUsd;
+      if (!s.totalTokensFresh) staleSessions += 1;
 
       // Peak session
       if (!peakSession || s.totalTokens > peakSession.totalTokens) {
@@ -249,24 +285,33 @@ export async function GET() {
       if (!byModel[s.model]) {
         byModel[s.model] = {
           model: s.model,
+          fullModel: s.fullModel,
           sessions: 0,
           inputTokens: 0,
           outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
           totalTokens: 0,
           contextTokens: 0,
           agents: new Set(),
           lastUsed: 0,
           avgPercentUsed: 0,
+          estimatedCostUsd: null,
         };
       }
       const bm = byModel[s.model];
       bm.sessions += 1;
       bm.inputTokens += s.inputTokens;
       bm.outputTokens += s.outputTokens;
+      bm.cacheReadTokens += s.cacheReadTokens;
+      bm.cacheWriteTokens += s.cacheWriteTokens;
       bm.totalTokens += s.totalTokens;
       bm.contextTokens = Math.max(bm.contextTokens, s.contextTokens);
       bm.agents.add(s.agentId);
       bm.lastUsed = Math.max(bm.lastUsed, s.updatedAt);
+      if (s.estimatedCostUsd != null) {
+        bm.estimatedCostUsd = (bm.estimatedCostUsd ?? 0) + s.estimatedCostUsd;
+      }
 
       // By agent
       if (!byAgent[s.agentId]) {
@@ -275,20 +320,28 @@ export async function GET() {
           sessions: 0,
           inputTokens: 0,
           outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
           totalTokens: 0,
           contextTokens: 0,
           models: new Set(),
           lastUsed: 0,
+          estimatedCostUsd: null,
         };
       }
       const ba = byAgent[s.agentId];
       ba.sessions += 1;
       ba.inputTokens += s.inputTokens;
       ba.outputTokens += s.outputTokens;
+      ba.cacheReadTokens += s.cacheReadTokens;
+      ba.cacheWriteTokens += s.cacheWriteTokens;
       ba.totalTokens += s.totalTokens;
       ba.contextTokens = Math.max(ba.contextTokens, s.contextTokens);
       ba.models.add(s.model);
       ba.lastUsed = Math.max(ba.lastUsed, s.updatedAt);
+      if (s.estimatedCostUsd != null) {
+        ba.estimatedCostUsd = (ba.estimatedCostUsd ?? 0) + s.estimatedCostUsd;
+      }
     }
 
     // Compute avg percent for models
@@ -358,6 +411,9 @@ export async function GET() {
       activitySeriesByModel[modelKey] = buildActivitySeries(sessionsForModel, now);
     }
 
+    // Load historical aggregates (never blocks if CSV missing)
+    const historical = await aggregateHistory().catch(() => null);
+
     return NextResponse.json({
       totals: {
         sessions: allSessions.length,
@@ -366,6 +422,12 @@ export async function GET() {
         totalTokens: grandTotalTokens,
         models: Object.keys(byModel).length,
         agents: agentIds.length,
+        staleSessions,
+      },
+      liveCost: {
+        totalEstimatedUsd: grandTotalCostUsd,
+        totalCacheReadTokens: grandTotalCacheRead,
+        totalCacheWriteTokens: grandTotalCacheWrite,
       },
       buckets,
       activitySeries,
@@ -400,6 +462,7 @@ export async function GET() {
         : null,
       agentModels,
       sessionFileSizes,
+      historical,
     });
   } catch (err) {
     console.error("Usage API error:", err);

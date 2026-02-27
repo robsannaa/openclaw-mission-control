@@ -8,7 +8,6 @@ import {
   CheckCircle,
   XCircle,
   AlertTriangle,
-  Loader2,
   Play,
   Copy,
   ExternalLink,
@@ -315,7 +314,13 @@ function SearchPlayground({
           disabled={running || disabled || !query.trim()}
           className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-cyan-500 disabled:opacity-60"
         >
-          {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+          {running ? (
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
+              ) : <Play className="h-3.5 w-3.5" />}
           {running ? "Searching..." : "Run Search"}
         </button>
       </div>
@@ -419,7 +424,15 @@ export function WebSearchView() {
             onClick={() => void load()}
             className="flex items-center gap-1.5 rounded-lg border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/80"
           >
-            <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />
+            {loading ? (
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
+              ) : (
+                <RefreshCw className="h-3 w-3" />
+              )}
             Refresh
           </button>
         }
@@ -509,7 +522,13 @@ export function WebSearchView() {
                 <p className="text-xs text-muted-foreground">
                   Select a model below. Currently using{" "}
                   <code className="rounded bg-foreground/10 px-1 text-foreground/70">{status.model}</code>.
-                  {switchingModel && <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin text-violet-400" />}
+                  {switchingModel && (
+                    <span className="ml-1.5 inline-flex items-center gap-0.5">
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" />
+                    </span>
+                  )}
                 </p>
                 <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
                   {PERPLEXITY_MODELS.map((m) => {

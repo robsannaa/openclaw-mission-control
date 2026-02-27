@@ -237,7 +237,15 @@ export function LogsView() {
             className="rounded-md border border-foreground/10 bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
             title="Refresh now"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+            {loading ? (
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+              </span>
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
           </button>
 
           {/* Filter toggle */}

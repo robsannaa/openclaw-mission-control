@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { requestRestart } from "@/lib/restart-store";
 import {
   CheckCircle, XCircle, Search, RefreshCw,
-  AlertTriangle, X, Loader2, Check, Download,
+  AlertTriangle, X, Check, Download,
   Settings2, Package, Cpu,
   FileText, Terminal, Globe, Wrench, ArrowLeft,
   Info, CircleStop, Play, Copy, Star,
@@ -603,7 +603,15 @@ function SkillPlayground({ skillName }: { skillName: string }) {
           disabled={running}
           className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-cyan-500 disabled:opacity-60"
         >
-          {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+          {running ? (
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+            </span>
+          ) : (
+            <Play className="h-3.5 w-3.5" />
+          )}
           {running ? "Running..." : "Run Skill Test"}
         </button>
       </div>
@@ -677,7 +685,11 @@ function SkillCard({ skill, onClick, onToggle, toggling }: { skill: Skill; onCli
         </div>
         <div className="flex flex-col items-center gap-1 mt-0.5">
           {toggling ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
+            </span>
           ) : (
             <ToggleSwitch
               checked={!skill.disabled}
@@ -769,7 +781,11 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
           <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-2.5">
             <div className="flex items-center gap-2">
               {(busy === "enable-skill" || busy === "disable-skill") ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
+                </span>
               ) : (
                 <ToggleSwitch
                   checked={!detail.disabled}
@@ -1238,7 +1254,13 @@ function ClawHubPanel({
 
       <div>
         {loading && viewFilter === "all" ? (
-          <div className="flex items-center justify-center py-12"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground/50" /></div>
+          <div className="flex items-center justify-center py-12">
+            <span className="inline-flex items-center gap-1">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:0ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:300ms]" />
+            </span>
+          </div>
         ) : sortedItems.length === 0 ? (
           <div className="rounded-lg border border-foreground/10 bg-foreground/5 px-4 py-6 text-center text-xs text-muted-foreground/70">
             {viewFilter === "installed" ? "No ClawHub skills installed yet. Use Trending or search, then Install." : "No skills found."}

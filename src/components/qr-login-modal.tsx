@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { QrCode, RefreshCw, Check, X, AlertTriangle, Loader2 } from "lucide-react";
+import { QrCode, RefreshCw, Check, X, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type QrLoginModalProps = {
@@ -148,7 +148,11 @@ export function QrLoginModal({
         {/* ── Connecting ──────────────────────────────── */}
         {state === "connecting" && (
           <div className="flex flex-col items-center gap-3 py-10">
-            <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
+            <span className="inline-flex items-center gap-1">
+              <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" />
+              <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" />
+            </span>
             <p className="text-sm text-muted-foreground">
               Starting login session...
             </p>

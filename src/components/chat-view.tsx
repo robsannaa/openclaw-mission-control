@@ -13,7 +13,6 @@ import { TextStreamChatTransport } from "ai";
 import {
   Send,
   User,
-  Loader2,
   RefreshCw,
   ChevronDown,
   Cpu,
@@ -33,32 +32,25 @@ import { addUnread, clearUnread, setChatActive } from "@/lib/chat-store";
 type Agent = {
   id: string;
   name: string;
+  emoji: string;
   model: string;
+  isDefault: boolean;
   workspace: string;
   sessionCount: number;
   lastActive: number | null;
 };
 
-/* ── Agent icon/color mapping ──────────────────── */
+/* ── Agent display helpers ──────────────────────── */
 
-const AGENT_COLORS: Record<string, string> = {
-  main: "bg-violet-500/20 text-violet-300 border-violet-500/30",
-  gilfoyle: "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
-};
-
-const AGENT_EMOJIS: Record<string, string> = {
-  main: "🦞",
-  gilfoyle: "💀",
-};
-
-function agentColor(id: string) {
-  return (
-    AGENT_COLORS[id] || "bg-blue-500/20 text-blue-300 border-blue-500/30"
-  );
+/** Show a friendly display name: use agent name, but if it's just the raw ID, show model instead */
+function agentDisplayName(agent: Agent): string {
+  if (agent.name && agent.name !== agent.id) return agent.name;
+  return formatModel(agent.model);
 }
 
-function agentEmoji(id: string) {
-  return AGENT_EMOJIS[id] || "🤖";
+function agentSubtitle(agent: Agent): string {
+  if (agent.name && agent.name !== agent.id) return formatModel(agent.model);
+  return agent.id;
 }
 
 function formatTime(d: Date | undefined) {
@@ -243,6 +235,7 @@ function MessageContent({ text }: { text: string }) {
 function ChatPanel({
   agentId,
   agentName,
+  agentEmoji: emoji,
   agentModel,
   isSelected,
   isVisible,
@@ -250,6 +243,7 @@ function ChatPanel({
 }: {
   agentId: string;
   agentName: string;
+  agentEmoji: string;
   agentModel: string;
   isSelected: boolean;
   isVisible: boolean;
@@ -416,7 +410,7 @@ function ChatPanel({
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center gap-4 px-4 md:px-6">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/80 text-xl">
-              {agentEmoji(agentId)}
+              {emoji}
             </div>
             <div className="text-center">
               <h3 className="text-xs font-semibold text-foreground/90">
@@ -441,8 +435,7 @@ function ChatPanel({
                   key={prompt}
                   type="button"
                   onClick={() => {
-                    setInputValue(prompt);
-                    setTimeout(() => inputRef.current?.focus(), 50);
+                    sendMessage({ text: prompt });
                   }}
                   className="rounded-lg border border-foreground/10 bg-muted/60 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
                 >
@@ -492,14 +485,14 @@ function ChatPanel({
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs",
                       isUser
                         ? "bg-muted/80 text-foreground/70"
-                        : cn("border", agentColor(agentId))
+                        : "border border-violet-500/30 bg-violet-500/10"
                     )}
                   >
                     {isUser ? (
                       <User className="h-4 w-4" />
                     ) : (
                       <span className="text-sm">
-                        {agentEmoji(agentId)}
+                        {emoji}
                       </span>
                     )}
                   </div>
@@ -564,15 +557,16 @@ function ChatPanel({
             {isLoading && (
               <div className="mb-6 flex gap-3">
                 <div
-                  className={cn(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border text-xs",
-                    agentColor(agentId)
-                  )}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/30 bg-violet-500/10 text-xs"
                 >
-                  <span className="text-sm">{agentEmoji(agentId)}</span>
+                  <span className="text-sm">{emoji}</span>
                 </div>
                 <div className="flex items-center gap-2 rounded-xl bg-muted/80 px-4 py-3">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  <span className="inline-flex items-center gap-0.5 text-muted-foreground">
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                  </span>
                   <span className="text-xs text-muted-foreground">
                     {agentName} is thinking...
                   </span>
@@ -628,148 +622,155 @@ function ChatPanel({
         onDrop={handleDrop}
       >
         <div className="mx-auto max-w-3xl space-y-2">
-          {/* Model override (brain icon) + attachments row */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative" ref={modelMenuRef}>
-              <button
-                type="button"
-                onClick={() => setModelMenuOpen((open) => !open)}
-                title={modelOverride ? formatModel(modelOverride) : `Model (default: ${formatModel(agentModel)})`}
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-lg border transition-colors",
-                  modelMenuOpen
-                    ? "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300"
-                    : "border-foreground/10 bg-card text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
-              >
-                <Brain className="h-4 w-4" />
-              </button>
-              {modelMenuOpen && (
-                <div className="absolute left-0 bottom-full z-50 mb-1 min-w-48 overflow-hidden rounded-lg border border-foreground/10 bg-card py-1 shadow-xl backdrop-blur-sm">
+          {/* Attached files preview */}
+          {attachedFiles.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {attachedFiles.map((f, i) => (
+                <span
+                  key={`${f.name}-${i}`}
+                  className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-muted/60 px-2 py-1 text-xs"
+                >
+                  <Paperclip className="h-3 w-3 text-muted-foreground/60" />
+                  <span className="max-w-32 truncate">{f.name}</span>
                   <button
                     type="button"
-                    onClick={() => {
-                      setModelOverride(null);
-                      setModelMenuOpen(false);
-                    }}
+                    onClick={() =>
+                      setAttachedFiles((prev) => prev.filter((_, j) => j !== i))
+                    }
+                    className="rounded p-0.5 text-muted-foreground/40 hover:bg-muted hover:text-foreground"
+                    aria-label="Remove file"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files?.length) addFiles(e.target.files);
+              e.target.value = "";
+            }}
+          />
+          {/* Input row: textarea with inline actions */}
+          <div className="flex min-w-0 items-end gap-2 sm:gap-3">
+            <div className="flex min-w-0 flex-1 flex-col rounded-xl border border-foreground/10 bg-card focus-within:border-violet-500/30 focus-within:ring-1 focus-within:ring-violet-500/20">
+              <textarea
+                ref={inputRef}
+                value={inputValue}
+                onChange={handleTextareaChange}
+                onKeyDown={handleKeyDown}
+                placeholder={`Message ${agentName}...`}
+                rows={1}
+                disabled={isLoading}
+                className="max-h-48 flex-1 resize-none bg-transparent px-3 pt-2.5 pb-1 text-xs text-foreground/90 outline-none placeholder:text-muted-foreground/60 disabled:opacity-50 sm:px-4"
+              />
+              {/* Inline toolbar */}
+              <div className="flex items-center gap-1 px-2 pb-1.5 sm:px-3">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  title="Attach files"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/40 transition-colors hover:bg-muted hover:text-foreground/70"
+                >
+                  <Paperclip className="h-3.5 w-3.5" />
+                </button>
+                <div className="relative" ref={modelMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setModelMenuOpen((open) => !open)}
+                    title={modelOverride ? formatModel(modelOverride) : `Model: ${formatModel(agentModel)}`}
                     className={cn(
-                      "flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors",
-                      !modelOverride
-                        ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
-                        : "text-foreground/80 hover:bg-muted hover:text-foreground"
+                      "flex h-7 items-center gap-1 rounded-md px-1.5 text-xs transition-colors",
+                      modelOverride
+                        ? "bg-violet-500/10 text-violet-400"
+                        : "text-muted-foreground/40 hover:bg-muted hover:text-foreground/70"
                     )}
                   >
-                    <Brain className="h-3.5 w-3.5 shrink-0" />
-                    Agent default ({formatModel(agentModel)})
+                    <Brain className="h-3.5 w-3.5" />
+                    {modelOverride && (
+                      <span className="hidden text-xs sm:inline">{formatModel(modelOverride)}</span>
+                    )}
                   </button>
-                  {availableModels.map((m) => (
-                    <button
-                      key={m.key}
-                      type="button"
-                      onClick={() => {
-                        setModelOverride(m.key);
-                        setModelMenuOpen(false);
-                      }}
-                      className={cn(
-                        "flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors",
-                        modelOverride === m.key
-                          ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
-                          : "text-foreground/80 hover:bg-muted hover:text-foreground"
-                      )}
-                    >
-                      <Cpu className="h-3.5 w-3.5 shrink-0" />
-                      {formatModel(m.name)}
-                    </button>
-                  ))}
+                  {modelMenuOpen && (
+                    <div className="absolute left-0 bottom-full z-50 mb-1 min-w-48 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-xl backdrop-blur-sm animate-enter">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setModelOverride(null);
+                          setModelMenuOpen(false);
+                        }}
+                        className={cn(
+                          "flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors",
+                          !modelOverride
+                            ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
+                            : "text-foreground/80 hover:bg-muted hover:text-foreground"
+                        )}
+                      >
+                        <Brain className="h-3.5 w-3.5 shrink-0" />
+                        Default ({formatModel(agentModel)})
+                      </button>
+                      {availableModels.map((m) => (
+                        <button
+                          key={m.key}
+                          type="button"
+                          onClick={() => {
+                            setModelOverride(m.key);
+                            setModelMenuOpen(false);
+                          }}
+                          className={cn(
+                            "flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors",
+                            modelOverride === m.key
+                              ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
+                              : "text-foreground/80 hover:bg-muted hover:text-foreground"
+                          )}
+                        >
+                          <Cpu className="h-3.5 w-3.5 shrink-0" />
+                          {formatModel(m.name)}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files?.length) addFiles(e.target.files);
-                e.target.value = "";
-              }}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              title="Attach files"
-              className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-card px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <Paperclip className="h-3.5 w-3.5" />
-              Attach
-            </button>
-            {attachedFiles.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1">
-                {attachedFiles.map((f, i) => (
-                  <span
-                    key={`${f.name}-${i}`}
-                    className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-muted/60 px-2 py-0.5 text-xs"
+                {messages.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={clearChat}
+                    title="Clear conversation"
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground/40 transition-colors hover:bg-muted hover:text-foreground/70"
                   >
-                    <span className="max-w-32 truncate">{f.name}</span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setAttachedFiles((prev) => prev.filter((_, j) => j !== i))
-                      }
-                      className="rounded p-0.5 hover:bg-muted"
-                      aria-label="Remove file"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                )}
               </div>
-            )}
-          </div>
-          <div className="flex min-w-0 items-end gap-2 sm:gap-3">
-          <div className="flex min-w-0 flex-1 items-end rounded-xl border border-foreground/10 bg-card px-3 py-2 sm:px-4 sm:py-3 focus-within:border-violet-500/30 focus-within:ring-1 focus-within:ring-violet-500/20">
-            <textarea
-              ref={inputRef}
-              value={inputValue}
-              onChange={handleTextareaChange}
-              onKeyDown={handleKeyDown}
-              placeholder={`Message ${agentName}... (or attach files only)`}
-              rows={1}
-              disabled={isLoading}
-              className="max-h-48 flex-1 resize-none bg-transparent text-xs text-foreground/90 outline-none placeholder:text-muted-foreground/60 disabled:opacity-50"
-            />
-          </div>
+            </div>
 
-          {/* Clear button (only when there are messages) */}
-          {messages.length > 0 && (
             <button
               type="button"
-              onClick={clearChat}
-              title="Clear conversation"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted/80 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground/70"
+              onClick={handleSend}
+              disabled={(!inputValue.trim() && attachedFiles.length === 0) || isLoading}
+              className={cn(
+                "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
+                (inputValue.trim() || attachedFiles.length > 0) && !isLoading
+                  ? "bg-violet-600 text-white hover:bg-violet-500"
+                  : "bg-muted text-muted-foreground/60"
+              )}
             >
-              <Trash2 className="h-4 w-4" />
+              {isLoading ? (
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </button>
-          )}
-
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={(!inputValue.trim() && attachedFiles.length === 0) || isLoading}
-            className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
-              (inputValue.trim() || attachedFiles.length > 0) && !isLoading
-                ? "bg-violet-600 text-white hover:bg-violet-500"
-                : "bg-muted text-muted-foreground/60"
-            )}
-          >
-            {isLoading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </button>
-        </div>
+          </div>
         </div>
         <p className="mx-auto mt-2 max-w-3xl text-center text-xs text-muted-foreground/40">
           Messages are sent to your OpenClaw agent. You can send text, attachments only, or both. Press Enter to send, Shift+Enter for new line.
@@ -915,10 +916,10 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                 )}
               >
                 <span className="text-xs">
-                  {agentEmoji(selectedAgent)}
+                  {currentAgent?.emoji || "🤖"}
                 </span>
                 <span className="font-medium text-foreground/90">
-                  {currentAgent?.name || selectedAgent}
+                  {currentAgent ? agentDisplayName(currentAgent) : selectedAgent}
                 </span>
                 <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
@@ -947,12 +948,12 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                         )}
                       >
                         <span className="text-xs">
-                          {agentEmoji(agent.id)}
+                          {agent.emoji || "🤖"}
                         </span>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-medium">
-                              {agent.name}
+                              {agentDisplayName(agent)}
                             </span>
                             {agent.lastActive &&
                               now - agent.lastActive < 300000 && (
@@ -960,7 +961,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                               )}
                           </div>
                           <span className="text-xs text-muted-foreground">
-                            {formatModel(agent.model)} &bull;{" "}
+                            {agentSubtitle(agent)} &bull; {formatModel(agent.model)} &bull;{" "}
                             {agent.sessionCount} session
                             {agent.sessionCount !== 1 ? "s" : ""}
                           </span>
@@ -977,12 +978,13 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
               )}
             </div>
 
-            {/* Model badge */}
+            {/* Model / agent ID badge */}
             {currentAgent && (
               <div className="flex items-center gap-1.5 rounded-md border border-foreground/10 bg-muted/60 px-2 py-1">
                 <Cpu className="h-3 w-3 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
-                  {formatModel(currentAgent.model)}
+                  {agentSubtitle(currentAgent)}
+                  {currentAgent.name !== currentAgent.id && ` · ${formatModel(currentAgent.model)}`}
                 </span>
               </div>
             )}
@@ -1008,7 +1010,8 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
           <ChatPanel
             key={agentId}
             agentId={agentId}
-            agentName={agent?.name || agentId}
+            agentName={agent ? agentDisplayName(agent) : agentId}
+            agentEmoji={agent?.emoji || "🤖"}
             agentModel={agent?.model || "unknown"}
             isSelected={agentId === selectedAgent}
             isVisible={isVisible}

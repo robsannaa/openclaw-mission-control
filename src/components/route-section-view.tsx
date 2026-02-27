@@ -9,8 +9,12 @@ import { setChatActive } from "@/lib/chat-store";
 
 function SectionLoading() {
   return (
-    <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">
-      Loading...
+    <div className="flex flex-1 flex-col items-center justify-center gap-3">
+      <div className="flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:0ms]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:150ms]" />
+        <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/40 [animation-delay:300ms]" />
+      </div>
     </div>
   );
 }
@@ -103,6 +107,10 @@ const SettingsView = dynamic(
   () => import("@/components/settings-view").then((m) => m.SettingsView),
   { loading: () => <SectionLoading /> }
 );
+const HooksView = dynamic(
+  () => import("@/components/hooks-view").then((m) => m.HooksView),
+  { loading: () => <SectionLoading /> }
+);
 
 export type DashboardSection =
   | "dashboard"
@@ -128,9 +136,9 @@ export type DashboardSection =
   | "permissions"
   | "tailscale"
   | "browser"
-  | "calendar"
   | "search"
-  | "settings";
+  | "settings"
+  | "hooks";
 
 function SectionContent({ section }: { section: DashboardSection }) {
   switch (section) {
@@ -178,17 +186,12 @@ function SectionContent({ section }: { section: DashboardSection }) {
       return <TailscaleView />;
     case "browser":
       return <BrowserRelayView />;
-    case "calendar":
-      return (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-muted-foreground">
-          <p className="text-sm font-medium">Calendar</p>
-          <p className="text-xs">Coming soon</p>
-        </div>
-      );
     case "search":
       return <WebSearchView />;
     case "settings":
       return <SettingsView />;
+    case "hooks":
+      return <HooksView />;
     default:
       return <DashboardView />;
   }

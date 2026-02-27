@@ -915,7 +915,15 @@ export function MemoryView() {
           className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/5 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 disabled:opacity-50"
           title="Re-index all memory files into the vector store"
         >
-          <RefreshCw className={cn("h-3 w-3", reindexingAll && "animate-spin")} />
+          {reindexingAll ? (
+            <span className="inline-flex items-center gap-0.5">
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+            </span>
+          ) : (
+            <RefreshCw className="h-3 w-3" />
+          )}
           {reindexingAll ? "Reindexing..." : "Reindex All"}
         </button>
       </div>
@@ -1008,7 +1016,15 @@ export function MemoryView() {
                       disabled={ensuringIndex}
                       className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300 hover:bg-sky-500/20 disabled:opacity-60"
                     >
-                      <RefreshCw className={cn("h-2.5 w-2.5", ensuringIndex && "animate-spin")} />
+                      {ensuringIndex ? (
+                        <span className="inline-flex items-center gap-0.5">
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                        </span>
+                      ) : (
+                        <RefreshCw className="h-2.5 w-2.5" />
+                      )}
                       {ensuringIndex ? "Indexing…" : "Add to Index"}
                     </button>
                   )}
@@ -1144,7 +1160,15 @@ export function MemoryView() {
                           disabled={indexingFile === key}
                           className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-1.5 py-0.5 text-xs font-medium text-sky-300 hover:bg-sky-500/20 disabled:opacity-60"
                         >
-                          <RefreshCw className={cn("h-2.5 w-2.5", indexingFile === key && "animate-spin")} />
+                          {indexingFile === key ? (
+                            <span className="inline-flex items-center gap-0.5">
+                              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                              <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                            </span>
+                          ) : (
+                            <RefreshCw className="h-2.5 w-2.5" />
+                          )}
                           {indexingFile === key ? "Indexing" : "Index"}
                         </button>
                       )}
@@ -1362,7 +1386,15 @@ export function MemoryView() {
                       className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Add this file to the vector index"
                     >
-                      <RefreshCw className={cn("h-3 w-3", ensuringIndex && "animate-spin")} />
+                      {ensuringIndex ? (
+                        <span className="inline-flex items-center gap-0.5">
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                        </span>
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
                       {ensuringIndex ? "Indexing..." : "Add to Index"}
                     </button>
                   )}
@@ -1375,12 +1407,15 @@ export function MemoryView() {
                       className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Re-index this memory entry"
                     >
-                      <RefreshCw
-                        className={cn(
-                          "h-3 w-3",
-                          indexingFile === journalKey(selectedDailyEntry.name) && "animate-spin"
-                        )}
-                      />
+                      {indexingFile === journalKey(selectedDailyEntry.name) ? (
+                        <span className="inline-flex items-center gap-0.5">
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                        </span>
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
                       {indexingFile === journalKey(selectedDailyEntry.name) ? "Indexing..." : "Index now"}
                     </button>
                   )}
@@ -1393,12 +1428,15 @@ export function MemoryView() {
                       className="ml-auto inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2 py-0.5 text-xs font-medium text-sky-300 transition-colors hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-60"
                       title="Re-index this agent memory file"
                     >
-                      <RefreshCw
-                        className={cn(
-                          "h-3 w-3",
-                          indexingFile === agentMemoryKey(selectedAgentMemory.agentId) && "animate-spin"
-                        )}
-                      />
+                      {indexingFile === agentMemoryKey(selectedAgentMemory.agentId) ? (
+                        <span className="inline-flex items-center gap-0.5">
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                        </span>
+                      ) : (
+                        <RefreshCw className="h-3 w-3" />
+                      )}
                       {indexingFile === agentMemoryKey(selectedAgentMemory.agentId) ? "Indexing..." : "Index now"}
                     </button>
                   )}
@@ -1485,12 +1523,15 @@ export function MemoryView() {
                 }}
                 disabled={indexingFile === journalKey(ctxMenu.entry.name)}
               >
-                <RefreshCw
-                  className={cn(
-                    "h-3.5 w-3.5",
-                    indexingFile === journalKey(ctxMenu.entry.name) && "animate-spin"
-                  )}
-                />
+                {indexingFile === journalKey(ctxMenu.entry.name) ? (
+                  <span className="inline-flex items-center gap-0.5">
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                  </span>
+                ) : (
+                  <RefreshCw className="h-3.5 w-3.5" />
+                )}
                 {indexingFile === journalKey(ctxMenu.entry.name) ? "Indexing..." : "Index now"}
               </button>
             )}

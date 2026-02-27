@@ -17,7 +17,6 @@ import {
   MessageSquare,
   Radio,
   Brain,
-  CalendarDays,
   FolderOpen,
   Settings,
   Wrench,
@@ -44,6 +43,7 @@ import {
   Search,
   Heart,
   Settings2,
+  Webhook,
 } from "lucide-react";
 import { getChatUnreadCount, subscribeChatStore } from "@/lib/chat-store";
 import {
@@ -75,7 +75,6 @@ const navItems: NavItem[] = [
   { section: "sessions", label: "Sessions", icon: MessageSquare, href: "/sessions" },
   { section: "cron", label: "Cron Jobs", icon: Clock, href: "/cron" },
   { section: "heartbeat", label: "Heartbeat", icon: Heart, href: "/heartbeat", isSubItem: true },
-  { section: "calendar", label: "Calendar", icon: CalendarDays, comingSoon: true, href: "/calendar" },
   // ── Knowledge ──
   { group: "Knowledge", section: "memory", label: "Memory", icon: Brain, href: "/memory" },
   { section: "docs", label: "Documents", icon: FolderOpen, href: "/documents" },
@@ -90,6 +89,7 @@ const navItems: NavItem[] = [
   { group: "Configuration", section: "models", label: "Models", icon: Cpu, href: "/models" },
   { section: "accounts", label: "Accounts & Keys", icon: KeyRound, href: "/accounts" },
   { section: "permissions", label: "Permissions", icon: Shield, href: "/permissions" },
+  { section: "hooks", label: "Hooks", icon: Webhook, href: "/hooks" },
   { section: "tailscale", label: "Tailscale", icon: Waypoints, href: "/tailscale" },
   { section: "settings", label: "Settings", icon: Settings2, href: "/settings" },
   { section: "config", label: "Config", icon: Settings, href: "/config" },
@@ -131,12 +131,12 @@ function deriveSectionFromPath(pathname: string): string | null {
     "search",
     "tailscale",
     "permissions",
+    "hooks",
     "usage",
     "terminal",
     "logs",
     "config",
     "settings",
-    "calendar",
   ]);
   return known.has(first) ? first : null;
 }
@@ -421,12 +421,15 @@ function GatewayBadge({ collapsed }: { collapsed?: boolean }) {
             disabled={restarting}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground/70 transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:opacity-50"
           >
-            <RefreshCw
-              className={cn(
-                "h-3.5 w-3.5 text-muted-foreground",
-                restarting && "animate-spin"
-              )}
-            />
+            {restarting ? (
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+              </span>
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
             Restart Gateway
           </button>
           <button

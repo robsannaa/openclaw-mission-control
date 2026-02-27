@@ -226,20 +226,12 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.10);
+  background: var(--border-subtle);
   border-radius: 10px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.20);
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.07);
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--border-strong);
 }
 
 /* ── Surface system — flat card utilities ───────── */
@@ -263,16 +255,69 @@ body {
     box-shadow: 0 1px 3px var(--glass-shadow-strong);
   }
 
-  /* Interactive surface — hover border strengthen */
+  /* Interactive surface — hover border strengthen + lift */
   .glass-glow {
     background: var(--glass-bg);
     border: 1px solid var(--glass-border);
-    transition: border-color 0.15s ease;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
   }
 
   .glass-glow:hover {
     border-color: var(--border-strong);
+    box-shadow: 0 2px 8px var(--glass-shadow-strong);
+    transform: translateY(-1px);
   }
+
+  /* Card lift — subtle hover depth for interactive cards */
+  .card-lift {
+    transition: box-shadow 0.2s ease, transform 0.2s ease;
+  }
+
+  .card-lift:hover {
+    box-shadow: 0 4px 12px var(--glass-shadow-strong);
+    transform: translateY(-2px);
+  }
+
+  /* Smooth content entrance */
+  .animate-enter {
+    animation: enterFade 0.3s ease-out;
+  }
+
+  /* Staggered children fade-in */
+  .stagger-enter > * {
+    animation: enterSlideUp 0.35s ease-out both;
+  }
+
+  .stagger-enter > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-enter > *:nth-child(2) { animation-delay: 50ms; }
+  .stagger-enter > *:nth-child(3) { animation-delay: 100ms; }
+  .stagger-enter > *:nth-child(4) { animation-delay: 150ms; }
+  .stagger-enter > *:nth-child(5) { animation-delay: 200ms; }
+  .stagger-enter > *:nth-child(6) { animation-delay: 250ms; }
+  .stagger-enter > *:nth-child(7) { animation-delay: 300ms; }
+  .stagger-enter > *:nth-child(8) { animation-delay: 350ms; }
+  .stagger-enter > *:nth-child(n+9) { animation-delay: 400ms; }
+}
+
+/* ── Keyframes ─────────────────────────────────── */
+@keyframes enterFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes enterSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
 }
 
 /* ── Light mode — accent color adjustments ──────── */

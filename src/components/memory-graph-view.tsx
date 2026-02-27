@@ -25,7 +25,6 @@ import {
   Filter,
   GitBranch,
   Layers,
-  Loader2,
   Pin,
   PinOff,
   RefreshCw,
@@ -1676,7 +1675,7 @@ export function MemoryGraphView() {
               title="Rebuild from memory"
               className="inline-flex items-center gap-1 rounded border border-sky-500/30 bg-sky-500/10 px-1.5 py-1 text-xs text-sky-700 hover:bg-sky-500/20 dark:text-sky-200 disabled:opacity-50"
             >
-              {rebuilding ? <Loader2 className="h-3 w-3 animate-spin" /> : <GitBranch className="h-3 w-3" />} Rebuild
+              {rebuilding ? <span className="inline-flex items-center gap-0.5"><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span> : <GitBranch className="h-3 w-3" />} Rebuild
             </button>
             <button
               type="button"
@@ -1685,7 +1684,7 @@ export function MemoryGraphView() {
               title="Save graph"
               className="inline-flex items-center gap-1 rounded border border-violet-500/35 bg-violet-500/15 px-1.5 py-1 text-xs text-violet-700 hover:bg-violet-500/25 dark:text-violet-200 disabled:opacity-50"
             >
-              {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />} Save
+              {saving ? <span className="inline-flex items-center gap-0.5"><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span> : <Save className="h-3 w-3" />} Save
             </button>
             <button
               type="button"
@@ -1694,7 +1693,7 @@ export function MemoryGraphView() {
               title="Publish snapshot to memory"
               className="inline-flex items-center gap-1 rounded border border-emerald-500/35 bg-emerald-500/10 px-1.5 py-1 text-xs text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-200 disabled:opacity-50"
             >
-              {publishing ? <Loader2 className="h-3 w-3 animate-spin" /> : <UploadCloud className="h-3 w-3" />} Publish
+              {publishing ? <span className="inline-flex items-center gap-0.5"><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span> : <UploadCloud className="h-3 w-3" />} Publish
             </button>
             <button
               type="button"

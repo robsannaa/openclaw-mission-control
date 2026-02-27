@@ -20,7 +20,6 @@ import {
   Smartphone,
   UserCheck,
   UserX,
-  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
@@ -403,7 +402,15 @@ export function PermissionsView() {
               disabled={loading || mutating}
               className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/80 disabled:opacity-60"
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", (loading || mutating) && "animate-spin")} />
+              {(loading || mutating) ? (
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
               Refresh
             </button>
           </div>
@@ -613,7 +620,13 @@ export function PermissionsView() {
                   disabled={mutating || elevatedEnabled}
                   className="inline-flex items-center gap-1 rounded-md border border-amber-500/25 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-200 disabled:opacity-50"
                 >
-                  {pendingAction === "elevated-enable" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Unlock className="h-3 w-3" />}
+                  {pendingAction === "elevated-enable" ? (
+                    <span className="inline-flex items-center gap-0.5">
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                    </span>
+                  ) : <Unlock className="h-3 w-3" />}
                   Enable
                 </button>
                 <button
@@ -622,7 +635,13 @@ export function PermissionsView() {
                   disabled={mutating || !elevatedEnabled}
                   className="inline-flex items-center gap-1 rounded-md border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs text-emerald-700 dark:text-emerald-200 disabled:opacity-50"
                 >
-                  {pendingAction === "elevated-disable" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Lock className="h-3 w-3" />}
+                  {pendingAction === "elevated-disable" ? (
+                    <span className="inline-flex items-center gap-0.5">
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                    </span>
+                  ) : <Lock className="h-3 w-3" />}
                   Disable
                 </button>
               </div>
@@ -646,7 +665,13 @@ export function PermissionsView() {
                   disabled={mutating || !pattern.trim()}
                   className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/15 px-2 py-1 text-xs text-violet-700 dark:text-violet-200 disabled:opacity-50"
                 >
-                  {pendingAction === "grant" ? <Loader2 className="h-3 w-3 animate-spin" /> : <Plus className="h-3 w-3" />}
+                  {pendingAction === "grant" ? (
+                    <span className="inline-flex items-center gap-0.5">
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                    </span>
+                  ) : <Plus className="h-3 w-3" />}
                   Grant
                 </button>
               </div>
@@ -722,7 +747,13 @@ export function PermissionsView() {
                   disabled={mutating}
                   className="inline-flex items-center gap-1 rounded border border-cyan-500/30 bg-cyan-500/15 px-2 py-1 text-xs font-medium text-cyan-700 dark:text-cyan-200 disabled:opacity-50"
                 >
-                  {pendingAction === "defaults" ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                  {pendingAction === "defaults" ? (
+                    <span className="inline-flex items-center gap-0.5">
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                    </span>
+                  ) : null}
                   Save defaults
                 </button>
               </div>
@@ -763,7 +794,13 @@ export function PermissionsView() {
                           : "border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-200"
                       )}
                     >
-                      {pendingAction === `quick:${item.pattern}` ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                      {pendingAction === `quick:${item.pattern}` ? (
+                        <span className="inline-flex items-center gap-0.5">
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                        </span>
+                      ) : null}
                       {active ? "Revoke" : "Grant"}
                     </button>
                   </div>
@@ -823,7 +860,13 @@ export function PermissionsView() {
                         disabled={mutating}
                         className="inline-flex items-center gap-1 rounded-md border border-red-500/30 bg-red-500/15 px-2 py-1 text-xs font-medium text-red-700 dark:text-red-200 disabled:opacity-50"
                       >
-                        {pendingAction === `revoke:${entry.pattern}` ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                        {pendingAction === `revoke:${entry.pattern}` ? (
+                          <span className="inline-flex items-center gap-0.5">
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                          </span>
+                        ) : <Trash2 className="h-3 w-3" />}
                         Revoke
                       </button>
                     </div>
@@ -890,7 +933,15 @@ export function PermissionsView() {
               disabled={devicesLoading || deviceMutating}
               className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/80 disabled:opacity-60"
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", (devicesLoading || deviceMutating) && "animate-spin")} />
+              {(devicesLoading || deviceMutating) ? (
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
               Refresh Devices
             </button>
           </div>

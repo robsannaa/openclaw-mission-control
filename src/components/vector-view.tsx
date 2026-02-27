@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   Database, Search, RefreshCw, ChevronDown, ChevronUp, Check,
-  AlertTriangle, Loader2, X, FileText, Hash, Cpu, HardDrive,
+  AlertTriangle, X, FileText, Hash, Cpu, HardDrive,
   Layers, RotateCcw, Activity, Filter, ArrowUpDown, Eye, Copy,
   Box, BarChart3, CircleDot, Settings2, Pencil, Save, Lock, KeyRound,
   Zap,
@@ -156,7 +156,7 @@ function AgentIndexCard({ agent, onReindex, reindexing }: { agent: AgentMemory; 
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => onReindex(agent.agentId, false)} disabled={reindexing} className="flex items-center gap-1.5 rounded-lg bg-foreground/10 px-3 py-1.5 text-xs font-medium text-foreground/70 hover:bg-foreground/10 disabled:opacity-50">
-            {reindexing ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}Reindex
+            {reindexing ? <span className="inline-flex items-center gap-0.5"><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span> : <RefreshCw className="h-3 w-3" />}Reindex
           </button>
           <button onClick={() => setExpanded(!expanded)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-foreground/10 hover:text-foreground/70">
             {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -308,7 +308,7 @@ function EmbeddingModelEditor({
       {/* Available models — from authenticated providers */}
       {authLoading ? (
         <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground/60">
-          <Loader2 className="h-3 w-3 animate-spin" />Checking authenticated providers...
+          <span className="inline-flex items-center gap-0.5"><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span>Checking authenticated providers...
         </div>
       ) : (
         <>
@@ -485,7 +485,7 @@ function EmbeddingModelEditor({
           disabled={saving || !provider.trim() || !model.trim() || (provider === currentProvider && model === currentModel)}
           className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50"
         >
-          {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}Save & Reindex
+          {saving ? <span className="inline-flex items-center gap-0.5"><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span> : <Save className="h-3.5 w-3.5" />}Save & Reindex
         </button>
         <button onClick={() => { setEditing(false); setProvider(currentProvider); setModel(currentModel); }} className="rounded-lg px-3 py-2 text-xs text-muted-foreground hover:text-foreground/90">Cancel</button>
       </div>
@@ -661,7 +661,7 @@ function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]
             onClick={() => onSetup(customProvider.trim(), customModel.trim())}
             className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50"
           >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            {busy ? <span className="inline-flex items-center gap-0.5"><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span> : <Save className="h-3.5 w-3.5" />}
             Save & Enable
           </button>
         </div>
@@ -679,7 +679,7 @@ function SetupWizard({ authProviders, onSetup, busy }: { authProviders: string[]
               className="inline-flex items-center gap-2 rounded-xl bg-violet-600 px-8 py-3 text-xs font-semibold text-white transition hover:bg-violet-500 disabled:opacity-50"
             >
               {busy ? (
-                <><Loader2 className="h-4 w-4 animate-spin" />Setting up...</>
+                <><span className="inline-flex items-center gap-0.5"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span>Setting up...</>
               ) : (
                 <><Zap className="h-4 w-4" />Enable Vector Memory</>
               )}
@@ -926,7 +926,7 @@ export function VectorView() {
 
         <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-foreground/90"><Search className="h-4 w-4 text-violet-400" />Query Console</div>
-          <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" /><input type="text" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") doSearch(query); }} placeholder="Semantic search across your vector memory..." className="w-full rounded-lg border border-foreground/10 bg-muted py-2.5 pl-10 pr-4 text-sm text-foreground/90 placeholder-zinc-600 outline-none focus:border-violet-500/30" />{searching && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-violet-400" />}</div>
+          <div className="relative"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" /><input type="text" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") doSearch(query); }} placeholder="Semantic search across your vector memory..." className="w-full rounded-lg border border-foreground/10 bg-muted py-2.5 pl-10 pr-4 text-sm text-foreground/90 placeholder-zinc-600 outline-none focus:border-violet-500/30" />{searching && <span className="absolute right-3 top-1/2 -translate-y-1/2 inline-flex items-center gap-0.5"><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" /><span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" /></span>}</div>
           <div className="flex items-center gap-3 flex-wrap">
             <div className="flex items-center gap-1.5"><Filter className="h-3 w-3 text-muted-foreground/60" /><span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Filters</span></div>
             <select value={searchAgent} onChange={(e) => setSearchAgent(e.target.value)} className="rounded-md border border-foreground/10 bg-muted px-2.5 py-1.5 text-xs text-foreground/70 outline-none"><option value="">All namespaces</option>{agents.map((a) => <option key={a.agentId} value={a.agentId}>{a.agentId}</option>)}</select>
@@ -961,7 +961,7 @@ export function VectorView() {
               <p className="text-xs text-muted-foreground mt-0.5">Include all root-level <code className="rounded bg-muted px-1 text-xs">.md</code> files in semantic search so the index covers your full workspace knowledge, not just <code className="rounded bg-muted px-1 text-xs">memory/</code>.</p>
             </div>
             <button type="button" onClick={handleEnsureExtraPaths} disabled={ensuringExtraPaths} className="shrink-0 flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50">
-              {ensuringExtraPaths ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FileText className="h-3.5 w-3.5" />}
+              {ensuringExtraPaths ? <span className="inline-flex items-center gap-0.5"><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span> : <FileText className="h-3.5 w-3.5" />}
               {ensuringExtraPaths ? "Adding & reindexing…" : "Include reference files in search"}
             </button>
           </div>

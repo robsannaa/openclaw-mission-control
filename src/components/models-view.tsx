@@ -9,7 +9,6 @@ import {
   EyeOff,
   KeyRound,
   ListOrdered,
-  Loader2,
   Plus,
   RefreshCw,
   RotateCcw,
@@ -1225,7 +1224,15 @@ export function ModelsView() {
               disabled={Boolean(busyKey)}
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
             >
-              <RefreshCw className={cn("h-3.5 w-3.5", busyKey && "animate-spin")} />
+              {busyKey ? (
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
               Refresh
             </button>
           </div>
@@ -1663,7 +1670,11 @@ export function ModelsView() {
               className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
             >
               {allModelsLoading ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
               )}
@@ -1678,7 +1689,11 @@ export function ModelsView() {
               className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-2.5 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
             >
               {busyKey === "catalog:scan" ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
               ) : (
                 <RefreshCw className="h-3.5 w-3.5" />
               )}
@@ -1787,7 +1802,11 @@ export function ModelsView() {
               <p className="text-xs font-semibold text-foreground">Per-agent auth order override</p>
               {orderLoading ? (
                 <p className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <span className="inline-flex items-center gap-0.5">
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                  </span>
                   Loading order…
                 </p>
               ) : (
@@ -1905,7 +1924,13 @@ export function ModelsView() {
                 disabled={orderBusy || orderDraft.length === 0}
                 className="inline-flex items-center justify-center gap-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
               >
-                {orderBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ListOrdered className="h-3.5 w-3.5" />}
+                {orderBusy ? (
+                  <span className="inline-flex items-center gap-0.5">
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                  </span>
+                ) : <ListOrdered className="h-3.5 w-3.5" />}
                 Save order
               </button>
               <button

@@ -482,7 +482,15 @@ export function ChannelsView() {
                 disabled={busy || channelsLoading}
                 className="flex items-center gap-1 rounded-lg border border-foreground/10 bg-foreground/5 px-2.5 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/10 disabled:opacity-40"
               >
-                <RefreshCw className={cn("h-3 w-3", channelsLoading && "animate-spin")} />
+                {channelsLoading ? (
+                  <span className="inline-flex items-center gap-0.5">
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                    <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                  </span>
+                ) : (
+                  <RefreshCw className="h-3 w-3" />
+                )}
                 Refresh
               </button>
               <button
@@ -696,7 +704,11 @@ export function ChannelsView() {
                     >
                       {wizardRunning ? (
                         <>
-                          <RefreshCw className="h-3 w-3 animate-spin" />
+                          <span className="inline-flex items-center gap-0.5">
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                            <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                          </span>
                           Running...
                         </>
                       ) : (

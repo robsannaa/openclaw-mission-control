@@ -4,6 +4,13 @@
  * instead of raw model keys like "anthropic/claude-sonnet-4-20250514".
  */
 
+export type ModelPricing = {
+  inputPer1M: number;
+  outputPer1M: number;
+  cacheReadPer1M?: number;
+  cacheWritePer1M?: number;
+};
+
 export type ModelMeta = {
   displayName: string;
   provider: string;
@@ -11,6 +18,7 @@ export type ModelMeta = {
   description: string;
   contextWindow: string;
   priceTier: "$" | "$$" | "$$$";
+  pricing?: ModelPricing;
 };
 
 const MODEL_META: Record<string, ModelMeta> = {
@@ -22,6 +30,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Most capable model for complex reasoning and analysis",
     contextWindow: "200K",
     priceTier: "$$$",
+    pricing: { inputPer1M: 15, outputPer1M: 75, cacheReadPer1M: 1.5, cacheWritePer1M: 18.75 },
   },
   "anthropic/claude-sonnet-4-20250514": {
     displayName: "Claude Sonnet 4",
@@ -30,6 +39,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Best balance of intelligence, speed, and cost",
     contextWindow: "200K",
     priceTier: "$$",
+    pricing: { inputPer1M: 3, outputPer1M: 15, cacheReadPer1M: 0.3, cacheWritePer1M: 3.75 },
   },
   "anthropic/claude-haiku-3-5-20241022": {
     displayName: "Claude Haiku 3.5",
@@ -38,6 +48,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Fast and affordable for routine tasks",
     contextWindow: "200K",
     priceTier: "$",
+    pricing: { inputPer1M: 0.8, outputPer1M: 4, cacheReadPer1M: 0.08, cacheWritePer1M: 1 },
   },
 
   // ── OpenAI ──
@@ -48,6 +59,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Flagship model for complex reasoning",
     contextWindow: "1M",
     priceTier: "$$",
+    pricing: { inputPer1M: 2, outputPer1M: 8 },
   },
   "openai/gpt-4.1-mini": {
     displayName: "GPT-4.1 Mini",
@@ -56,6 +68,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Fast, affordable with strong capabilities",
     contextWindow: "1M",
     priceTier: "$",
+    pricing: { inputPer1M: 0.4, outputPer1M: 1.6 },
   },
   "openai/gpt-4.1-nano": {
     displayName: "GPT-4.1 Nano",
@@ -64,6 +77,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Fastest and cheapest for simple tasks",
     contextWindow: "1M",
     priceTier: "$",
+    pricing: { inputPer1M: 0.1, outputPer1M: 0.4 },
   },
   "openai/gpt-4o": {
     displayName: "GPT-4o",
@@ -72,6 +86,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Versatile multimodal model",
     contextWindow: "128K",
     priceTier: "$$",
+    pricing: { inputPer1M: 2.5, outputPer1M: 10 },
   },
   "openai/gpt-4o-mini": {
     displayName: "GPT-4o Mini",
@@ -80,6 +95,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Compact and cost-effective",
     contextWindow: "128K",
     priceTier: "$",
+    pricing: { inputPer1M: 0.15, outputPer1M: 0.6 },
   },
   "openai/o3": {
     displayName: "o3",
@@ -88,6 +104,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Advanced reasoning with extended thinking",
     contextWindow: "200K",
     priceTier: "$$$",
+    pricing: { inputPer1M: 2, outputPer1M: 8 },
   },
   "openai/o3-mini": {
     displayName: "o3 Mini",
@@ -96,6 +113,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Efficient reasoning model",
     contextWindow: "200K",
     priceTier: "$$",
+    pricing: { inputPer1M: 1.1, outputPer1M: 4.4 },
   },
   "openai/o4-mini": {
     displayName: "o4 Mini",
@@ -104,6 +122,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Latest efficient reasoning model",
     contextWindow: "200K",
     priceTier: "$$",
+    pricing: { inputPer1M: 1.1, outputPer1M: 4.4 },
   },
 
   // ── Google ──
@@ -114,6 +133,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Most capable Gemini for complex tasks",
     contextWindow: "1M",
     priceTier: "$$",
+    pricing: { inputPer1M: 1.25, outputPer1M: 10 },
   },
   "google/gemini-2.5-flash": {
     displayName: "Gemini 2.5 Flash",
@@ -122,6 +142,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Fast and efficient with large context",
     contextWindow: "1M",
     priceTier: "$",
+    pricing: { inputPer1M: 0.15, outputPer1M: 0.6 },
   },
   "google/gemini-2.0-flash": {
     displayName: "Gemini 2.0 Flash",
@@ -130,6 +151,7 @@ const MODEL_META: Record<string, ModelMeta> = {
     description: "Previous gen flash model",
     contextWindow: "1M",
     priceTier: "$",
+    pricing: { inputPer1M: 0.1, outputPer1M: 0.4 },
   },
 
   // ── Groq ──
@@ -218,22 +240,61 @@ const MODEL_META: Record<string, ModelMeta> = {
 /**
  * Look up enriched metadata for a model key.
  * Returns null if no metadata exists (falls back to raw key display).
+ * Handles OpenRouter 3-part keys like "openrouter/anthropic/claude-sonnet-4"
+ * by first trying direct match, then stripping the "openrouter/" prefix.
  */
 export function getModelMeta(key: string): ModelMeta | null {
   // Direct match
   if (MODEL_META[key]) return MODEL_META[key];
 
-  // Try without date suffix (e.g. "anthropic/claude-sonnet-4-20250514" → "anthropic/claude-sonnet-4")
   const parts = key.split("/");
+
+  // OpenRouter 3-part key: try "openrouter/provider/model" first,
+  // then fall back to "provider/model" to reuse the underlying model's metadata
+  if (parts.length === 3 && parts[0] === "openrouter") {
+    const underlyingKey = `${parts[1]}/${parts[2]}`;
+    if (MODEL_META[underlyingKey]) return MODEL_META[underlyingKey];
+    // Also try stripping date suffix on the underlying key
+    const stripped = parts[2].replace(/-\d{8}$/, "");
+    const candidateKey = `${parts[1]}/${stripped}`;
+    if (MODEL_META[candidateKey]) return MODEL_META[candidateKey];
+  }
+
+  // Try without date suffix (e.g. "anthropic/claude-sonnet-4-20250514" → "anthropic/claude-sonnet-4")
   if (parts.length === 2) {
     const [provider, name] = parts;
-    // Strip date suffix pattern like -YYYYMMDD
     const stripped = name.replace(/-\d{8}$/, "");
     const candidateKey = `${provider}/${stripped}`;
     if (MODEL_META[candidateKey]) return MODEL_META[candidateKey];
   }
 
   return null;
+}
+
+/**
+ * Estimate the USD cost for a set of token counts given a full model key.
+ * Returns null if no pricing data is available for the model.
+ */
+export function estimateCostUsd(
+  fullModel: string,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens = 0,
+  cacheWriteTokens = 0,
+): number | null {
+  const meta = getModelMeta(fullModel);
+  if (!meta?.pricing) return null;
+  const p = meta.pricing;
+  let cost =
+    (inputTokens / 1_000_000) * p.inputPer1M +
+    (outputTokens / 1_000_000) * p.outputPer1M;
+  if (cacheReadTokens > 0 && p.cacheReadPer1M != null) {
+    cost += (cacheReadTokens / 1_000_000) * p.cacheReadPer1M;
+  }
+  if (cacheWriteTokens > 0 && p.cacheWritePer1M != null) {
+    cost += (cacheWriteTokens / 1_000_000) * p.cacheWritePer1M;
+  }
+  return cost;
 }
 
 /**

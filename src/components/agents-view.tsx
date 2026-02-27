@@ -41,7 +41,6 @@ import {
   Network,
   Plus,
   X,
-  Loader2,
   Sparkles,
   Search,
   Key,
@@ -1227,7 +1226,11 @@ function FlowView({
         </div>
       ) : (
         <div className="flex h-full items-center justify-center text-muted-foreground/40">
-          <Loader2 className="h-5 w-5 animate-spin" />
+          <span className="inline-flex items-center gap-1">
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+          </span>
         </div>
       )}
     </div>
@@ -1682,7 +1685,13 @@ function ModelPicker({
                   disabled={!apiKey.trim() || savingKey}
                   className="shrink-0 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
                 >
-                  {savingKey ? <Loader2 className="h-3 w-3 animate-spin" /> : "Connect"}
+                  {savingKey ? (
+                    <span className="inline-flex items-center gap-0.5">
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                      <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                    </span>
+                  ) : "Connect"}
                 </button>
               </div>
               <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground/50">
@@ -2073,7 +2082,7 @@ function ChannelBindingPicker({
                       className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
                     >
                       {saving ? (
-                        <span className="flex items-center gap-1.5"><Loader2 className="h-3 w-3 animate-spin" /> Connecting...</span>
+                        <span className="flex items-center gap-1.5"><span className="inline-flex items-center gap-0.5"><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span> Connecting...</span>
                       ) : (
                         "Connect & Save"
                       )}
@@ -2569,7 +2578,11 @@ function AddAgentModal({
           >
             {busy ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
                 Creating...
               </>
             ) : success ? (
@@ -3041,7 +3054,11 @@ function EditAgentModal({
             </label>
             {modelsLoading ? (
               <div className="flex items-center gap-2 rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-xs text-muted-foreground/50">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
                 Loading models…
               </div>
             ) : (
@@ -3086,7 +3103,11 @@ function EditAgentModal({
             </label>
             {modelsLoading ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground/50">
-                <Loader2 className="h-3 w-3 animate-spin" /> Loading…
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span> Loading…
               </div>
             ) : models.length === 0 ? (
               <p className="text-xs text-muted-foreground/50">
@@ -3269,7 +3290,11 @@ function EditAgentModal({
                   >
                     {deleting ? (
                       <span className="inline-flex items-center gap-1.5">
-                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span className="inline-flex items-center gap-0.5">
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                          <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                        </span>
                         Deleting…
                       </span>
                     ) : (
@@ -3327,7 +3352,11 @@ function EditAgentModal({
           >
             {busy ? (
               <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
                 Saving…
               </>
             ) : success ? (
@@ -3641,7 +3670,11 @@ function WorkspaceFilesModal({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
           {loading ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground/70">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+              </span>
               Loading workspace files...
             </div>
           ) : error ? (

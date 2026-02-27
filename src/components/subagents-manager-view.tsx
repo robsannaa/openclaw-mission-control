@@ -11,7 +11,6 @@ import {
   Terminal,
   Send,
   Activity,
-  Loader2,
 } from "lucide-react";
 import { SectionBody } from "@/components/section-layout";
 import { requestRestart } from "@/lib/restart-store";
@@ -868,7 +867,11 @@ export function SubagentsManagerView({
             className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
           >
             {running ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span className="inline-flex items-center gap-0.5">
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+              </span>
             ) : action === "kill" ? (
               <Square className="h-3.5 w-3.5" />
             ) : (

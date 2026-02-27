@@ -13,6 +13,8 @@
 # testing
 /coverage
 /playwright-report
+/playwright/.cache
+.playwright-mcp/
 /test-results
 
 # next.js

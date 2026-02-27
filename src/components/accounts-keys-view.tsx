@@ -3,14 +3,23 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
   Cpu,
   Eye,
   EyeOff,
+  FileWarning,
   KeyRound,
   RefreshCw,
+  RotateCw,
+  Shield,
+  ShieldAlert,
   ShieldCheck,
   ShieldX,
+  Wrench,
 } from "lucide-react";
+import { InlineSpinner } from "@/components/ui/loading-state";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 
 type AccountsResponse = {
@@ -188,6 +197,386 @@ function statusPill(ok: boolean, label: string) {
       {ok ? <ShieldCheck className="h-3.5 w-3.5" /> : <ShieldX className="h-3.5 w-3.5" />}
       {label}
     </span>
+  );
+}
+
+/* ================================================================
+   Secrets Management Panel
+   ================================================================ */
+
+type AuditFinding = {
+  code: string;
+  severity: "warn" | "info" | "error";
+  file: string;
+  path: string;
+  message: string;
+  provider?: string;
+  detail?: string;
+};
+
+type AuditData = {
+  version: number;
+  status: string;
+  filesScanned: string[];
+  summary: {
+    plaintextCount: number;
+    unresolvedRefCount: number;
+    shadowedRefCount: number;
+    legacyResidueCount: number;
+  };
+  findings: AuditFinding[];
+};
+
+const SEVERITY_STYLES: Record<string, { bg: string; text: string; border: string; icon: React.ReactNode }> = {
+  warn: {
+    bg: "bg-amber-500/10",
+    text: "text-amber-300",
+    border: "border-amber-500/20",
+    icon: <ShieldAlert className="h-3.5 w-3.5 text-amber-400" />,
+  },
+  error: {
+    bg: "bg-red-500/10",
+    text: "text-red-300",
+    border: "border-red-500/20",
+    icon: <FileWarning className="h-3.5 w-3.5 text-red-400" />,
+  },
+  info: {
+    bg: "bg-blue-500/10",
+    text: "text-blue-300",
+    border: "border-blue-500/20",
+    icon: <Shield className="h-3.5 w-3.5 text-blue-400" />,
+  },
+};
+
+const CODE_LABELS: Record<string, { label: string; hint: string }> = {
+  PLAINTEXT_FOUND: {
+    label: "Plaintext Secret",
+    hint: "This value is stored as plain text. Migrate to a SecretRef (env/file/exec) for better security.",
+  },
+  UNRESOLVED_REF: {
+    label: "Unresolved Reference",
+    hint: "A SecretRef points to a source that cannot be resolved. Check the provider or env variable.",
+  },
+  SHADOWED_REF: {
+    label: "Shadowed Reference",
+    hint: "This SecretRef is overridden by another source, which may cause unexpected behavior.",
+  },
+  LEGACY_RESIDUE: {
+    label: "Legacy Residue",
+    hint: "Old credential format from a previous version. Can be safely cleaned up.",
+  },
+};
+
+function shortFilePath(path: string): string {
+  const home = path.indexOf(".openclaw/");
+  if (home >= 0) return path.slice(home);
+  const parts = path.split("/");
+  return parts.slice(-2).join("/");
+}
+
+function SecretsPanel() {
+  const [audit, setAudit] = useState<AuditData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(true);
+  const [findingsExpanded, setFindingsExpanded] = useState(false);
+  const [configuring, setConfiguring] = useState(false);
+  const [configResult, setConfigResult] = useState<string | null>(null);
+  const [reloading, setReloading] = useState(false);
+  const [reloadResult, setReloadResult] = useState<string | null>(null);
+
+  const runAudit = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/secrets", { cache: "no-store" });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      setAudit(data as AuditData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void runAudit();
+  }, [runAudit]);
+
+  const handleConfigure = useCallback(async (opts: { apply?: boolean; providersOnly?: boolean; skipProviderSetup?: boolean } = {}) => {
+    setConfiguring(true);
+    setConfigResult(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/secrets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "configure", ...opts }),
+      });
+      const data = await res.json();
+      if (data.error && !data.ok) throw new Error(data.error);
+      setConfigResult(data.ok ? "Configuration applied successfully." : data.raw || data.stderr || "Done.");
+      // Re-run audit to refresh findings
+      await runAudit();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setConfiguring(false);
+    }
+  }, [runAudit]);
+
+  const handleReload = useCallback(async () => {
+    setReloading(true);
+    setReloadResult(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/secrets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reload" }),
+      });
+      const data = await res.json();
+      if (data.error && !data.ok) throw new Error(data.error);
+      setReloadResult("Secrets reloaded successfully. Runtime snapshot updated.");
+      await runAudit();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setReloading(false);
+    }
+  }, [runAudit]);
+
+  const totalFindings = audit?.findings.length ?? 0;
+  const warnCount = audit?.findings.filter((f) => f.severity === "warn").length ?? 0;
+  const errorCount = audit?.findings.filter((f) => f.severity === "error").length ?? 0;
+  const infoCount = audit?.findings.filter((f) => f.severity === "info").length ?? 0;
+  const isClean = totalFindings === 0 && audit?.status === "clean";
+
+  return (
+    <div className="rounded-xl border border-border/70 bg-card">
+      {/* Header */}
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
+      >
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/10">
+          <Shield className="h-4 w-4 text-violet-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xs font-semibold text-foreground">Secrets Management</h2>
+            {audit && !loading && (
+              isClean ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-400">
+                  <CheckCircle className="h-2.5 w-2.5" /> Clean
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
+                  <ShieldAlert className="h-2.5 w-2.5" /> {totalFindings} finding{totalFindings !== 1 ? "s" : ""}
+                </span>
+              )
+            )}
+            {loading && <InlineSpinner size="sm" className="text-muted-foreground/50" />}
+          </div>
+          <p className="text-xs text-muted-foreground/60">
+            Audit, configure SecretRefs, and reload runtime secrets
+          </p>
+        </div>
+        {expanded ? (
+          <ChevronUp className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-muted-foreground/40 shrink-0" />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="border-t border-foreground/10 px-4 py-4 space-y-4">
+          {/* Error */}
+          {error && (
+            <div className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          {/* Config/Reload success */}
+          {configResult && (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-400">
+              <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+              {configResult}
+            </div>
+          )}
+          {reloadResult && (
+            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-400">
+              <CheckCircle className="h-3.5 w-3.5 shrink-0" />
+              {reloadResult}
+            </div>
+          )}
+
+          {/* Summary cards */}
+          {audit && (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2">
+                <p className="text-xs text-muted-foreground/60">Plaintext</p>
+                <p className={`text-sm font-bold ${audit.summary.plaintextCount > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                  {audit.summary.plaintextCount}
+                </p>
+              </div>
+              <div className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2">
+                <p className="text-xs text-muted-foreground/60">Unresolved</p>
+                <p className={`text-sm font-bold ${audit.summary.unresolvedRefCount > 0 ? "text-red-400" : "text-emerald-400"}`}>
+                  {audit.summary.unresolvedRefCount}
+                </p>
+              </div>
+              <div className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2">
+                <p className="text-xs text-muted-foreground/60">Shadowed</p>
+                <p className={`text-sm font-bold ${audit.summary.shadowedRefCount > 0 ? "text-amber-400" : "text-emerald-400"}`}>
+                  {audit.summary.shadowedRefCount}
+                </p>
+              </div>
+              <div className="rounded-lg border border-foreground/10 bg-foreground/[0.03] px-3 py-2">
+                <p className="text-xs text-muted-foreground/60">Legacy</p>
+                <p className={`text-sm font-bold ${audit.summary.legacyResidueCount > 0 ? "text-blue-400" : "text-emerald-400"}`}>
+                  {audit.summary.legacyResidueCount}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Findings list */}
+          {audit && totalFindings > 0 && (
+            <div>
+              <button
+                type="button"
+                onClick={() => setFindingsExpanded(!findingsExpanded)}
+                className="flex w-full items-center gap-2 text-left text-xs font-medium text-foreground/70 hover:text-foreground/90"
+              >
+                {findingsExpanded ? (
+                  <ChevronUp className="h-3 w-3" />
+                ) : (
+                  <ChevronDown className="h-3 w-3" />
+                )}
+                {totalFindings} finding{totalFindings !== 1 ? "s" : ""}
+                {warnCount > 0 && <span className="text-amber-400">{warnCount} warn</span>}
+                {errorCount > 0 && <span className="text-red-400">{errorCount} error</span>}
+                {infoCount > 0 && <span className="text-blue-400">{infoCount} info</span>}
+              </button>
+
+              {findingsExpanded && (
+                <div className="mt-2 space-y-2">
+                  {audit.findings.map((finding, idx) => {
+                    const style = SEVERITY_STYLES[finding.severity] || SEVERITY_STYLES.info;
+                    const codeMeta = CODE_LABELS[finding.code];
+                    return (
+                      <div
+                        key={`${finding.file}:${finding.path}:${idx}`}
+                        className={`rounded-lg border ${style.border} ${style.bg} px-3 py-2.5`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="mt-0.5 shrink-0">{style.icon}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className={`text-xs font-semibold ${style.text}`}>
+                                {codeMeta?.label || finding.code}
+                              </span>
+                              <code className="rounded bg-foreground/5 px-1.5 py-0.5 text-xs text-muted-foreground">
+                                {finding.code}
+                              </code>
+                            </div>
+                            <p className="mt-1 text-xs text-foreground/70">{finding.message}</p>
+                            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground/60">
+                              <span>
+                                File: <code>{shortFilePath(finding.file)}</code>
+                              </span>
+                              <span>
+                                Path: <code>{finding.path}</code>
+                              </span>
+                              {finding.provider && (
+                                <span>
+                                  Provider: <code>{finding.provider}</code>
+                                </span>
+                              )}
+                            </div>
+                            {codeMeta?.hint && (
+                              <p className="mt-1.5 text-xs text-muted-foreground/50 italic">
+                                {codeMeta.hint}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Files scanned */}
+          {audit && (
+            <p className="text-xs text-muted-foreground/40">
+              {audit.filesScanned.length} file{audit.filesScanned.length !== 1 ? "s" : ""} scanned
+              {audit.status === "clean" && " — no issues found"}
+            </p>
+          )}
+
+          {/* Actions */}
+          <div className="flex flex-wrap gap-2 border-t border-foreground/5 pt-3">
+            <button
+              type="button"
+              onClick={() => void runAudit()}
+              disabled={loading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs font-medium text-foreground/70 transition-colors hover:bg-foreground/10 disabled:opacity-40"
+            >
+              {loading ? <InlineSpinner size="sm" /> : <RefreshCw className="h-3 w-3" />}
+              Re-audit
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleConfigure({ apply: true })}
+              disabled={configuring || loading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-400 transition-colors hover:bg-violet-500/20 disabled:opacity-40"
+              title="Run secrets configure --apply: auto-map plaintext secrets to SecretRefs"
+            >
+              {configuring ? <InlineSpinner size="sm" /> : <Wrench className="h-3 w-3" />}
+              Auto-configure & Apply
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleConfigure({ providersOnly: true, apply: true })}
+              disabled={configuring || loading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs font-medium text-foreground/70 transition-colors hover:bg-foreground/10 disabled:opacity-40"
+              title="Configure providers only without mapping credentials"
+            >
+              {configuring ? <InlineSpinner size="sm" /> : <Shield className="h-3 w-3" />}
+              Providers Only
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleReload()}
+              disabled={reloading || loading}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs font-medium text-foreground/70 transition-colors hover:bg-foreground/10 disabled:opacity-40"
+              title="Re-resolve secret references and swap runtime snapshot"
+            >
+              {reloading ? <InlineSpinner size="sm" /> : <RotateCw className="h-3 w-3" />}
+              Reload Runtime
+            </button>
+          </div>
+
+          {/* Help text */}
+          <div className="rounded-lg border border-foreground/5 bg-foreground/[0.02] px-3 py-2.5">
+            <p className="text-xs text-muted-foreground/50 leading-relaxed">
+              <strong className="text-foreground/60">Secrets audit</strong> scans your config for plaintext tokens, unresolved SecretRefs, and legacy credentials.{" "}
+              <strong className="text-foreground/60">Auto-configure</strong> maps plaintext values to secure SecretRef providers (env/file/exec).{" "}
+              <strong className="text-foreground/60">Reload</strong> re-resolves all references and updates the runtime snapshot without restarting.{" "}
+              CLI equivalents: <code className="text-muted-foreground/60">openclaw secrets audit</code>, <code className="text-muted-foreground/60">secrets configure --apply</code>, <code className="text-muted-foreground/60">secrets reload</code>.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -380,7 +769,15 @@ export function AccountsKeysView() {
               className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
               disabled={busy}
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
+              {busy ? (
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
               Refresh
             </button>
           </div>
@@ -456,6 +853,8 @@ export function AccountsKeysView() {
                 </div>
               </div>
             </div>
+
+            <SecretsPanel />
 
             <div className="rounded-xl border border-border/70 bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">

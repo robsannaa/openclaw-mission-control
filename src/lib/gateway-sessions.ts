@@ -35,6 +35,8 @@ export type NormalizedGatewaySession = {
   ageMs: number;
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   totalTokens: number;
   totalTokensFresh: boolean;
   contextTokens: number;
@@ -91,6 +93,13 @@ function normalizeGatewaySession(
   const model = String(session.model || "unknown");
   const inputTokens = toNonNegativeNumber(session.inputTokens);
   const outputTokens = toNonNegativeNumber(session.outputTokens);
+  // Probe common field names for cache tokens from the catch-all [key: string]: unknown
+  const cacheReadTokens = toNonNegativeNumber(
+    session.cacheReadTokens ?? session.cacheReadInputTokens ?? session.cache_read_input_tokens ?? 0,
+  );
+  const cacheWriteTokens = toNonNegativeNumber(
+    session.cacheWriteTokens ?? session.cacheCreationInputTokens ?? session.cache_creation_input_tokens ?? 0,
+  );
   const totalTokensRaw = toNonNegativeNumber(session.totalTokens);
   // sessions.list may omit totalTokens while still exposing input/output.
   const totalTokens = totalTokensRaw > 0 ? totalTokensRaw : inputTokens + outputTokens;
@@ -108,6 +117,8 @@ function normalizeGatewaySession(
     ageMs,
     inputTokens,
     outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
     totalTokens,
     totalTokensFresh: Boolean(session.totalTokensFresh),
     contextTokens: toNonNegativeNumber(session.contextTokens),
