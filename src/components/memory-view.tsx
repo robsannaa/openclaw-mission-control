@@ -156,11 +156,27 @@ function shortWorkspace(path: string): string {
 
 const PERIOD_ORDER = ["Today", "Yesterday", "This Week", "This Month"] as const;
 
+function parseDateLike(dateStr: string): Date {
+  const isoDateOnlyMatch = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s-])/.exec(dateStr);
+  if (isoDateOnlyMatch) {
+    const year = Number(isoDateOnlyMatch[1]);
+    const month = Number(isoDateOnlyMatch[2]);
+    const day = Number(isoDateOnlyMatch[3]);
+    return new Date(year, month - 1, day);
+  }
+  return new Date(dateStr);
+}
+
+function startOfLocalDay(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
 function getPeriodKey(dateStr: string): string {
-  const d = new Date(dateStr);
+  const d = parseDateLike(dateStr);
   if (isNaN(d.getTime())) return "Other";
-  const now = new Date();
-  const diff = now.getTime() - d.getTime();
+  const now = startOfLocalDay(new Date());
+  const date = startOfLocalDay(d);
+  const diff = now.getTime() - date.getTime();
   const days = Math.floor(diff / 86400000);
   if (days === 0) return "Today";
   if (days === 1) return "Yesterday";
@@ -1252,7 +1268,7 @@ export function MemoryView() {
                               >
                                 <span className="text-sm">
                                   {(() => {
-                                    const d = new Date(e.date);
+                                    const d = parseDateLike(e.date);
                                     return isNaN(d.getTime())
                                       ? e.date
                                       : d.toLocaleDateString("en-US", {
