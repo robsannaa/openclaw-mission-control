@@ -22,6 +22,7 @@ import { cn } from "@/lib/utils";
 import { InlineMarkdownEditor } from "./inline-markdown-editor";
 import { SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
+import { SaveShortcut } from "@/components/ui/save-shortcut";
 
 /* ── types ─────────────────────────────────────── */
 
@@ -994,10 +995,11 @@ export function DocsView() {
                 </span>
                 {formatBytes(selected.size)} &bull; {words} words &bull;
                 Modified {formatAgo(selected.mtime)} &bull;
-                <kbd className="rounded bg-muted px-1 py-0.5 text-xs font-mono text-muted-foreground">
-                  &#8984;S
-                </kbd>{" "}
-                to save
+                Use
+                <span className="inline-flex items-center rounded-md border border-foreground/10 bg-card/50 px-1.5 py-0.5 text-[11px] font-medium text-foreground/80">
+                  Edit
+                </span>
+                to modify &bull; <SaveShortcut /> to save
               </p>
             </div>
 
@@ -1017,6 +1019,7 @@ export function DocsView() {
                     content={content}
                     onContentChange={handleContentChange}
                     onSave={handleSave}
+                    className="w-full"
                     placeholder="Click to start writing..."
                   />
                 )
