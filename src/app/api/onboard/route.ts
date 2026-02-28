@@ -333,7 +333,7 @@ export async function GET() {
 
     return NextResponse.json({
       installed,
-      configured: configExists && hasModel && hasApiKey,
+      configured: installed && configExists && hasModel && hasApiKey,
       configExists,
       hasModel,
       hasApiKey,

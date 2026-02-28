@@ -37,6 +37,13 @@ import {
   type GatewayHealth,
   type GatewayStatus,
 } from "@/lib/gateway-status-store";
+import {
+  getTimeFormatServerSnapshot,
+  getTimeFormatSnapshot,
+  subscribeTimeFormatPreference,
+  withTimeFormat,
+  type TimeFormatPreference,
+} from "@/lib/time-format-preference";
 
 /* ── Types ──────────────────────────────────────── */
 
@@ -52,17 +59,20 @@ function useChatState() {
   return useSyncExternalStore(chatStore.subscribe, chatStore.getSnapshot, chatStore.getSnapshot);
 }
 
-function formatTime(ts: number) {
-  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function formatTime(ts: number, timeFormat: TimeFormatPreference) {
+  return new Date(ts).toLocaleTimeString(
+    [],
+    withTimeFormat({ hour: "2-digit", minute: "2-digit" }, timeFormat),
+  );
 }
 
-function ChatBubble({ msg }: { msg: ChatMessage }) {
+function ChatBubble({ msg, timeFormat }: { msg: ChatMessage; timeFormat: TimeFormatPreference }) {
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-md rounded-2xl rounded-tr-sm bg-violet-600/90 px-3.5 py-2 text-xs leading-relaxed text-white shadow-sm">
+        <div className="max-w-md rounded-2xl rounded-tr-sm bg-primary/90 text-primary-foreground px-3.5 py-2 text-xs leading-relaxed shadow-sm">
           <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-          <p className="mt-1 text-right text-xs text-white/40">{formatTime(msg.timestamp)}</p>
+          <p className="mt-1 text-right text-xs text-white/40">{formatTime(msg.timestamp, timeFormat)}</p>
         </div>
       </div>
     );
@@ -75,7 +85,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
             <AlertTriangle className="h-3 w-3" />Error
           </div>
           <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-          <p className="mt-1 text-xs text-red-400/40">{formatTime(msg.timestamp)}</p>
+          <p className="mt-1 text-xs text-red-400/40">{formatTime(msg.timestamp, timeFormat)}</p>
         </div>
       </div>
     );
@@ -85,7 +95,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
     <div className="flex justify-start">
       <div className="max-w-md rounded-2xl rounded-tl-sm border border-foreground/10 bg-foreground/5 px-3.5 py-2 text-xs leading-relaxed text-foreground/80 shadow-sm">
         <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-        <p className="mt-1 text-xs text-muted-foreground/30">{formatTime(msg.timestamp)}</p>
+        <p className="mt-1 text-xs text-muted-foreground/30">{formatTime(msg.timestamp, timeFormat)}</p>
       </div>
     </div>
   );
@@ -93,6 +103,11 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
 
 export function AgentChatPanel() {
   const chat = useChatState();
+  const timeFormat = useSyncExternalStore(
+    subscribeTimeFormatPreference,
+    getTimeFormatSnapshot,
+    getTimeFormatServerSnapshot,
+  );
   const [agents, setAgents] = useState<AgentInfo[]>([]);
   const [prompt, setPrompt] = useState("");
   const [showAgentPicker, setShowAgentPicker] = useState(false);
@@ -210,8 +225,8 @@ export function AgentChatPanel() {
       {/* Header */}
       <div className="flex shrink-0 items-center justify-between border-b border-foreground/10 px-4 py-2.5">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-violet-500/15">
-            <MessageSquare className="h-3.5 w-3.5 text-violet-400" />
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10">
+            <MessageSquare className="h-3.5 w-3.5 text-foreground" />
           </div>
           <div>
             <p className="text-xs font-semibold text-foreground/80">Agent Chat</p>
@@ -273,8 +288,8 @@ export function AgentChatPanel() {
                     setShowAgentPicker(false);
                   }}
                   className={cn(
-                    "flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-violet-500/10",
-                    a.id === chat.agentId && "bg-violet-500/5"
+                    "flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-muted",
+                    a.id === chat.agentId && "bg-muted"
                   )}
                 >
                   <span className="text-xs font-medium text-foreground/70">
@@ -286,7 +301,7 @@ export function AgentChatPanel() {
                     </span>
                   )}
                   {a.id === chat.agentId && (
-                    <Check className="h-3 w-3 shrink-0 text-violet-400" />
+                    <Check className="h-3 w-3 shrink-0 text-foreground" />
                   )}
                 </button>
               ))}
@@ -299,8 +314,8 @@ export function AgentChatPanel() {
       <div ref={scrollRef} className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-3">
         {chat.messages.length === 0 && !chat.sending && (
           <div className="flex flex-1 flex-col items-center justify-center gap-2 py-8 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10">
-              <Zap className="h-6 w-6 text-violet-400/60" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10">
+              <Zap className="h-6 w-6 text-foreground/60" />
             </div>
             <p className="text-sm font-medium text-foreground/50">Send a message</p>
             <p className="max-w-xs text-xs text-muted-foreground/40">
@@ -309,15 +324,15 @@ export function AgentChatPanel() {
           </div>
         )}
         {chat.messages.map((msg) => (
-          <ChatBubble key={msg.id} msg={msg} />
+          <ChatBubble key={msg.id} msg={msg} timeFormat={timeFormat} />
         ))}
         {chat.sending && (
           <div className="flex justify-start">
             <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-foreground/10 bg-foreground/5 px-3.5 py-2.5 shadow-sm">
               <span className="inline-flex items-center gap-0.5">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
+                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
               </span>
               <span className="text-xs text-muted-foreground/60">Agent is thinking...</span>
             </div>
@@ -336,7 +351,7 @@ export function AgentChatPanel() {
             placeholder="Message your agent..."
             rows={1}
             disabled={chat.sending || !chat.agentId}
-            className="flex-1 resize-none rounded-xl border border-foreground/10 bg-foreground/5 px-3.5 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none disabled:opacity-50"
+            className="flex-1 resize-none rounded-xl border border-foreground/10 bg-foreground/5 px-3.5 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-ring focus:ring-2 focus:ring-ring/20 focus:outline-none disabled:opacity-50"
             style={{ maxHeight: "80px" }}
             onInput={(e) => {
               const ta = e.target as HTMLTextAreaElement;
@@ -348,7 +363,7 @@ export function AgentChatPanel() {
             type="button"
             onClick={handleSend}
             disabled={!prompt.trim() || !chat.agentId || chat.sending}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-violet-600 text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
           >
             {chat.sending ? (
               <span className="inline-flex items-center gap-0.5">
@@ -673,22 +688,22 @@ export function Header() {
             className={cn(
               "relative flex h-8 items-center gap-1.5 rounded-lg border px-2 md:px-3 text-xs transition-colors",
               chat.open
-                ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                ? "border-border bg-muted text-foreground"
                 : "border-foreground/10 bg-card text-muted-foreground hover:bg-muted/80"
             )}
           >
             <Zap className="h-3.5 w-3.5" />
             <span className="hidden md:inline">Ping Agent</span>
             {chat.unread > 0 && !chat.open && (
-              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-violet-500 px-1 text-xs font-bold text-white shadow-lg">
+              <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-xs font-bold text-primary-foreground shadow-lg">
                 {chat.unread}
               </span>
             )}
             {chat.sending && !chat.open && (
               <span className="inline-flex items-center gap-0.5">
-                <span className="h-1 w-1 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-primary [animation-delay:0ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-primary [animation-delay:150ms]" />
+                <span className="h-1 w-1 animate-bounce rounded-full bg-primary [animation-delay:300ms]" />
               </span>
             )}
           </button>

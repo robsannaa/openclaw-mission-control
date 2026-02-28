@@ -165,6 +165,27 @@ function emitPing() {
   persistState(pingState);
 }
 
+function notifyDesktop(title: string, text: string, tag: string) {
+  if (typeof Notification === "undefined") return;
+  if (Notification.permission !== "granted") return;
+
+  const preview = text.length > 120 ? text.slice(0, 117) + "…" : text;
+  const n = new Notification(title, {
+    body: preview,
+    icon: "/favicon.ico",
+    tag,
+    requireInteraction: false,
+  });
+
+  n.onclick = () => {
+    window.focus();
+    chatStore.open();
+    n.close();
+  };
+
+  setTimeout(() => n.close(), 8000);
+}
+
 export const chatStore = {
   getSnapshot(): PingChatState {
     return pingState;
@@ -279,6 +300,39 @@ export const chatStore = {
     }
   },
 
+  pushSystemMessage(text: string, opts?: { notifyDesktop?: boolean }) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+
+    const msg: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      text: trimmed,
+      timestamp: Date.now(),
+      agentId: "mission-control",
+    };
+
+    const isStillOpen = pingState.open;
+    pingState = {
+      ...pingState,
+      messages: [...pingState.messages, msg],
+      unread: isStillOpen ? 0 : pingState.unread + 1,
+    };
+    emitPing();
+
+    if (typeof window !== "undefined" && !isStillOpen) {
+      window.dispatchEvent(
+        new CustomEvent("openclaw:chat-message", {
+          detail: { agentId: "mission-control", agentName: "Mission Control" },
+        })
+      );
+    }
+
+    if (!isStillOpen && opts?.notifyDesktop !== false) {
+      notifyDesktop("Mission Control alert", trimmed, "openclaw-mission-control-alert");
+    }
+  },
+
   requestNotificationPermission() {
     if (typeof Notification !== "undefined" && Notification.permission === "default") {
       Notification.requestPermission();
@@ -286,23 +340,6 @@ export const chatStore = {
   },
 
   _notify(agentId: string, text: string) {
-    if (typeof Notification === "undefined") return;
-    if (Notification.permission !== "granted") return;
-
-    const preview = text.length > 120 ? text.slice(0, 117) + "…" : text;
-    const n = new Notification(`Agent ${agentId} responded`, {
-      body: preview,
-      icon: "/favicon.ico",
-      tag: "openclaw-ping-chat",
-      requireInteraction: false,
-    });
-
-    n.onclick = () => {
-      window.focus();
-      chatStore.open();
-      n.close();
-    };
-
-    setTimeout(() => n.close(), 8000);
+    notifyDesktop(`Agent ${agentId} responded`, text, "openclaw-ping-chat");
   },
 };

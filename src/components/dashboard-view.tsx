@@ -13,7 +13,6 @@ import {
   AlertCircle,
   CheckCircle,
   Zap,
-  RefreshCw,
   Cpu,
   MemoryStick,
   HardDrive,
@@ -31,9 +30,11 @@ import {
   KeyRound,
   Bell,
   X,
+  Stethoscope,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionLayout } from "@/components/section-layout";
+import { getTimeFormatSnapshot, withTimeFormat } from "@/lib/time-format-preference";
 
 /* ── types ────────────────────────────────────────── */
 
@@ -95,34 +96,6 @@ type PairingSummary = {
   total: number;
 };
 
-type GatewayDiagnosticsData = {
-  ts: number;
-  status: {
-    service?: {
-      loaded?: boolean;
-      runtime?: { status?: string; state?: string; pid?: number };
-      configAudit?: { ok?: boolean; issues?: unknown[] };
-    };
-    gateway?: { bindMode?: string; bindHost?: string; port?: number };
-    port?: { port?: number; status?: string };
-    rpc?: { ok?: boolean; url?: string };
-  } | null;
-  statusError?: string | null;
-  doctor: {
-    command: string;
-    ok: boolean;
-    exitCode: number;
-    summary: { error: number; warning: number; info: number };
-    lines: string[];
-    raw: string;
-  };
-  summary: { error: number; warning: number; info: number };
-  highlights: Array<{
-    source: "gateway-status" | "doctor";
-    severity: "error" | "warning" | "info";
-    text: string;
-  }>;
-};
 
 /* ── helpers ──────────────────────────────────────── */
 
@@ -646,163 +619,6 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
   );
 }
 
-function GatewayDiagnosticsPanel({
-  data,
-  loading,
-  error,
-  onRefresh,
-}: {
-  data: GatewayDiagnosticsData | null;
-  loading: boolean;
-  error: string | null;
-  onRefresh: () => void;
-}) {
-  const status = data?.status;
-  const summary = data?.summary || { error: 0, warning: 0, info: 0 };
-  const runtimeStatus = status?.service?.runtime?.status || "unknown";
-  const bind = status?.gateway?.bindMode || "unknown";
-  const rpcLabel = status?.rpc?.ok ? "reachable" : "unreachable";
-  const portLabel = status?.port?.port || status?.gateway?.port || "—";
-
-  return (
-    <div className="space-y-4">
-      <div className="glass rounded-lg p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-sans font-medium text-foreground/90">Gateway Diagnostics</p>
-            <p className="text-xs text-muted-foreground/60">
-              Live snapshot from <code className="rounded bg-foreground/[0.06] px-1">gateway status</code> and{" "}
-              <code className="rounded bg-foreground/[0.06] px-1">doctor</code>.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onRefresh}
-            disabled={loading}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/[0.04] px-2.5 py-1.5 text-xs text-foreground/80 transition-colors hover:bg-foreground/[0.08] disabled:opacity-60"
-          >
-            {loading ? (
-              <span className="inline-flex items-center gap-1">
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
-              </span>
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-            Refresh
-          </button>
-        </div>
-
-        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-          <div className="rounded-lg border border-red-500/20 bg-red-500/5 px-2.5 py-1.5">
-            <p className="text-xs uppercase tracking-wide text-red-300/80">Errors</p>
-            <p className="mt-0.5 text-sm font-semibold tabular-nums text-red-200">{summary.error}</p>
-          </div>
-          <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5">
-            <p className="text-xs uppercase tracking-wide text-amber-300/80">Warnings</p>
-            <p className="mt-0.5 text-sm font-semibold tabular-nums text-amber-200">{summary.warning}</p>
-          </div>
-          <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-2.5 py-1.5">
-            <p className="text-xs uppercase tracking-wide text-blue-300/80">Signals</p>
-            <p className="mt-0.5 text-sm font-semibold tabular-nums text-blue-200">{summary.info}</p>
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-          {[
-            { label: "Runtime", value: runtimeStatus },
-            { label: "Bind", value: bind },
-            { label: "Port", value: String(portLabel) },
-            { label: "RPC", value: rpcLabel },
-            { label: "Doctor", value: data?.doctor?.ok ? "ok" : `exit ${data?.doctor?.exitCode ?? "?"}` },
-          ].map(({ label, value }) => (
-            <div key={label} className="rounded-lg border border-foreground/[0.06] bg-foreground/[0.03] px-2.5 py-1.5">
-              <p className="text-xs text-muted-foreground/60">{label}</p>
-              <p className="mt-0.5 text-xs font-medium text-foreground/90">{value}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {error && (
-        <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-xs text-red-200">
-          {error}
-        </div>
-      )}
-
-      {loading && !data && (
-        <div className="rounded-lg border border-foreground/10 bg-card/70 px-4 py-8 text-center text-xs text-muted-foreground/70">
-          <span className="mx-auto mb-2 inline-flex items-center gap-1">
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
-            <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
-          </span>
-          Running gateway checks...
-        </div>
-      )}
-
-      {data && (
-        <>
-          <div className="glass-subtle rounded-lg p-3">
-            <h3 className="mb-1.5 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground/60">
-              Alerts & Recommendations
-            </h3>
-            <div className="space-y-1">
-              {data.highlights.slice(0, 14).map((item, idx) => {
-                const cfg =
-                  item.severity === "error"
-                    ? {
-                      icon: AlertCircle,
-                      row: "border-red-500/20 bg-red-500/5 text-red-200",
-                      chip: "bg-red-500/15 text-red-300",
-                    }
-                    : item.severity === "warning"
-                      ? {
-                        icon: AlertTriangle,
-                        row: "border-amber-500/20 bg-amber-500/5 text-amber-100",
-                        chip: "bg-amber-500/15 text-amber-300",
-                      }
-                      : {
-                        icon: Info,
-                        row: "border-blue-500/20 bg-blue-500/5 text-blue-100",
-                        chip: "bg-blue-500/15 text-blue-300",
-                      };
-                const SevIcon = cfg.icon;
-                return (
-                  <div
-                    key={`${item.source}-${idx}-${item.text}`}
-                    className={cn("flex items-start gap-2 rounded-lg border px-2 py-1.5", cfg.row)}
-                  >
-                    <SevIcon className="mt-0.5 h-3 w-3 shrink-0" />
-                    <div className="min-w-0 flex-1 text-xs leading-snug">{item.text}</div>
-                    <span className={cn("shrink-0 rounded px-1.5 py-0.5 text-xs uppercase tracking-wide", cfg.chip)}>
-                      {item.source === "doctor" ? "doctor" : "status"}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="glass-subtle rounded-lg p-3">
-            <h3 className="mb-1.5 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground/60">
-              Doctor Output
-            </h3>
-            <div className="max-h-80 overflow-y-auto rounded-lg border border-foreground/[0.06] bg-foreground/[0.03] p-2 font-mono text-xs leading-snug text-muted-foreground/90">
-              {(data.doctor.lines || []).slice(0, 120).map((line, idx) => (
-                <div key={`${idx}-${line}`} className="truncate">
-                  {line}
-                </div>
-              ))}
-              {(data.doctor.lines || []).length === 0 && <div>No doctor output.</div>}
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
 
 function OcStatMini({
   icon: Icon,
@@ -833,14 +649,11 @@ const POLL_INTERVAL = 8000;
 
 export function DashboardView() {
   const router = useRouter();
+  const timeFormat = getTimeFormatSnapshot();
   const [live, setLive] = useState<LiveData | null>(null);
   const [system, setSystem] = useState<SystemData | null>(null);
   const [lastRefresh, setLastRefresh] = useState(0);
   const [now, setNow] = useState(() => Date.now());
-  const [dashboardTab, setDashboardTab] = useState<"overview" | "gateway">("overview");
-  const [gatewayDiag, setGatewayDiag] = useState<GatewayDiagnosticsData | null>(null);
-  const [gatewayDiagError, setGatewayDiagError] = useState<string | null>(null);
-  const [gatewayDiagLoading, setGatewayDiagLoading] = useState(false);
   const [pairingSummary, setPairingSummary] = useState<PairingSummary | null>(null);
   const [onboardStatus, setOnboardStatus] = useState<{
     installed: boolean;
@@ -864,24 +677,6 @@ export function DashboardView() {
       setLastRefresh(Date.now());
     } catch { /* retry next interval */ }
   }, []);
-
-  const fetchGatewayDiagnostics = useCallback(
-    async (silent = false) => {
-      if (!silent) setGatewayDiagLoading(true);
-      try {
-        const res = await fetch("/api/gateway/diagnostics", { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as GatewayDiagnosticsData;
-        setGatewayDiag(data);
-        setGatewayDiagError(null);
-      } catch (err) {
-        setGatewayDiagError(err instanceof Error ? err.message : String(err));
-      } finally {
-        if (!silent) setGatewayDiagLoading(false);
-      }
-    },
-    []
-  );
 
   const openCronJob = useCallback(
     (jobId: string) => {
@@ -943,15 +738,6 @@ export function DashboardView() {
       if (tickRef.current) clearInterval(tickRef.current);
     };
   }, [fetchLive]);
-
-  useEffect(() => {
-    if (dashboardTab !== "gateway") return;
-    void fetchGatewayDiagnostics();
-    const id = setInterval(() => {
-      void fetchGatewayDiagnostics(true);
-    }, 30000);
-    return () => clearInterval(id);
-  }, [dashboardTab, fetchGatewayDiagnostics]);
 
   if (!live) {
     return (
@@ -1081,48 +867,7 @@ export function DashboardView() {
       </div>
 
       <SectionBody width="content" padding="regular" innerClassName="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="inline-flex rounded-lg border border-border bg-muted p-1">
-            <button
-              type="button"
-              onClick={() => setDashboardTab("overview")}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200",
-                dashboardTab === "overview"
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Overview
-            </button>
-            <button
-              type="button"
-              onClick={() => setDashboardTab("gateway")}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200",
-                dashboardTab === "gateway"
-                  ? "bg-card text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              Gateway Diagnostics
-              {gatewayDiag && (gatewayDiag.summary.error > 0 || gatewayDiag.summary.warning > 0) && (
-                <span className="ml-1.5 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-200">
-                  {gatewayDiag.summary.error > 0
-                    ? `${gatewayDiag.summary.error} err`
-                    : `${gatewayDiag.summary.warning} warn`}
-                </span>
-              )}
-            </button>
-          </div>
-          {dashboardTab === "gateway" && (
-            <span className="text-xs text-muted-foreground/50">
-              Auto-refresh every 30s while this tab is open
-            </span>
-          )}
-        </div>
-
-        <div className={cn("space-y-6", dashboardTab !== "overview" && "hidden")}>
+        <div className="space-y-6">
           {/* ── Onboarding banner ──────────────────────── */}
           {onboardStatus && !onboardStatus.configured && !onboardDismissed && (
             <div className="glass rounded-lg border-violet-500/20 bg-violet-500/10 dark:bg-violet-500/5 p-4">
@@ -1145,7 +890,7 @@ export function DashboardView() {
                 <div className="flex shrink-0 items-center gap-2">
                   <Link
                     href="/onboard"
-                    className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500"
+                    className="flex items-center gap-1 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90"
                   >
                     {onboardStatus.installed ? "Set up" : "Install"}
                     <ArrowRight className="h-3 w-3" />
@@ -1564,7 +1309,10 @@ export function DashboardView() {
                   const isWs = entry.source === "ws";
                   const isCron = entry.source.includes("cron");
                   const time = entry.time
-                    ? new Date(entry.time).toLocaleTimeString()
+                    ? new Date(entry.time).toLocaleTimeString(
+                        undefined,
+                        withTimeFormat({ hour: "2-digit", minute: "2-digit", second: "2-digit" }, timeFormat),
+                      )
                     : "";
                   return (
                     <div
@@ -1605,14 +1353,18 @@ export function DashboardView() {
           </div>
         </div>
 
-        {dashboardTab === "gateway" && (
-          <GatewayDiagnosticsPanel
-            data={gatewayDiag}
-            loading={gatewayDiagLoading}
-            error={gatewayDiagError}
-            onRefresh={() => void fetchGatewayDiagnostics()}
-          />
-        )}
+        {/* Doctor link */}
+        <Link
+          href="/doctor"
+          className="glass-subtle flex items-center gap-3 rounded-lg p-3 transition-colors hover:bg-foreground/[0.04]"
+        >
+          <Stethoscope className="h-4 w-4 text-primary" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-medium text-foreground/90">System Doctor</p>
+            <p className="text-xs text-muted-foreground/60">Run health checks, view diagnostics, and repair issues</p>
+          </div>
+          <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
+        </Link>
       </SectionBody>
     </SectionLayout>
   );

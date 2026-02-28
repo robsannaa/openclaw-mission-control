@@ -496,7 +496,7 @@ export function ChannelsView() {
               <button
                 type="button"
                 onClick={() => openWizard()}
-                className="inline-flex items-center gap-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-500/20"
+                className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
               >
                 <Plus className="h-3.5 w-3.5" />
                 Add Channel
@@ -592,7 +592,7 @@ export function ChannelsView() {
                       type="button"
                       onClick={() => setWizardStep(2)}
                       disabled={!selectedWizardChannel}
-                      className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40"
                     >
                       Next
                       <Play className="h-3 w-3" />
@@ -700,7 +700,7 @@ export function ChannelsView() {
                       type="button"
                       onClick={() => void runWizardSetup()}
                       disabled={!canRunWizard || wizardRunning}
-                      className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40"
                     >
                       {wizardRunning ? (
                         <>
@@ -776,7 +776,7 @@ export function ChannelsView() {
                       </button>
                       <Link
                         href="/terminal"
-                        className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500"
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90"
                       >
                         Open Terminal
                       </Link>
@@ -825,7 +825,7 @@ export function ChannelsView() {
                     <button
                       type="button"
                       onClick={() => openWizard(ch.channel)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-xs text-violet-300 transition-colors hover:bg-violet-500/20"
+                      className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground transition-colors hover:bg-muted"
                     >
                       {ch.configured ? "Reconfigure" : "Setup"}
                     </button>

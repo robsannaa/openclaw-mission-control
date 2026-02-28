@@ -668,7 +668,7 @@ export function PermissionsView({ embedded = false }: { embedded?: boolean } = {
                   type="button"
                   onClick={handleAddPattern}
                   disabled={mutating || !pattern.trim()}
-                  className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/15 px-2 py-1 text-xs text-violet-700 dark:text-violet-200 disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground hover:bg-muted disabled:opacity-50"
                 >
                   {pendingAction === "grant" ? (
                     <span className="inline-flex items-center gap-0.5">

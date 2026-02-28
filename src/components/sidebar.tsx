@@ -44,6 +44,7 @@ import {
   Heart,
   Settings2,
   Webhook,
+  Stethoscope,
 } from "lucide-react";
 import { getChatUnreadCount, subscribeChatStore } from "@/lib/chat-store";
 import {
@@ -74,7 +75,7 @@ const navItems: NavItem[] = [
   { group: "Work", section: "tasks", label: "Tasks", icon: ListChecks, href: "/tasks" },
   { section: "sessions", label: "Sessions", icon: MessageSquare, href: "/sessions" },
   { section: "cron", label: "Cron Jobs", icon: Clock, href: "/cron" },
-  { section: "heartbeat", label: "Heartbeat", icon: Heart, href: "/heartbeat", isSubItem: true },
+  { section: "cron", label: "Heartbeat", icon: Heart, href: "/heartbeat", tab: "heartbeat", isSubItem: true },
   // ── Knowledge ──
   { group: "Knowledge", section: "memory", label: "Memory", icon: Brain, href: "/memory" },
   { section: "docs", label: "Documents", icon: FolderOpen, href: "/documents" },
@@ -94,7 +95,8 @@ const navItems: NavItem[] = [
   { section: "settings", label: "Settings", icon: Settings2, href: "/settings" },
   { section: "config", label: "Config", icon: Settings, href: "/config" },
   // ── Monitoring ──
-  { group: "Monitoring", section: "usage", label: "Usage", icon: BarChart3, href: "/usage" },
+  { group: "Monitoring", section: "doctor", label: "Doctor", icon: Stethoscope, href: "/doctor" },
+  { section: "usage", label: "Usage", icon: BarChart3, href: "/usage" },
   { section: "terminal", label: "Terminal", icon: SquareTerminal, href: "/terminal" },
   { section: "logs", label: "Logs", icon: Terminal, href: "/logs" },
 ];
@@ -110,6 +112,7 @@ function deriveSectionFromPath(pathname: string): string | null {
     documents: "docs",
     memories: "memory",
     permissions: "security",
+    heartbeat: "cron",
   };
   if (aliases[first]) return aliases[first];
   const known = new Set([
@@ -134,6 +137,7 @@ function deriveSectionFromPath(pathname: string): string | null {
     "security",
     "permissions",
     "hooks",
+    "doctor",
     "usage",
     "terminal",
     "logs",
@@ -143,23 +147,34 @@ function deriveSectionFromPath(pathname: string): string | null {
   return known.has(first) ? first : null;
 }
 
+function deriveTabFromPath(pathname: string): string | null {
+  if (!pathname || pathname === "/") return null;
+  const first = pathname.split("/").filter(Boolean)[0] || "";
+  if (first === "heartbeat") return "heartbeat";
+  return null;
+}
+
 function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collapsed?: boolean }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const sectionFromPath = deriveSectionFromPath(pathname);
   const sectionFromQuery = searchParams.get("section") || "dashboard";
   const tabFromQuery = (searchParams.get("tab") || "").toLowerCase();
+  const tabFromPath = deriveTabFromPath(pathname);
   const isSkillDetailRoute = pathname.startsWith("/skills/");
   const section = isSkillDetailRoute
     ? "skills"
     : sectionFromPath || sectionFromQuery;
-  const tab = isSkillDetailRoute ? "skills" : tabFromQuery;
-  const [skillsExpanded, setSkillsExpanded] = useState(true);
-  const [agentsExpanded, setAgentsExpanded] = useState(true);
+  const tab = isSkillDetailRoute ? "skills" : (tabFromPath ?? tabFromQuery);
+  const [skillsExpanded, setSkillsExpanded] = useState(false);
+  const [agentsExpanded, setAgentsExpanded] = useState(false);
+  const [cronExpanded, setCronExpanded] = useState(false);
   const isClawHubActive = section === "skills" && tab === "clawhub";
   const showSkillsChildren = isClawHubActive ? true : skillsExpanded;
   const isSubagentsActive = section === "agents" && tab === "subagents";
   const showAgentsChildren = isSubagentsActive ? true : agentsExpanded;
+  const isHeartbeatActive = section === "cron" && tab === "heartbeat";
+  const showCronChildren = isHeartbeatActive ? true : cronExpanded;
 
   // Subscribe to chat unread count reactively
   const chatUnread = useSyncExternalStore(
@@ -173,9 +188,11 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
       {navItems.map((item, index) => {
         const isSkillsParent = item.section === "skills" && item.label === "Skills";
         const isAgentsParent = item.section === "agents" && item.label === "Agents";
+        const isCronParent = item.section === "cron" && item.label === "Cron Jobs";
         if (collapsed && item.isSubItem) return null;
         if (item.isSubItem && item.section === "skills" && !showSkillsChildren) return null;
         if (item.isSubItem && item.section === "agents" && !showAgentsChildren) return null;
+        if (item.isSubItem && item.section === "cron" && !showCronChildren) return null;
 
         // Group header
         const previousGroup = index > 0 ? navItems[index - 1]?.group : undefined;
@@ -214,14 +231,14 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                 {!collapsed && (
                   <>
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                    <span className="shrink-0 whitespace-nowrap rounded-full border border-violet-500/20 bg-violet-500/5 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-violet-400/80">
+                    <span className="shrink-0 whitespace-nowrap rounded-full border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                       Soon
                     </span>
                   </>
                 )}
               </span>
             ) : (
-              (isSkillsParent || isAgentsParent) && !collapsed ? (
+              (isSkillsParent || isAgentsParent || isCronParent) && !collapsed ? (
                 <div className={linkClass}>
                   <Link
                     href={item.href || `/${item.section}`}
@@ -238,21 +255,25 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                       e.stopPropagation();
                       if (isSkillsParent) {
                         setSkillsExpanded((prev) => !prev);
-                      } else {
+                      } else if (isAgentsParent) {
                         setAgentsExpanded((prev) => !prev);
+                      } else {
+                        setCronExpanded((prev) => !prev);
                       }
                     }}
-                    className="rounded-md p-0.5 text-muted-foreground/50 transition-colors hover:text-foreground/80"
+                    className="rounded-md p-0.5 text-foreground/60 transition-colors hover:text-foreground"
                     aria-label={
                       isSkillsParent
                         ? (showSkillsChildren ? "Collapse skills submenu" : "Expand skills submenu")
-                        : (showAgentsChildren ? "Collapse agents submenu" : "Expand agents submenu")
+                        : isAgentsParent
+                          ? (showAgentsChildren ? "Collapse agents submenu" : "Expand agents submenu")
+                          : (showCronChildren ? "Collapse cron submenu" : "Expand cron submenu")
                     }
                   >
                     <ChevronRight
                       className={cn(
-                        "h-3 w-3 transition-transform duration-200",
-                        (isSkillsParent ? showSkillsChildren : showAgentsChildren) && "rotate-90"
+                        "h-3 w-3 shrink-0 transition-transform duration-200",
+                        (isSkillsParent ? showSkillsChildren : isAgentsParent ? showAgentsChildren : showCronChildren) && "rotate-90"
                       )}
                     />
                   </button>
@@ -267,12 +288,12 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                   <span className="relative inline-flex shrink-0">
                     <Icon className="h-3.5 w-3.5" />
                     {collapsed && showBadge && (
-                      <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-violet-600 ring-2 ring-sidebar" title={`${chatUnread} unread`} aria-hidden />
+                      <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary ring-2 ring-sidebar" title={`${chatUnread} unread`} aria-hidden />
                     )}
                   </span>
                   {!collapsed && <span className="flex-1">{item.label}</span>}
                   {!collapsed && showBadge && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-violet-600 px-1.5 text-xs font-bold text-white shadow-sm">
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground shadow-sm">
                       {chatUnread > 9 ? "9+" : chatUnread}
                     </span>
                   )}
@@ -414,7 +435,7 @@ function GatewayBadge({ collapsed }: { collapsed?: boolean }) {
       </button>
 
       {showMenu && (
-        <div className="absolute bottom-full left-0 z-50 mb-1.5 w-full overflow-hidden rounded-lg glass-strong py-1">
+        <div className="absolute bottom-full left-0 z-50 mb-1.5 w-56 min-w-56 overflow-hidden rounded-lg glass-strong py-1">
           <button
             type="button"
             onClick={handleRestart}
@@ -453,7 +474,7 @@ function GatewayBadge({ collapsed }: { collapsed?: boolean }) {
               }}
               className={cn(
                 "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200",
-                autoRestartOnChanges ? "bg-violet-500" : "bg-foreground/10"
+                autoRestartOnChanges ? "bg-primary" : "bg-foreground/10"
               )}
             >
               <span

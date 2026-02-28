@@ -1,9 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readdir, readFile, stat, writeFile, unlink, rename, copyFile } from "fs/promises";
-import { join, extname, dirname, basename } from "path";
+import { join, resolve, extname, dirname, basename } from "path";
 import { getOpenClawHome } from "@/lib/paths";
 
 const OPENCLAW_HOME = getOpenClawHome();
+
+/** Resolve a user-supplied path safely within OPENCLAW_HOME. Returns null if traversal is detected. */
+function safePath(filePath: string): string | null {
+  const cleaned = filePath.replace(/^\/+/, "");
+  const full = resolve(OPENCLAW_HOME, cleaned);
+  if (!full.startsWith(OPENCLAW_HOME + "/") && full !== OPENCLAW_HOME) return null;
+  return full;
+}
 
 const SKIP_DIRS = new Set([
   "node_modules",
@@ -118,12 +126,12 @@ export async function GET(request: NextRequest) {
   const filePath = searchParams.get("path");
   try {
     if (filePath) {
-      const safePath = filePath.replace(/\.\./g, "").replace(/^\/+/, "");
-      const fullPath = join(OPENCLAW_HOME, safePath);
+      const fullPath = safePath(filePath);
+      if (!fullPath) return NextResponse.json({ error: "invalid path" }, { status: 400 });
       const content = await readFile(fullPath, "utf-8");
       const words = content.split(/\s+/).filter(Boolean).length;
       const size = Buffer.byteLength(content, "utf-8");
-      return NextResponse.json({ content, words, size, path: safePath });
+      return NextResponse.json({ content, words, size, path: filePath.replace(/^\/+/, "") });
     }
     const workspaces = await discoverWorkspaces();
     let allDocs: FileInfo[] = [];
@@ -149,15 +157,15 @@ export async function PUT(request: NextRequest) {
     if (typeof filePath !== "string" || typeof content !== "string") {
       return NextResponse.json({ error: "path and content required" }, { status: 400 });
     }
-    const safePath = filePath.replace(/\.\./g, "").replace(/^\/+/, "");
-    if (!/\.(md|json|txt)$/i.test(safePath)) {
+    if (!/\.(md|json|txt)$/i.test(filePath)) {
       return NextResponse.json({ error: "unsupported file type" }, { status: 400 });
     }
-    const fullPath = join(OPENCLAW_HOME, safePath);
+    const fullPath = safePath(filePath);
+    if (!fullPath) return NextResponse.json({ error: "invalid path" }, { status: 400 });
     await writeFile(fullPath, content, "utf-8");
     const words = content.split(/\s+/).filter(Boolean).length;
     const size = Buffer.byteLength(content, "utf-8");
-    return NextResponse.json({ ok: true, path: safePath, words, size });
+    return NextResponse.json({ ok: true, path: filePath.replace(/^\/+/, ""), words, size });
   } catch (err) {
     console.error("Docs PUT error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
@@ -172,8 +180,8 @@ export async function DELETE(request: NextRequest) {
     if (!filePath) {
       return NextResponse.json({ error: "path required" }, { status: 400 });
     }
-    const safePath = filePath.replace(/\.\./g, "").replace(/^\/+/, "");
-    const fullPath = join(OPENCLAW_HOME, safePath);
+    const fullPath = safePath(filePath);
+    if (!fullPath) return NextResponse.json({ error: "invalid path" }, { status: 400 });
     // Verify it exists and is a file
     const s = await stat(fullPath);
     if (!s.isFile()) {
@@ -199,8 +207,9 @@ export async function PATCH(request: NextRequest) {
     if (!filePath || !action) {
       return NextResponse.json({ error: "action and path required" }, { status: 400 });
     }
-    const safePath = filePath.replace(/\.\./g, "").replace(/^\/+/, "");
-    const fullPath = join(OPENCLAW_HOME, safePath);
+    const fullPath = safePath(filePath);
+    if (!fullPath) return NextResponse.json({ error: "invalid path" }, { status: 400 });
+    const logicalPath = filePath.replace(/^\/+/, "");
 
     if (action === "rename") {
       if (!newName) {
@@ -215,11 +224,11 @@ export async function PATCH(request: NextRequest) {
       const newFullPath = join(dir, sanitizedName);
       await rename(fullPath, newFullPath);
       // Build the new logical path
-      const parentLogical = safePath.substring(0, safePath.lastIndexOf("/"));
+      const parentLogical = logicalPath.substring(0, logicalPath.lastIndexOf("/"));
       const newLogicalPath = parentLogical
         ? `${parentLogical}/${sanitizedName}`
         : sanitizedName;
-      return NextResponse.json({ ok: true, path: newLogicalPath, oldPath: safePath });
+      return NextResponse.json({ ok: true, path: newLogicalPath, oldPath: logicalPath });
     }
 
     if (action === "duplicate") {
@@ -235,7 +244,7 @@ export async function PATCH(request: NextRequest) {
       } while (await stat(dupPath).then(() => true).catch(() => false));
       await copyFile(fullPath, dupPath);
       // Build logical path
-      const parentLogical = safePath.substring(0, safePath.lastIndexOf("/"));
+      const parentLogical = logicalPath.substring(0, logicalPath.lastIndexOf("/"));
       const dupName = basename(dupPath);
       const dupLogical = parentLogical ? `${parentLogical}/${dupName}` : dupName;
       return NextResponse.json({ ok: true, path: dupLogical, name: dupName });

@@ -1248,7 +1248,7 @@ export function HeartbeatManager() {
               void saveDefaults();
             }}
             disabled={Boolean(busyKey)}
-            className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {busyKey === "save-defaults" ? (
               <span className="inline-flex items-center gap-0.5">
@@ -1410,7 +1410,7 @@ export function HeartbeatManager() {
                       void saveAgent(agent.id);
                     }}
                     disabled={Boolean(busyKey)}
-                    className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-50"
                   >
                     {busyKey === `save-agent:${agent.id}` ? (
                       <span className="inline-flex items-center gap-0.5">
@@ -1489,7 +1489,7 @@ export function HeartbeatManager() {
                   void saveVisibility();
                 }}
                 disabled={Boolean(busyKey)}
-                className="inline-flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 {busyKey === "save-visibility" ? (
                   <span className="inline-flex items-center gap-0.5">

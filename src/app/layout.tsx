@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { ChatNotificationToast } from "@/components/chat-notification-toast";
 import { RestartAnnouncementBar } from "@/components/restart-announcement-bar";
 import { SetupGate } from "@/components/setup-gate";
+import { UsageAlertMonitor } from "@/components/usage-alert-monitor";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -118,6 +119,7 @@ export default function RootLayout({
             </div>
             <AgentChatPanel />
             <ChatNotificationToast />
+            <UsageAlertMonitor />
           </SetupGate>
         </ThemeProvider>
       </body>

@@ -111,6 +111,10 @@ const HooksView = dynamic(
   () => import("@/components/hooks-view").then((m) => m.HooksView),
   { loading: () => <SectionLoading /> }
 );
+const DoctorView = dynamic(
+  () => import("@/components/doctor-view").then((m) => m.DoctorView),
+  { loading: () => <SectionLoading /> }
+);
 
 export type DashboardSection =
   | "dashboard"
@@ -139,7 +143,8 @@ export type DashboardSection =
   | "browser"
   | "search"
   | "settings"
-  | "hooks";
+  | "hooks"
+  | "doctor";
 
 function SectionContent({ section }: { section: DashboardSection }) {
   switch (section) {
@@ -182,7 +187,7 @@ function SectionContent({ section }: { section: DashboardSection }) {
     case "terminal":
       return <TerminalView />;
     case "security":
-      return <SecurityView initialTab="audit" />;
+      return <SecurityView initialTab="health" />;
     case "permissions":
       return <SecurityView initialTab="permissions" />;
     case "tailscale":
@@ -195,6 +200,8 @@ function SectionContent({ section }: { section: DashboardSection }) {
       return <SettingsView />;
     case "hooks":
       return <HooksView />;
+    case "doctor":
+      return <DoctorView />;
     default:
       return <DashboardView />;
   }

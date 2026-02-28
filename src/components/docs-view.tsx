@@ -86,10 +86,12 @@ function workspaceLabel(name: string): string {
   return suffix ? suffix.charAt(0).toUpperCase() + suffix.slice(1) : name;
 }
 
-const WORKSPACE_ICONS: Record<string, string> = {
-  workspace: "🦞",
-  "workspace-gilfoyle": "💀",
-};
+/** Last path segment of agent workspace (e.g. "workspace", "workspace-gilfoyle") to match doc.workspace. */
+function workspaceNameFromPath(workspacePath: string): string {
+  const trimmed = (workspacePath || "").trim().replace(/[/\\]+$/, "");
+  const segment = trimmed.split(/[/\\]/).filter(Boolean).pop();
+  return segment ?? (trimmed || "workspace");
+}
 
 const TAG_COLORS: Record<string, string> = {
   "Core Prompt": "bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30",
@@ -394,6 +396,7 @@ export function DocsView() {
   const [extFilter, setExtFilter] = useState<string | null>(null);
   const [collapsedWorkspace, setCollapsedWorkspace] = useState<Record<string, boolean>>({});
   const [collapsedType, setCollapsedType] = useState<Record<string, boolean>>({});
+  const [agents, setAgents] = useState<Array<{ id: string; name: string; emoji: string; workspace: string }>>([]);
 
   // Save state
   const [saveStatus, setSaveStatus] = useState<
@@ -447,6 +450,30 @@ export function DocsView() {
   useEffect(() => {
     queueMicrotask(() => fetchDocs());
   }, [fetchDocs]);
+
+  // Load agents for workspace → emoji (identity emoji from OpenClaw config)
+  useEffect(() => {
+    let mounted = true;
+    fetch("/api/agents", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data) => {
+        if (!mounted) return;
+        const list = (data.agents || []) as Array<{ id: string; name: string; emoji: string; workspace: string }>;
+        setAgents(list);
+      })
+      .catch(() => {});
+    return () => { mounted = false; };
+  }, []);
+
+  // Map workspace folder name → agent emoji (from identity)
+  const workspaceEmojiByFolder = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const a of agents) {
+      const folder = workspaceNameFromPath(a.workspace);
+      if (folder && a.emoji) map[folder] = a.emoji;
+    }
+    return map;
+  }, [agents]);
 
   // Close context menu on click outside / escape
   useEffect(() => {
@@ -776,7 +803,7 @@ export function DocsView() {
             <div className="space-y-1">
               {workspaceGroups.map((ws) => {
                 const isCollapsed = collapsedWorkspace[ws.name] || false;
-                const icon = WORKSPACE_ICONS[ws.name] || "📁";
+                const icon = workspaceEmojiByFolder[ws.name] || "📁";
                 const wsCount = ws.typeGroups.reduce((sum, tg) => sum + tg.docs.length, 0);
                 return (
                   <div key={ws.name}>
@@ -966,7 +993,7 @@ export function DocsView() {
             <div className="shrink-0 border-b border-foreground/10 px-4 py-4 md:px-6">
               <div className="flex items-center gap-3">
                 <span className="text-xs">
-                  {WORKSPACE_ICONS[selected.workspace] || "📁"}
+                  {workspaceEmojiByFolder[selected.workspace] || "📁"}
                 </span>
                 <h2 className="text-xs font-semibold text-foreground">
                   {selected.name}

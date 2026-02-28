@@ -36,6 +36,13 @@ import {
   getAutoRestartSnapshot,
   getAutoRestartServerSnapshot,
 } from "@/lib/auto-restart-preference";
+import {
+  setTimeFormatPreference,
+  subscribeTimeFormatPreference,
+  getTimeFormatSnapshot,
+  getTimeFormatServerSnapshot,
+  type TimeFormatPreference,
+} from "@/lib/time-format-preference";
 import { chatStore } from "@/lib/chat-store";
 
 /* ── Types ────────────────────────────────────────── */
@@ -138,6 +145,11 @@ export function SettingsView() {
     subscribeAutoRestartPreference,
     getAutoRestartSnapshot,
     getAutoRestartServerSnapshot,
+  );
+  const timeFormat = useSyncExternalStore(
+    subscribeTimeFormatPreference,
+    getTimeFormatSnapshot,
+    getTimeFormatServerSnapshot,
   );
 
   // Banner reset feedback
@@ -296,15 +308,15 @@ export function SettingsView() {
   // Filtered timezone list
   const filteredTimezones = tzSearch
     ? COMMON_TIMEZONES.filter((tz) =>
-        tz.toLowerCase().includes(tzSearch.toLowerCase()),
-      )
+      tz.toLowerCase().includes(tzSearch.toLowerCase()),
+    )
     : COMMON_TIMEZONES;
 
   if (loading) {
     return (
       <SectionLayout>
         <SectionHeader title="Settings" />
-        <LoadingState label="Loading settings..." />
+        <LoadingState />
       </SectionLayout>
     );
   }
@@ -337,7 +349,7 @@ export function SettingsView() {
         <SettingsSection
           title="General"
           icon={SlidersHorizontal}
-          iconColor="text-violet-400"
+          iconColor="text-foreground"
           defaultOpen
         >
           {/* Theme */}
@@ -377,6 +389,38 @@ export function SettingsView() {
             ) : (
               <div className="h-7 w-40 animate-pulse rounded-lg bg-muted" />
             )}
+          </SettingRow>
+
+          {/* Time format */}
+          <SettingRow
+            label="Time format"
+            description={`Choose how times are displayed across the dashboard. Current: ${timeFormat === "12h" ? "12-hour clock" : "24-hour clock"}.`}
+          >
+            <div className="inline-flex rounded-lg border border-border bg-muted p-0.5">
+              {(
+                [
+                  { value: "12h", label: "12-hour" },
+                  { value: "24h", label: "24-hour" },
+                ] satisfies Array<{ value: TimeFormatPreference; label: string }>
+              ).map((opt) => {
+                const active = timeFormat === opt.value;
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setTimeFormatPreference(opt.value)}
+                    className={cn(
+                      "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                      active
+                        ? "bg-card text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
           </SettingRow>
 
           {/* Timezone */}
@@ -592,7 +636,7 @@ export function SettingsView() {
               />
               <Link
                 href="/tailscale"
-                className="text-xs text-violet-400 hover:underline"
+                className="text-xs text-foreground underline-offset-4 hover:underline"
               >
                 Manage
               </Link>
@@ -872,6 +916,12 @@ export function SettingsView() {
             </span>
           </SettingRow>
 
+          <SettingRow label="Config hash">
+            <span className="rounded-md bg-muted/50 px-2 py-1 font-mono text-xs text-foreground/70">
+              {settings?.configHash || "—"}
+            </span>
+          </SettingRow>
+
           <div className="flex flex-wrap gap-3 pt-1">
             <a
               href="https://docs.openclaw.ai"
@@ -883,7 +933,7 @@ export function SettingsView() {
               <ExternalLink className="h-3 w-3" />
             </a>
             <a
-              href="https://github.com/openclaw/mission-control/issues"
+              href="https://github.com/robsannaa/openclaw-mission-control/issues"
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs font-medium text-foreground/70 transition-colors hover:bg-muted/80 hover:text-foreground"
@@ -979,7 +1029,7 @@ function ToggleSwitch({
       onClick={() => onChange(!checked)}
       className={cn(
         "relative h-5 w-9 shrink-0 rounded-full transition-colors",
-        checked ? "bg-violet-500" : "bg-muted",
+        checked ? "bg-primary" : "bg-muted",
       )}
     >
       <span

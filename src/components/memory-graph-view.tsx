@@ -1874,7 +1874,7 @@ export function MemoryGraphView() {
                       className="w-full rounded-md border border-foreground/10 bg-background px-2 py-1.5 text-xs text-foreground/90 outline-none"
                     />
                     <div className="flex gap-1">
-                      <button type="button" onClick={saveEdit} className="rounded bg-violet-600 px-2 py-1 text-xs text-white hover:bg-violet-500">Save edit</button>
+                      <button type="button" onClick={saveEdit} className="rounded bg-primary text-primary-foreground px-2 py-1 text-xs hover:bg-primary/90">Save edit</button>
                       <button type="button" onClick={() => setEditingNodeId(null)} className="rounded border border-foreground/10 px-2 py-1 text-xs text-muted-foreground hover:bg-muted">Cancel</button>
                     </div>
                   </div>
@@ -1886,7 +1886,7 @@ export function MemoryGraphView() {
                   <button type="button" onClick={handleConfirm} className="inline-flex items-center justify-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-1 text-emerald-700 hover:bg-emerald-500/20 dark:text-emerald-200"><CheckCircle2 className="h-3 w-3" />confirm</button>
                   <button type="button" onClick={startEditing} className="inline-flex items-center justify-center gap-1 rounded border border-foreground/10 bg-card px-2 py-1 text-foreground/80 hover:bg-muted">edit</button>
                   <button type="button" onClick={handleDeprecate} className="inline-flex items-center justify-center gap-1 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-amber-700 hover:bg-amber-500/20 dark:text-amber-200">deprecate</button>
-                  <button type="button" onClick={() => togglePin(selectedNode.id)} className="inline-flex items-center justify-center gap-1 rounded border border-violet-500/30 bg-violet-500/10 px-2 py-1 text-violet-700 hover:bg-violet-500/20 dark:text-violet-200">{pinnedIds.includes(selectedNode.id) ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}{pinnedIds.includes(selectedNode.id) ? "unpin" : "pin"}</button>
+                  <button type="button" onClick={() => togglePin(selectedNode.id)} className="inline-flex items-center justify-center gap-1 rounded border border-border bg-card px-2 py-1 text-foreground hover:bg-muted">{pinnedIds.includes(selectedNode.id) ? <PinOff className="h-3 w-3" /> : <Pin className="h-3 w-3" />}{pinnedIds.includes(selectedNode.id) ? "unpin" : "pin"}</button>
                 </div>
 
                 <div className="rounded border border-foreground/10 bg-background/30 p-2 text-xs text-muted-foreground">

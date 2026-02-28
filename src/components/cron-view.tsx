@@ -17,7 +17,6 @@ import {
   Check,
   Send,
   Cpu,
-  Zap,
   Calendar,
   Globe,
   Hash,
@@ -33,6 +32,12 @@ import { cn } from "@/lib/utils";
 import { requestRestart } from "@/lib/restart-store";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 import { InlineSpinner, LoadingState } from "@/components/ui/loading-state";
+import {
+  getTimeFormatSnapshot,
+  is12HourTimeFormat,
+  withTimeFormat,
+  type TimeFormatPreference,
+} from "@/lib/time-format-preference";
 
 /* ── types ────────────────────────────────────────── */
 
@@ -74,6 +79,12 @@ type RunEntry = {
 
 type Toast = { message: string; type: "success" | "error" };
 
+type RunOutputState = {
+  status: "running" | "done" | "error";
+  output: string;
+  runStartedAtMs: number;
+};
+
 /* ── helpers ──────────────────────────────────────── */
 
 function fmtDuration(ms: number | undefined): string {
@@ -102,32 +113,56 @@ function fmtAgo(ms: number | undefined): string {
 
 function fmtDate(ms: number | undefined): string {
   if (!ms) return "—";
-  return new Date(ms).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const timeFormat = getTimeFormatSnapshot();
+  return new Date(ms).toLocaleString(
+    "en-US",
+    withTimeFormat(
+      {
+        month: "short",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      },
+      timeFormat,
+    ),
+  );
 }
 
 function fmtFullDate(ms: number | undefined): string {
   if (!ms) return "—";
-  return new Date(ms).toLocaleString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  const timeFormat = getTimeFormatSnapshot();
+  return new Date(ms).toLocaleString(
+    "en-US",
+    withTimeFormat(
+      {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      },
+      timeFormat,
+    ),
+  );
 }
 
 /** Turn a cron expression into a short human-readable phrase (e.g. "Every 6 hours", "Daily at 8:00 AM"). */
 function cronToHuman(expr: string): string {
+  const timeFormat = getTimeFormatSnapshot();
   const parts = expr.trim().split(/\s+/);
   if (parts.length < 5) return expr;
   const [min, hour, day, month, dow] = parts;
+  const formatClock = (hour24: number, minute: number): string => {
+    if (!Number.isFinite(hour24) || !Number.isFinite(minute)) return `${hour24}:${minute}`;
+    if (!is12HourTimeFormat(timeFormat)) {
+      return `${String(hour24).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    }
+    const suffix = hour24 < 12 ? "AM" : "PM";
+    const hour12 = hour24 % 12 || 12;
+    return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
+  };
   // Every N minutes: */N * * * *
   if (min.startsWith("*/") && hour === "*" && day === "*" && month === "*" && dow === "*") {
     const n = min.slice(2);
@@ -144,35 +179,28 @@ function cronToHuman(expr: string): string {
   // Daily at H:M
   if (min !== "*" && !min.includes("/") && !min.includes(",") && hour !== "*" && !hour.includes("/") && !hour.includes(",") && day === "*" && month === "*" && dow === "*") {
     const h = parseInt(hour, 10);
-    const m = min === "0" ? "" : `:${min.padStart(2, "0")}`;
-    const ampm = h === 0 ? "12" : h > 12 ? String(h - 12) : String(h);
-    const suffix = h < 12 ? "AM" : "PM";
-    return `Daily at ${ampm}${m || ":00"} ${suffix}`;
+    const m = parseInt(min, 10);
+    return `Daily at ${formatClock(h, m)}`;
   }
   // Twice a day: 0 8,20 * * *
   if (min === "0" && /^\d+,\d+$/.test(hour) && day === "*" && month === "*" && dow === "*") {
     const [h1, h2] = hour.split(",").map((x) => parseInt(x, 10));
-    const fmt = (h: number) => (h === 0 ? "12" : h > 12 ? String(h - 12) : String(h)) + (h < 12 ? "AM" : "PM");
-    return `Twice a day (${fmt(h1)} & ${fmt(h2)})`;
+    return `Twice a day (${formatClock(h1, 0)} & ${formatClock(h2, 0)})`;
   }
   // Weekdays at noon: 0 12 * * 1-5
   if (min === "0" && hour === "12" && day === "*" && month === "*" && dow === "1-5")
-    return "Weekdays at noon";
+    return is12HourTimeFormat(timeFormat) ? "Weekdays at noon" : "Weekdays at 12:00";
   // Weekdays at H
   if (min === "0" && day === "*" && month === "*" && dow === "1-5") {
     const h = parseInt(hour, 10);
-    const ampm = h === 0 ? "12" : h > 12 ? String(h - 12) : String(h);
-    const suffix = h < 12 ? "AM" : "PM";
-    return `Weekdays at ${ampm}:00 ${suffix}`;
+    return `Weekdays at ${formatClock(h, 0)}`;
   }
   // Specific weekday: 0 9 * * 1 = Monday at 9am
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   if (min === "0" && day === "*" && month === "*" && /^\d+$/.test(dow)) {
     const d = parseInt(dow, 10);
     const h = parseInt(hour, 10);
-    const ampm = h === 0 ? "12" : h > 12 ? String(h - 12) : String(h);
-    const suffix = h < 12 ? "AM" : "PM";
-    if (d >= 0 && d <= 6) return `Every ${dayNames[d]} at ${ampm}:00 ${suffix}`;
+    if (d >= 0 && d <= 6) return `Every ${dayNames[d]} at ${formatClock(h, 0)}`;
   }
   return expr;
 }
@@ -187,6 +215,56 @@ function scheduleDisplay(s: CronJob["schedule"]): string {
     return mins < 60 ? `Every ${mins}m` : `Every ${Math.round(mins / 60)}h`;
   }
   return "Unknown";
+}
+
+function scheduleOptionLabel(opt: ScheduleOption, timeFormat: TimeFormatPreference): string {
+  if (opt.kind === "cron" && "expr" in opt) {
+    const human = cronToHuman(opt.expr);
+    if (human !== opt.expr) return human;
+  }
+  if (!is12HourTimeFormat(timeFormat)) {
+    if (opt.id === "daily-8am") return "Every day at 08:00";
+    if (opt.id === "daily-6pm") return "Every day at 18:00";
+    if (opt.id === "monday-9am") return "Every Monday at 09:00";
+    if (opt.id === "twice-day") return "Twice a day (08:00 & 20:00)";
+  }
+  return opt.label;
+}
+
+const SESSION_OUTPUT_MARKER = "--- Session output ---";
+
+function splitSessionOutput(output: string): { prefix: string; session: string } {
+  const idx = output.indexOf(SESSION_OUTPUT_MARKER);
+  if (idx === -1) {
+    return { prefix: output.trimEnd(), session: "" };
+  }
+  return {
+    prefix: output.slice(0, idx).trimEnd(),
+    session: output.slice(idx + SESSION_OUTPUT_MARKER.length).trim(),
+  };
+}
+
+function mergeSessionOutput(existing: string, incoming: string): string {
+  const nextSession = incoming.trim();
+  if (!nextSession) return existing;
+
+  const { prefix, session: currentSession } = splitSessionOutput(existing);
+  const basePrefix = prefix ? `${prefix}\n\n` : "";
+
+  if (!currentSession) {
+    return `${basePrefix}${SESSION_OUTPUT_MARKER}\n\n${nextSession}`;
+  }
+  if (currentSession === nextSession || currentSession.includes(nextSession)) {
+    return existing;
+  }
+  if (nextSession.startsWith(currentSession)) {
+    const delta = nextSession.slice(currentSession.length);
+    if (!delta) return existing;
+    return `${existing}${delta}`;
+  }
+
+  // Session output changed shape; replace the session segment with latest text.
+  return `${basePrefix}${SESSION_OUTPUT_MARKER}\n\n${nextSession}`;
 }
 
 function describeDelivery(d: CronJob["delivery"]): {
@@ -206,6 +284,117 @@ function describeDelivery(d: CronJob["delivery"]): {
     issue: hasIssue
       ? 'Missing delivery target ("to"). The job will fail after completing.'
       : undefined,
+  };
+}
+
+type FailureGuide = {
+  headline: string;
+  explanation: string;
+  steps: string[];
+};
+
+function buildFailureGuide(error: string, delivery: CronJob["delivery"]): FailureGuide {
+  const raw = String(error || "").trim();
+  const lower = raw.toLowerCase();
+  const channelHint = delivery.channel
+    ? `Set recipient in Delivery for the ${delivery.channel} channel.`
+    : "Set a delivery channel and recipient in the Delivery section.";
+
+  if (
+    lower.includes("delivery target is missing") ||
+    (lower.includes("delivery") && lower.includes("missing") && lower.includes("target"))
+  ) {
+    return {
+      headline: "Delivery destination is missing",
+      explanation:
+        "The job ran, but it had nowhere to send the result. This is a setup issue, not a system crash.",
+      steps: [
+        "Open job settings.",
+        channelHint,
+        "Save changes and run the job once to confirm.",
+      ],
+    };
+  }
+
+  if (
+    lower.includes("unauthorized") ||
+    lower.includes("forbidden") ||
+    lower.includes("invalid api key") ||
+    lower.includes("api key") ||
+    lower.includes("authentication failed")
+  ) {
+    return {
+      headline: "Provider authentication failed",
+      explanation:
+        "This job could not access the model provider because credentials are missing, expired, or invalid.",
+      steps: [
+        "Open Models or Accounts/Keys and reconnect the provider.",
+        "Check that the selected model is available for your account.",
+        "Run the cron job again after updating credentials.",
+      ],
+    };
+  }
+
+  if (
+    lower.includes("model") &&
+    (lower.includes("not found") ||
+      lower.includes("unknown") ||
+      lower.includes("invalid") ||
+      lower.includes("unavailable"))
+  ) {
+    return {
+      headline: "Selected model is unavailable",
+      explanation:
+        "The configured model could not be resolved at runtime, so the job stopped before completion.",
+      steps: [
+        "Edit this job and choose a valid model override, or clear the override.",
+        "Confirm the model exists in the Models page.",
+        "Run once manually to validate.",
+      ],
+    };
+  }
+
+  if (lower.includes("timed out") || lower.includes("timeout")) {
+    return {
+      headline: "The job timed out",
+      explanation:
+        "The run took longer than the allowed execution window and was canceled automatically.",
+      steps: [
+        "Shorten the prompt to reduce runtime.",
+        "Try a faster model for this cron job.",
+        "Run once manually and check output duration.",
+      ],
+    };
+  }
+
+  if (
+    lower.includes("econnrefused") ||
+    lower.includes("connection refused") ||
+    lower.includes("network") ||
+    lower.includes("dns") ||
+    lower.includes("host not found")
+  ) {
+    return {
+      headline: "Connection to a required service failed",
+      explanation:
+        "The job could not reach a provider or local service while running.",
+      steps: [
+        "Check internet/local network connectivity.",
+        "If using local models, verify the local model service is running.",
+        "Retry once services are reachable.",
+      ],
+    };
+  }
+
+  return {
+    headline: "The run failed",
+    explanation:
+      "Mission Control received an error from OpenClaw while executing this job.",
+    steps: [
+      "Open job settings and confirm schedule, model, and delivery fields.",
+      "Run the job once manually to verify behavior.",
+      "If this keeps failing, use Technical details below when reporting the issue.",
+    ],
   };
 }
 
@@ -230,15 +419,15 @@ function RunCard({ run }: { run: RunEntry }) {
         ) : (
           <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />
         )}
-        <span className="font-medium text-foreground/70">
+        <span className="font-medium text-foreground/90">
           {fmtFullDate(run.ts)}
         </span>
-        <span className="text-muted-foreground/60">·</span>
-        <span className="text-muted-foreground">{fmtDuration(run.durationMs)}</span>
+        <span className="text-muted-foreground/80">·</span>
+        <span className="text-muted-foreground/85">{fmtDuration(run.durationMs)}</span>
         {run.sessionId && (
           <>
-            <span className="text-muted-foreground/60">·</span>
-            <span className="font-mono text-xs text-muted-foreground/40">
+            <span className="text-muted-foreground/80">·</span>
+            <span className="font-mono text-xs text-muted-foreground/75">
               {run.sessionId.substring(0, 8)}
             </span>
           </>
@@ -248,7 +437,7 @@ function RunCard({ run }: { run: RunEntry }) {
           <button
             type="button"
             onClick={() => setShowFull(!showFull)}
-            className="text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+            className="text-xs text-muted-foreground/80 transition-colors hover:text-foreground/85"
           >
             {showFull ? "Collapse" : "Details"}
           </button>
@@ -258,14 +447,14 @@ function RunCard({ run }: { run: RunEntry }) {
       {/* Error */}
       {run.error && (
         <div className="mt-2 flex items-start gap-1.5 rounded bg-red-500/10 px-2.5 py-1.5">
-          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-red-400" />
-          <p className="text-red-300">{run.error}</p>
+          <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-red-600 dark:text-red-300" />
+          <p className="text-red-700 dark:text-red-200">{run.error}</p>
         </div>
       )}
 
       {/* Summary preview (collapsed) */}
       {!showFull && run.summary && (
-        <p className="mt-1.5 line-clamp-2 leading-5 text-muted-foreground">
+        <p className="mt-1.5 line-clamp-2 leading-5 text-muted-foreground/85">
           {run.summary.replace(/[*#|_`]/g, "").substring(0, 200)}
         </p>
       )}
@@ -275,24 +464,24 @@ function RunCard({ run }: { run: RunEntry }) {
         <div className="mt-2 space-y-2">
           {run.summary && (
             <div>
-              <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+              <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
                 Summary
               </p>
-              <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg bg-muted/60 p-3 leading-5 text-muted-foreground">
+              <pre className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg border border-foreground/10 bg-background/70 p-3 leading-5 text-foreground/90">
                 {run.summary}
               </pre>
             </div>
           )}
           {run.sessionKey && (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground/60">Session:</span>
-              <code className="rounded bg-muted/80 px-2 py-0.5 font-mono text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground/80">Session:</span>
+              <code className="rounded bg-background/70 px-2 py-0.5 font-mono text-xs text-foreground/85">
                 {run.sessionKey}
               </code>
             </div>
           )}
           {run.runAtMs && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground/80">
               <span>Scheduled: {fmtFullDate(run.runAtMs)}</span>
               <span>·</span>
               <span>Ran: {fmtFullDate(run.ts)}</span>
@@ -306,6 +495,72 @@ function RunCard({ run }: { run: RunEntry }) {
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function FailureGuideCard({
+  error,
+  delivery,
+  consecutiveErrors,
+  onFix,
+  compact = false,
+}: {
+  error: string;
+  delivery: CronJob["delivery"];
+  consecutiveErrors?: number;
+  onFix: () => void;
+  compact?: boolean;
+}) {
+  const guide = buildFailureGuide(error, delivery);
+  const steps = compact ? guide.steps.slice(0, 2) : guide.steps;
+
+  return (
+    <div className="rounded-lg border border-red-500/25 bg-red-500/8 px-3 py-2.5">
+      <div className="flex items-start gap-2">
+        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-600 dark:text-red-300" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-semibold text-red-700 dark:text-red-200">
+            Last run failed
+            {consecutiveErrors && consecutiveErrors > 1
+              ? ` (${consecutiveErrors} consecutive)`
+              : ""}
+          </p>
+          <p className="mt-1 text-xs font-medium text-red-700/90 dark:text-red-200/95">
+            {guide.headline}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-red-700/80 dark:text-red-100/90">
+            {guide.explanation}
+          </p>
+          <div className="mt-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-red-700/80 dark:text-red-200/90">
+              What to do
+            </p>
+            <ol className="mt-1 space-y-1 text-xs text-red-700/85 dark:text-red-100/90">
+              {steps.map((step, index) => (
+                <li key={`${step}-${index}`}>{index + 1}. {step}</li>
+              ))}
+            </ol>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onFix}
+              className="rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-red-500"
+            >
+              Open job settings
+            </button>
+            <details className="text-xs">
+              <summary className="cursor-pointer text-red-700/80 hover:text-red-700 dark:text-red-200/90 dark:hover:text-red-100">
+                Technical details
+              </summary>
+              <pre className="mt-1 max-h-36 overflow-auto whitespace-pre-wrap rounded-md border border-red-500/20 bg-red-500/5 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-red-700/80 dark:text-red-100/90">
+                {error}
+              </pre>
+            </details>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -474,7 +729,7 @@ function EditCronForm({
     <div className="border-t border-foreground/10 bg-card/70 px-4 py-4 space-y-4">
       {/* Name */}
       <div>
-        <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+        <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
           Name
         </label>
         <input
@@ -486,27 +741,27 @@ function EditCronForm({
 
       {/* Prompt / Message */}
       <div>
-        <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+        <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
           Prompt / Message
         </label>
         <textarea
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           rows={5}
-          className="w-full resize-y rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs leading-5 text-foreground/70 outline-none focus:border-violet-500/30"
+          className="w-full resize-y rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs leading-5 text-foreground/90 outline-none focus:border-violet-500/30"
         />
       </div>
 
       {/* Schedule */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
             Schedule Type
           </label>
           <select
             value={schedType}
             onChange={(e) => setSchedType(e.target.value)}
-            className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none"
+            className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none"
           >
             <option value="cron">Cron Expression</option>
             <option value="every">Interval</option>
@@ -515,46 +770,46 @@ function EditCronForm({
         <div>
           {schedType === "cron" ? (
             <>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
                 Cron Expression
               </label>
               <input
                 value={cronExpr}
                 onChange={(e) => setCronExpr(e.target.value)}
                 placeholder="0 8 * * *"
-                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
               />
             </>
           ) : (
             <>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
                 Interval
               </label>
               <input
                 value={everyVal}
                 onChange={(e) => setEveryVal(e.target.value)}
                 placeholder="5m, 1h, 30s"
-                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
               />
             </>
           )}
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+          <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
             Timezone
           </label>
           <input
             value={tz}
             onChange={(e) => setTz(e.target.value)}
             placeholder="Europe/Warsaw"
-            className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+            className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30"
           />
         </div>
       </div>
 
       {/* Delivery */}
       <div>
-        <label className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+        <label className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
           <Send className="h-3 w-3" />
           Delivery Configuration
         </label>
@@ -567,7 +822,7 @@ function EditCronForm({
               <select
                 value={deliveryMode}
                 onChange={(e) => setDeliveryMode(e.target.value)}
-                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none"
+                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none"
               >
                 <option value="announce">Announce (send summary)</option>
                 <option value="none">No delivery</option>
@@ -581,7 +836,7 @@ function EditCronForm({
                 value={channel}
                 onChange={(e) => setChannel(e.target.value)}
                 disabled={deliveryMode === "none"}
-                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none disabled:opacity-40"
+                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none disabled:opacity-40"
               >
                 <option value="">Select channel</option>
                 {readyChannels.map((ch) => (
@@ -606,7 +861,7 @@ function EditCronForm({
                     type="button"
                     onClick={() => fetchTargets()}
                     disabled={targetsLoading}
-                    className="shrink-0 text-xs text-violet-400 hover:text-violet-300 disabled:opacity-50"
+                    className="shrink-0 text-xs text-violet-700 hover:text-violet-800 disabled:opacity-50 dark:text-violet-300 dark:hover:text-violet-200"
                   >
                     {targetsLoading ? "Refreshing…" : "Refresh targets"}
                   </button>
@@ -617,12 +872,12 @@ function EditCronForm({
                   disabled
                   value=""
                   placeholder="—"
-                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none disabled:opacity-40"
+                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none disabled:opacity-40"
                 />
               ) : targetsLoading && knownTargets.length === 0 ? (
                 <div className="flex h-9 items-center rounded-lg border border-foreground/10 bg-muted/80 px-3">
                   <InlineSpinner size="sm" />
-                  <span className="ml-2 text-xs text-muted-foreground/40">
+                  <span className="ml-2 text-xs text-muted-foreground/70">
                     Loading targets…
                   </span>
                 </div>
@@ -639,7 +894,7 @@ function EditCronForm({
                         setTo(v);
                       }
                     }}
-                    className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                    className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                   >
                     <option value="">Select recipient…</option>
                     {filteredTargets.map((t) => (
@@ -658,14 +913,14 @@ function EditCronForm({
                       value={to}
                       onChange={(e) => setTo(e.target.value)}
                       placeholder={CHANNEL_PLACEHOLDER[channel] || "channel:TARGET_ID"}
-                      className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                      className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                       aria-label="Recipient (e.g. discord:CHANNEL_ID)"
                     />
                   )}
                   {!customTo && to && (
-                    <p className="text-xs text-emerald-500/70">
+                    <p className="text-xs text-emerald-700 dark:text-emerald-300">
                       <CheckCircle className="mr-1 inline h-2.5 w-2.5" />
-                      Target set: <code className="text-emerald-400">{to}</code>
+                      Target set: <code className="text-emerald-700 dark:text-emerald-300">{to}</code>
                     </p>
                   )}
                 </div>
@@ -676,12 +931,12 @@ function EditCronForm({
           {/* Warning for missing target */}
           {deliveryIssue && (
             <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-300" />
               <div>
-                <p className="text-xs font-medium text-amber-400">
+                <p className="text-xs font-medium text-amber-700 dark:text-amber-200">
                   Missing delivery target
                 </p>
-                <p className="text-xs text-amber-300/70">
+                <p className="text-xs text-amber-700/80 dark:text-amber-100/90">
                   {deliveryIssue}
                 </p>
               </div>
@@ -689,10 +944,10 @@ function EditCronForm({
           )}
 
           {customTo && (
-            <p className="text-xs text-muted-foreground/40">
-              Format: <code className="text-muted-foreground/60">telegram:CHAT_ID</code>,{" "}
-              <code className="text-muted-foreground/60">+15555550123</code> (WhatsApp),{" "}
-              <code className="text-muted-foreground/60">discord:CHANNEL_ID</code>
+            <p className="text-xs text-muted-foreground/70">
+              Format: <code className="text-muted-foreground/80">telegram:CHAT_ID</code>,{" "}
+              <code className="text-muted-foreground/80">+15555550123</code> (WhatsApp),{" "}
+              <code className="text-muted-foreground/80">discord:CHANNEL_ID</code>
             </p>
           )}
         </div>
@@ -700,10 +955,10 @@ function EditCronForm({
 
       {/* Model override */}
       <div>
-        <label className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+        <label className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
           <Cpu className="h-3 w-3" />
           Model Override
-          <span className="font-normal normal-case text-muted-foreground/40">
+          <span className="font-normal normal-case text-muted-foreground/70">
             (optional — leave blank for default)
           </span>
         </label>
@@ -711,7 +966,7 @@ function EditCronForm({
           value={model}
           onChange={(e) => setModel(e.target.value)}
           placeholder="e.g. minimax-portal/MiniMax-M2.5"
-          className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+          className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
         />
       </div>
 
@@ -729,7 +984,7 @@ function EditCronForm({
             <button
               type="button"
               onClick={() => setConfirmDel(false)}
-              className="text-xs text-muted-foreground hover:text-foreground/70"
+              className="text-xs text-muted-foreground hover:text-foreground/90"
             >
               Cancel
             </button>
@@ -738,7 +993,7 @@ function EditCronForm({
           <button
             type="button"
             onClick={() => setConfirmDel(true)}
-            className="flex items-center gap-1 rounded p-1.5 text-muted-foreground/60 hover:bg-red-500/15 hover:text-red-400"
+            className="flex items-center gap-1 rounded p-1.5 text-muted-foreground/80 hover:bg-red-500/15 hover:text-red-700 dark:hover:text-red-300"
           >
             <Trash2 className="h-3.5 w-3.5" />
           </button>
@@ -747,14 +1002,14 @@ function EditCronForm({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground/70"
+          className="rounded px-3 py-1.5 text-xs text-muted-foreground hover:text-foreground/90"
         >
           Cancel
         </button>
         <button
           type="button"
           onClick={save}
-          className="flex items-center gap-1 rounded bg-violet-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
+          className="flex items-center gap-1 rounded bg-primary text-primary-foreground px-4 py-1.5 text-xs font-medium hover:bg-primary/90"
         >
           <Check className="h-3 w-3" /> Save Changes
         </button>
@@ -814,6 +1069,7 @@ function CreateCronForm({
   onCreated: () => void;
   onCancel: () => void;
 }) {
+  const timeFormat = getTimeFormatSnapshot();
   // ── Step management ──
   const [step, setStep] = useState(1); // 1=basics, 2=schedule, 3=payload, 4=delivery, 5=review
   const totalSteps = 5;
@@ -993,7 +1249,7 @@ function CreateCronForm({
       {/* Wizard header */}
       <div className="flex items-center justify-between border-b border-foreground/10 bg-violet-500/5 px-4 py-3">
         <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-violet-400" />
+          <Calendar className="h-4 w-4 text-violet-600 dark:text-violet-400" />
           <h3 className="text-sm font-semibold text-foreground">New Cron Job</h3>
         </div>
         <div className="flex items-center gap-3">
@@ -1004,13 +1260,13 @@ function CreateCronForm({
                 key={i}
                 className={cn(
                   "h-1.5 rounded-full transition-all",
-                  i + 1 === step ? "w-4 bg-violet-500" : i + 1 < step ? "w-1.5 bg-violet-500/60" : "w-1.5 bg-foreground/10"
+                  i + 1 === step ? "w-4 bg-primary" : i + 1 < step ? "w-1.5 bg-primary/60" : "w-1.5 bg-foreground/10"
                 )}
               />
             ))}
           </div>
-          <span className="text-xs text-muted-foreground/60">Step {step}/{totalSteps}</span>
-          <button type="button" onClick={onCancel} className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70">
+          <span className="text-xs text-muted-foreground/80">Step {step}/{totalSteps}</span>
+          <button type="button" onClick={onCancel} className="rounded p-1 text-muted-foreground/80 transition-colors hover:bg-muted hover:text-foreground/90">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -1022,7 +1278,7 @@ function CreateCronForm({
           <div className="space-y-4">
             <div>
               <h4 className="text-xs font-medium text-foreground/80 mb-1">What should we call this job?</h4>
-              <p className="text-xs text-muted-foreground/60 mb-3">Give it a descriptive name so you can easily find it later.</p>
+              <p className="text-xs text-muted-foreground/80 mb-3">Give it a descriptive name so you can easily find it later.</p>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -1032,22 +1288,22 @@ function CreateCronForm({
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
                 Description <span className="font-normal normal-case">(optional)</span>
               </label>
               <input
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Brief description of what this job does..."
-                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Agent</label>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Agent</label>
               <select
                 value={agent}
                 onChange={(e) => setAgent(e.target.value)}
-                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none"
+                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none"
               >
                 {agents.length === 0 && <option value="main">main</option>}
                 {agents.map((a) => (
@@ -1063,7 +1319,7 @@ function CreateCronForm({
           <div className="space-y-4">
             <div>
               <h4 className="text-xs font-medium text-foreground/80 mb-1">How often should it run?</h4>
-              <p className="text-xs text-muted-foreground/60 mb-3">Choose a schedule below. Timezone applies to daily/weekly times.</p>
+              <p className="text-xs text-muted-foreground/80 mb-3">Choose a schedule below. Timezone applies to daily/weekly times.</p>
             </div>
 
             {/* Friendly schedule options (cards) */}
@@ -1090,11 +1346,11 @@ function CreateCronForm({
                     className={cn(
                       "rounded-lg border px-3 py-2.5 text-left text-xs transition-colors",
                       isSelected
-                        ? "border-violet-500/40 bg-violet-500/15 text-violet-200"
+                        ? "border-violet-500/40 bg-violet-500/15 text-violet-800 dark:text-violet-200"
                         : "border-foreground/10 bg-muted/50 text-muted-foreground/80 hover:bg-muted/80 hover:text-foreground/80"
                     )}
                   >
-                    {opt.label}
+                    {scheduleOptionLabel(opt, timeFormat)}
                   </button>
                 );
               })}
@@ -1103,12 +1359,12 @@ function CreateCronForm({
             {/* Run once: show datetime picker */}
             {simpleScheduleOption === "at" && (
               <div>
-                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Run at</label>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Run at</label>
                 <input
                   type="datetime-local"
                   value={atTime}
                   onChange={(e) => setAtTime(e.target.value)}
-                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                 />
               </div>
             )}
@@ -1117,11 +1373,11 @@ function CreateCronForm({
             {simpleScheduleOption === "custom" && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-foreground/10 bg-muted/30 p-3">
                 <div>
-                  <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Type</label>
+                  <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Type</label>
                   <select
                     value={scheduleKind}
                     onChange={(e) => setScheduleKind(e.target.value as "cron" | "every" | "at")}
-                    className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none"
+                    className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none"
                   >
                     <option value="cron">Cron expression</option>
                     <option value="every">Every X (interval)</option>
@@ -1131,34 +1387,34 @@ function CreateCronForm({
                 <div>
                   {scheduleKind === "cron" && (
                     <>
-                      <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Cron</label>
+                      <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Cron</label>
                       <input
                         value={cronExpr}
                         onChange={(e) => setCronExpr(e.target.value)}
                         placeholder="0 8 * * *"
-                        className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                        className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                       />
                     </>
                   )}
                   {scheduleKind === "every" && (
                     <>
-                      <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Interval</label>
+                      <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Interval</label>
                       <input
                         value={everyInterval}
                         onChange={(e) => setEveryInterval(e.target.value)}
                         placeholder="5m, 1h"
-                        className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                        className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                       />
                     </>
                   )}
                   {scheduleKind === "at" && (
                     <>
-                      <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Run at</label>
+                      <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Run at</label>
                       <input
                         type="datetime-local"
                         value={atTime}
                         onChange={(e) => setAtTime(e.target.value)}
-                        className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none"
+                        className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none"
                       />
                     </>
                   )}
@@ -1168,11 +1424,11 @@ function CreateCronForm({
 
             {/* Timezone (always) */}
             <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Timezone</label>
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Timezone</label>
               <select
                 value={tz}
                 onChange={(e) => setTz(e.target.value)}
-                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none"
+                className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none"
               >
                 {TZ_SUGGESTIONS.map((t) => (
                   <option key={t} value={t}>{t}</option>
@@ -1190,33 +1446,33 @@ function CreateCronForm({
           <div className="space-y-4">
             <div>
               <h4 className="text-xs font-medium text-foreground/80 mb-1">What should the agent do?</h4>
-              <p className="text-xs text-muted-foreground/60 mb-3">Write a prompt for the agent. Be specific about what you want.</p>
+              <p className="text-xs text-muted-foreground/80 mb-3">Write a prompt for the agent. Be specific about what you want.</p>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Payload Type</label>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Payload Type</label>
                 <select
                   value={payloadKind}
                   onChange={(e) => setPayloadKind(e.target.value as "agentTurn" | "systemEvent")}
-                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none"
+                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none"
                 >
                   <option value="agentTurn">Agent Turn (isolated task)</option>
                   <option value="systemEvent">System Event (main session)</option>
                 </select>
-                <p className="mt-1 text-xs text-muted-foreground/40">
+                <p className="mt-1 text-xs text-muted-foreground/70">
                   {payloadKind === "agentTurn"
                     ? "Runs in an isolated session — best for tasks with delivery"
                     : "Runs in the main session — best for internal updates"}
                 </p>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Session</label>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Session</label>
                 <select
                   value={sessionTarget}
                   onChange={(e) => setSessionTarget(e.target.value as "main" | "isolated")}
                   disabled={payloadKind === "systemEvent"}
-                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none disabled:opacity-40"
+                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none disabled:opacity-40"
                 >
                   <option value="isolated">Isolated (recommended)</option>
                   <option value="main">Main</option>
@@ -1225,7 +1481,7 @@ function CreateCronForm({
             </div>
 
             <div>
-              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+              <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
                 {payloadKind === "agentTurn" ? "Agent Prompt" : "System Event Text"}
               </label>
               <textarea
@@ -1237,14 +1493,14 @@ function CreateCronForm({
                     ? "e.g. Summarize the latest news and send me a brief update..."
                     : "e.g. Time to run the daily health check."
                 }
-                className="w-full resize-y rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2.5 text-xs leading-5 text-foreground/70 outline-none focus:border-violet-500/30"
+                className="w-full resize-y rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2.5 text-xs leading-5 text-foreground/90 outline-none focus:border-violet-500/30"
                 autoFocus
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+                <label className="mb-1 flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
                   <Cpu className="h-3 w-3" />
                   Model Override <span className="font-normal normal-case">(optional)</span>
                 </label>
@@ -1252,17 +1508,17 @@ function CreateCronForm({
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                   placeholder="Leave blank for default model"
-                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
                   Thinking Level <span className="font-normal normal-case">(optional)</span>
                 </label>
                 <select
                   value={thinking}
                   onChange={(e) => setThinking(e.target.value)}
-                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none"
+                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none"
                 >
                   <option value="">Default</option>
                   <option value="off">Off</option>
@@ -1282,7 +1538,7 @@ function CreateCronForm({
           <div className="space-y-4">
             <div>
               <h4 className="text-xs font-medium text-foreground/80 mb-1">Where should results be delivered?</h4>
-              <p className="text-xs text-muted-foreground/60 mb-3">
+              <p className="text-xs text-muted-foreground/80 mb-3">
                 {sessionTarget === "isolated"
                   ? "Isolated jobs can announce results to a messaging channel."
                   : "Main session jobs usually don't need delivery. You can skip this step."}
@@ -1291,23 +1547,23 @@ function CreateCronForm({
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Mode</label>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Mode</label>
                 <select
                   value={deliveryMode}
                   onChange={(e) => setDeliveryMode(e.target.value as "announce" | "none")}
-                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none"
+                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none"
                 >
                   <option value="announce">Announce (send summary)</option>
                   <option value="none">No delivery</option>
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Channel</label>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">Channel</label>
                 <select
                   value={channel}
                   onChange={(e) => setChannel(e.target.value)}
                   disabled={deliveryMode === "none"}
-                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/70 outline-none disabled:opacity-40"
+                  className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none disabled:opacity-40"
                 >
                   <option value="">Auto-detect</option>
                   {readyChannels.map((ch) => (
@@ -1325,7 +1581,7 @@ function CreateCronForm({
               </div>
               <div>
                 <div className="mb-1 flex items-center justify-between gap-2">
-                  <label className="block text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
+                  <label className="block text-xs font-medium uppercase tracking-wider text-muted-foreground/80">
                     Recipient
                   </label>
                   {deliveryMode !== "none" && channel && (
@@ -1333,18 +1589,18 @@ function CreateCronForm({
                       type="button"
                       onClick={() => fetchTargetsCreate()}
                       disabled={targetsLoading}
-                      className="shrink-0 text-xs text-violet-400 hover:text-violet-300 disabled:opacity-50"
+                      className="shrink-0 text-xs text-violet-700 hover:text-violet-800 disabled:opacity-50 dark:text-violet-300 dark:hover:text-violet-200"
                     >
                       {targetsLoading ? "Refreshing…" : "Refresh targets"}
                     </button>
                   )}
                 </div>
                 {deliveryMode === "none" ? (
-                  <input disabled value="" placeholder="—" className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none disabled:opacity-40" />
+                  <input disabled value="" placeholder="—" className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none disabled:opacity-40" />
                 ) : targetsLoading && knownTargets.length === 0 ? (
                   <div className="flex h-9 items-center rounded-lg border border-foreground/10 bg-muted/80 px-3">
                     <InlineSpinner size="sm" />
-                    <span className="ml-2 text-xs text-muted-foreground/40">Loading targets…</span>
+                    <span className="ml-2 text-xs text-muted-foreground/70">Loading targets…</span>
                   </div>
                 ) : (
                   <div className="space-y-1.5">
@@ -1355,7 +1611,7 @@ function CreateCronForm({
                         if (v === "__custom__") setCustomTo(true);
                         else { setCustomTo(false); setTo(v); }
                       }}
-                      className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                      className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                     >
                       <option value="">Select recipient…</option>
                       {filteredTargets.map((t) => (
@@ -1374,14 +1630,14 @@ function CreateCronForm({
                             ? "Auto from last active channel"
                             : CHANNEL_PLACEHOLDER[channel] || "channel:TARGET_ID"
                         }
-                        className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/70 outline-none focus:border-violet-500/30"
+                        className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 font-mono text-xs text-foreground/90 outline-none focus:border-violet-500/30"
                         aria-label="Recipient (e.g. discord:CHANNEL_ID)"
                       />
                     )}
                     {!customTo && to && (
-                      <p className="text-xs text-emerald-500/70">
+                      <p className="text-xs text-emerald-700 dark:text-emerald-300">
                         <CheckCircle className="mr-1 inline h-2.5 w-2.5" />
-                        Target set: <code className="text-emerald-400">{to}</code>
+                        Target set: <code className="text-emerald-700 dark:text-emerald-300">{to}</code>
                       </p>
                     )}
                   </div>
@@ -1403,8 +1659,8 @@ function CreateCronForm({
 
             {deliveryMode === "announce" && !to && (
               <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 px-3 py-2">
-                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-                <p className="text-xs text-amber-300/70">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700 dark:text-amber-300" />
+                <p className="text-xs text-amber-700/80 dark:text-amber-100/90">
                   No recipient set. The job will run but delivery may fail unless you set a target or use &quot;last&quot; channel.
                 </p>
               </div>
@@ -1417,63 +1673,63 @@ function CreateCronForm({
           <div className="space-y-4">
             <div>
               <h4 className="text-xs font-medium text-foreground/80 mb-1">Review &amp; Create</h4>
-              <p className="text-xs text-muted-foreground/60 mb-3">Double-check everything looks good before creating.</p>
+              <p className="text-xs text-muted-foreground/80 mb-3">Double-check everything looks good before creating.</p>
             </div>
 
             <div className="rounded-lg border border-foreground/5 bg-muted/40 divide-y divide-foreground/5">
               {/* Name */}
               <div className="flex items-center justify-between px-3 py-2.5">
-                <span className="text-xs text-muted-foreground/60">Name</span>
+                <span className="text-xs text-muted-foreground/80">Name</span>
                 <span className="text-xs font-medium text-foreground/80">{name}</span>
               </div>
               {/* Agent */}
               <div className="flex items-center justify-between px-3 py-2.5">
-                <span className="text-xs text-muted-foreground/60">Agent</span>
-                <span className="text-xs text-foreground/70">{agent}</span>
+                <span className="text-xs text-muted-foreground/80">Agent</span>
+                <span className="text-xs text-foreground/90">{agent}</span>
               </div>
               {/* Schedule */}
               <div className="flex items-center justify-between px-3 py-2.5">
-                <span className="text-xs text-muted-foreground/60">Schedule</span>
-                <span className="text-xs text-foreground/70">
+                <span className="text-xs text-muted-foreground/80">Schedule</span>
+                <span className="text-xs text-foreground/90">
                   {simpleScheduleOption !== "custom" && simpleScheduleOption !== "at"
                     ? (() => {
                         const opt = SCHEDULE_SIMPLE_OPTIONS.find((o) => o.id === simpleScheduleOption);
-                        return opt ? opt.label : (scheduleKind === "cron" ? cronToHuman(cronExpr) : `Every ${everyInterval}`);
+                        return opt ? scheduleOptionLabel(opt, timeFormat) : (scheduleKind === "cron" ? cronToHuman(cronExpr) : `Every ${everyInterval}`);
                       })()
                     : scheduleKind === "cron"
                       ? cronToHuman(cronExpr)
                       : scheduleKind === "every"
                         ? `Every ${everyInterval}`
                         : atTime}
-                  {tz && <span className="text-muted-foreground/50"> ({tz})</span>}
+                  {tz && <span className="text-muted-foreground/70"> ({tz})</span>}
                 </span>
               </div>
               {/* Session */}
               <div className="flex items-center justify-between px-3 py-2.5">
-                <span className="text-xs text-muted-foreground/60">Session</span>
-                <span className="text-xs text-foreground/70">{sessionTarget}</span>
+                <span className="text-xs text-muted-foreground/80">Session</span>
+                <span className="text-xs text-foreground/90">{sessionTarget}</span>
               </div>
               {/* Prompt */}
               <div className="px-3 py-2.5">
-                <span className="text-xs text-muted-foreground/60">Prompt</span>
-                <p className="mt-1 whitespace-pre-wrap rounded bg-muted/60 p-2 text-xs leading-5 text-foreground/60">{message}</p>
+                <span className="text-xs text-muted-foreground/80">Prompt</span>
+                <p className="mt-1 whitespace-pre-wrap rounded bg-muted/60 p-2 text-xs leading-5 text-foreground/90">{message}</p>
               </div>
               {/* Model */}
               {model && (
                 <div className="flex items-center justify-between px-3 py-2.5">
-                  <span className="text-xs text-muted-foreground/60">Model Override</span>
-                  <span className="text-xs font-mono text-violet-400">{model}</span>
+                  <span className="text-xs text-muted-foreground/80">Model Override</span>
+                  <span className="text-xs font-mono text-violet-700 dark:text-violet-300">{model}</span>
                 </div>
               )}
               {/* Delivery */}
               <div className="flex items-center justify-between px-3 py-2.5">
-                <span className="text-xs text-muted-foreground/60">Delivery</span>
-                <span className="text-xs text-foreground/70">
+                <span className="text-xs text-muted-foreground/80">Delivery</span>
+                <span className="text-xs text-foreground/90">
                   {deliveryMode === "none" ? (
                     "No delivery"
                   ) : (
                     <>
-                      {channel || "auto"} → {to || <span className="text-amber-400">not set</span>}
+                      {channel || "auto"} → {to || <span className="text-amber-700 dark:text-amber-300">not set</span>}
                     </>
                   )}
                 </span>
@@ -1482,8 +1738,8 @@ function CreateCronForm({
 
             {error && (
               <div className="flex items-start gap-2 rounded-lg border border-red-500/15 bg-red-500/10 px-3 py-2.5">
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
-                <p className="text-xs text-red-300">{error}</p>
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-700 dark:text-red-300" />
+                <p className="text-xs text-red-700 dark:text-red-200">{error}</p>
               </div>
             )}
           </div>
@@ -1495,7 +1751,7 @@ function CreateCronForm({
             <button
               type="button"
               onClick={() => setStep(step - 1)}
-              className="rounded px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground/70"
+              className="rounded px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground/90"
             >
               ← Back
             </button>
@@ -1506,7 +1762,7 @@ function CreateCronForm({
               type="button"
               onClick={() => setStep(step + 1)}
               disabled={!canAdvance()}
-              className="flex items-center gap-1 rounded bg-violet-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1 rounded bg-primary text-primary-foreground px-4 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed"
             >
               Next →
             </button>
@@ -1553,9 +1809,7 @@ export function CronView() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [runOutput, setRunOutput] = useState<
-    Record<string, { status: "running" | "done" | "error"; output: string }>
-  >({});
+  const [runOutput, setRunOutput] = useState<Record<string, RunOutputState>>({});
   const [runOutputCollapsed, setRunOutputCollapsed] = useState<
     Record<string, boolean>
   >({});
@@ -1651,10 +1905,11 @@ export function CronView() {
     async (action: string, id: string, extra?: Record<string, unknown>) => {
       setActionLoading(`${action}-${id}`);
       if (action === "run") {
+        const startedAt = Date.now();
         setExpanded(id);
         setRunOutput((prev) => ({
           ...prev,
-          [id]: { status: "running", output: "" },
+          [id]: { status: "running", output: "", runStartedAtMs: startedAt },
         }));
         setRunOutputCollapsed((prev) => ({ ...prev, [id]: false }));
       }
@@ -1674,6 +1929,7 @@ export function CronView() {
             [id]: {
               status: data.ok ? "done" : "error",
               output: initialOutput,
+              runStartedAtMs: prev[id]?.runStartedAtMs || Date.now(),
             },
           }));
           // Poll for real session output (agent transcript) — run may finish shortly after CLI returns
@@ -1694,16 +1950,13 @@ export function CronView() {
                   setRunOutput((prev) => {
                     const cur = prev[id];
                     if (!cur) return prev;
-                    const existing = cur.output.trim();
-                    const sep =
-                      existing && !existing.includes("--- Session output ---")
-                        ? "\n\n--- Session output ---\n\n"
-                        : "";
+                    const merged = mergeSessionOutput(cur.output, sessionOutput);
+                    if (merged === cur.output) return prev;
                     return {
                       ...prev,
                       [id]: {
                         ...cur,
-                        output: existing + sep + sessionOutput,
+                        output: merged,
                       },
                     };
                   });
@@ -1717,6 +1970,12 @@ export function CronView() {
         if (data.ok) {
           flash(`${action} successful`);
           fetchJobs();
+          if (action === "run") {
+            // Cron state can lag right after a successful run.
+            // Refresh again to avoid showing stale "failed" status.
+            setTimeout(() => fetchJobs(), 1500);
+            setTimeout(() => fetchJobs(), 5000);
+          }
           if (action === "run") setTimeout(() => fetchRuns(id), 5000);
           // Config-changing actions should prompt a restart
           if (["edit", "enable", "disable", "delete"].includes(action)) {
@@ -1730,7 +1989,11 @@ export function CronView() {
         if (action === "run") {
           setRunOutput((prev) => ({
             ...prev,
-            [id]: { status: "error", output: msg },
+            [id]: {
+              status: "error",
+              output: msg,
+              runStartedAtMs: prev[id]?.runStartedAtMs || Date.now(),
+            },
           }));
         }
         flash(msg, "error");
@@ -1761,7 +2024,15 @@ export function CronView() {
     return <LoadingState label="Loading cron jobs..." />;
   }
 
-  const errorJobs = jobs.filter((j) => j.state.lastStatus === "error");
+  const errorJobs = jobs.filter((j) => {
+    const local = runOutput[j.id];
+    const localIsNewer =
+      Boolean(local) &&
+      (!j.state.lastRunAtMs || (local?.runStartedAtMs || 0) > j.state.lastRunAtMs);
+    if (localIsNewer && local?.status === "done") return false;
+    if (localIsNewer && local?.status === "error") return true;
+    return j.state.lastStatus === "error";
+  });
 
   return (
     <SectionLayout>
@@ -1771,7 +2042,7 @@ export function CronView() {
           <>
             Schedule, delivery, run history &bull; Edit schedule, content, delivery targets
             {errorJobs.length > 0 && (
-              <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 text-xs font-medium text-red-400">
+              <span className="ml-2 rounded bg-red-500/10 px-1.5 py-0.5 text-xs font-medium text-red-700 dark:text-red-300">
                 {errorJobs.length} failing
               </span>
             )}
@@ -1782,7 +2053,7 @@ export function CronView() {
             <button
               type="button"
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500"
+              className="flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90"
             >
               <Plus className="h-3 w-3" /> New Cron Job
             </button>
@@ -1818,12 +2089,12 @@ export function CronView() {
         {jobs.length === 0 && !showCreate && (
           <div className="flex flex-col items-center justify-center py-16">
             <Calendar className="mx-auto h-10 w-10 text-zinc-700 mb-3" />
-            <p className="text-sm text-muted-foreground/60 mb-1">No cron jobs yet</p>
-            <p className="text-xs text-muted-foreground/40 mb-4">Create your first scheduled task to get started.</p>
+            <p className="text-sm text-muted-foreground/85 mb-1">No cron jobs yet</p>
+            <p className="text-xs text-muted-foreground/75 mb-4">Create your first scheduled task to get started.</p>
             <button
               type="button"
               onClick={() => setShowCreate(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500"
+              className="flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/90"
             >
               <Plus className="h-4 w-4" /> Create Cron Job
             </button>
@@ -1835,7 +2106,17 @@ export function CronView() {
           const isEditing = editing === job.id;
           const isFocusedFromLink = targetJobId === job.id;
           const st = job.state;
-          const hasError = st.lastStatus === "error";
+          const localRun = runOutput[job.id];
+          const localRunIsNewer =
+            Boolean(localRun) &&
+            (!st.lastRunAtMs || (localRun?.runStartedAtMs || 0) > st.lastRunAtMs);
+          const effectiveStatus =
+            localRunIsNewer && localRun?.status === "done"
+              ? "ok"
+              : localRunIsNewer && localRun?.status === "error"
+                ? "error"
+                : st.lastStatus;
+          const hasError = effectiveStatus === "error";
           const delivery = describeDelivery(job.delivery);
           const jobRuns = runs[job.id] || [];
 
@@ -1865,7 +2146,7 @@ export function CronView() {
                   {isExpanded ? (
                     <ChevronDown className="h-4 w-4 text-muted-foreground" />
                   ) : (
-                    <ChevronRight className="h-4 w-4 text-muted-foreground/60" />
+                    <ChevronRight className="h-4 w-4 text-muted-foreground/80" />
                   )}
                 </button>
                 <div
@@ -1875,7 +2156,7 @@ export function CronView() {
                       ? "bg-zinc-600"
                       : hasError
                         ? "bg-red-500 shadow-md shadow-red-500/40"
-                        : st.lastStatus === "ok"
+                        : effectiveStatus === "ok"
                           ? "bg-emerald-500"
                           : "bg-zinc-500"
                   )}
@@ -1889,18 +2170,18 @@ export function CronView() {
                       {job.name}
                     </p>
                     {!job.enabled && (
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground/60">
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground/80">
                         DISABLED
                       </span>
                     )}
                     {delivery.hasIssue && (
-                      <span className="flex items-center gap-0.5 rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-400">
+                      <span className="flex items-center gap-0.5 rounded bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
                         <AlertTriangle className="h-2.5 w-2.5" />
                         missing target
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground/60">
+                  <p className="text-xs text-muted-foreground/85">
                     {scheduleDisplay(job.schedule)} &bull; {job.agentId}
                     {st.nextRunAtMs && (
                       <>
@@ -1927,7 +2208,7 @@ export function CronView() {
                       "rounded p-1.5 transition-colors",
                       job.enabled
                         ? "text-emerald-500 hover:bg-emerald-500/15"
-                        : "text-muted-foreground/60 hover:bg-muted"
+                        : "text-muted-foreground/80 hover:bg-muted"
                     )}
                     title={job.enabled ? "Disable" : "Enable"}
                   >
@@ -1962,8 +2243,8 @@ export function CronView() {
                     className={cn(
                       "rounded p-1.5 transition-colors",
                       isEditing
-                        ? "bg-violet-500/15 text-violet-400"
-                        : "text-muted-foreground/60 hover:bg-muted hover:text-foreground/70"
+                        ? "bg-violet-500/15 text-violet-700 dark:text-violet-300"
+                        : "text-muted-foreground/80 hover:bg-muted hover:text-foreground/90"
                     )}
                     title="Edit"
                   >
@@ -1973,44 +2254,15 @@ export function CronView() {
               </div>
 
               {/* Error banner with quick-fix suggestion */}
-              {hasError && st.lastError && !isEditing && (
-                <div className="mx-4 mb-3 rounded-lg border border-red-500/15 bg-red-500/10 px-3 py-2.5">
-                  <div className="flex items-start gap-2">
-                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-red-400" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-medium text-red-400">
-                        Error
-                        {st.consecutiveErrors && st.consecutiveErrors > 1
-                          ? ` (${st.consecutiveErrors} consecutive)`
-                          : ""}
-                      </p>
-                      <p className="mt-0.5 text-xs text-red-300/70">
-                        {st.lastError}
-                      </p>
-
-                      {/* Quick-fix suggestion */}
-                      {st.lastError.includes("delivery target is missing") && (
-                        <div className="mt-2 flex items-center gap-2 rounded bg-amber-500/10 px-2.5 py-1.5">
-                          <Zap className="h-3 w-3 shrink-0 text-amber-400" />
-                          <p className="text-xs text-amber-300">
-                            <strong>Fix:</strong> Edit this job and add a delivery
-                            target (e.g.{" "}
-                            <code className="rounded bg-muted px-1 text-amber-400">
-                              telegram:CHAT_ID
-                            </code>
-                            ) in the Delivery section.
-                          </p>
-                          <button
-                            type="button"
-                            onClick={() => setEditing(job.id)}
-                            className="shrink-0 rounded bg-amber-500/15 px-2 py-1 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/25"
-                          >
-                            Fix now →
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
+              {hasError && st.lastError && !isEditing && !isExpanded && (
+                <div className="mx-4 mb-3">
+                  <FailureGuideCard
+                    error={st.lastError}
+                    delivery={job.delivery}
+                    consecutiveErrors={st.consecutiveErrors}
+                    onFix={() => setEditing(job.id)}
+                    compact
+                  />
                 </div>
               )}
 
@@ -2033,24 +2285,44 @@ export function CronView() {
               {/* Expanded detail view */}
               {isExpanded && !isEditing && (
                 <div className="border-t border-foreground/5 px-4 py-4 space-y-4">
+                  {hasError && st.lastError && (
+                    <FailureGuideCard
+                      error={st.lastError}
+                      delivery={job.delivery}
+                      consecutiveErrors={st.consecutiveErrors}
+                      onFix={() => setEditing(job.id)}
+                    />
+                  )}
+
                   {/* ── Run output (terminal-like accordion) ──── */}
                   {runOutput[job.id] && (
-                    <div className="rounded-lg border border-foreground/10 bg-zinc-900/90 overflow-hidden">
-                      <button
-                        type="button"
+                    <div className="rounded-lg border border-slate-300/70 bg-slate-50 overflow-hidden dark:border-zinc-800 dark:bg-zinc-950/95">
+                      <div
+                        role="button"
+                        tabIndex={0}
                         onClick={() =>
                           setRunOutputCollapsed((prev) => ({
                             ...prev,
                             [job.id]: !prev[job.id],
                           }))
                         }
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-zinc-300 hover:bg-zinc-800/80 transition-colors"
+                        onKeyDown={(e) => {
+                          if (e.target !== e.currentTarget) return;
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            setRunOutputCollapsed((prev) => ({
+                              ...prev,
+                              [job.id]: !prev[job.id],
+                            }));
+                          }
+                        }}
+                        className="flex w-full cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 dark:text-zinc-300 dark:hover:bg-zinc-900/70"
                       >
                         <span className="flex items-center gap-1.5">
-                          <Terminal className="h-3.5 w-3.5 text-emerald-500/80" />
+                          <Terminal className="h-3.5 w-3.5 text-emerald-700 dark:text-emerald-300" />
                           Run output
                           {runOutput[job.id].status === "running" && (
-                            <span className="flex items-center gap-1 text-emerald-400/80">
+                            <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-300">
                               <span className="inline-flex items-center gap-0.5">
                               <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
                               <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
@@ -2060,10 +2332,10 @@ export function CronView() {
                             </span>
                           )}
                           {runOutput[job.id].status === "done" && (
-                            <span className="text-emerald-400/80">Done</span>
+                            <span className="text-emerald-700 dark:text-emerald-300">Done</span>
                           )}
                           {runOutput[job.id].status === "error" && (
-                            <span className="text-red-400/90">Error</span>
+                            <span className="text-red-700 dark:text-red-300">Error</span>
                           )}
                         </span>
                         <span className="flex items-center gap-1">
@@ -2073,22 +2345,22 @@ export function CronView() {
                               e.stopPropagation();
                               clearRunOutput(job.id);
                             }}
-                            className="rounded p-1 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-700/50 transition-colors"
+                            className="rounded p-1 text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-800 dark:text-zinc-500 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-200"
                             title="Clear output"
                           >
                             <X className="h-3 w-3" />
                           </button>
                           {runOutputCollapsed[job.id] ? (
-                            <ChevronRight className="h-3.5 w-3.5 text-zinc-500" />
+                            <ChevronRight className="h-3.5 w-3.5 text-slate-500 dark:text-zinc-500" />
                           ) : (
-                            <ChevronUp className="h-3.5 w-3.5 text-zinc-500" />
+                            <ChevronUp className="h-3.5 w-3.5 text-slate-500 dark:text-zinc-500" />
                           )}
                         </span>
-                      </button>
+                      </div>
                       {!runOutputCollapsed[job.id] && (
                         <pre
                           ref={job.id === expanded ? runOutputRef : undefined}
-                          className="max-h-64 overflow-auto border-t border-zinc-700/50 px-3 py-2.5 text-xs font-mono leading-relaxed text-zinc-200 whitespace-pre-wrap break-words"
+                          className="max-h-64 overflow-auto border-t border-slate-200 bg-white px-3 py-2.5 text-xs font-mono leading-relaxed text-slate-900 whitespace-pre-wrap break-words dark:border-zinc-800 dark:bg-zinc-950/70 dark:text-zinc-100"
                         >
                           {runOutput[job.id].status === "running" && !runOutput[job.id].output
                             ? "Waiting for output…"
@@ -2106,55 +2378,55 @@ export function CronView() {
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 md:gap-x-6 gap-y-2 rounded-lg border border-foreground/5 bg-muted/40 px-3 py-3 text-xs">
                       <div className="flex items-center gap-2">
-                        <Hash className="h-3 w-3 text-muted-foreground/40" />
-                        <span className="text-muted-foreground/60">Job ID</span>
-                        <code className="ml-auto font-mono text-xs text-muted-foreground">
+                        <Hash className="h-3 w-3 text-muted-foreground/70" />
+                        <span className="text-muted-foreground/85">Job ID</span>
+                        <code className="ml-auto font-mono text-xs text-foreground/85">
                           {job.id}
                         </code>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Globe className="h-3 w-3 text-muted-foreground/40" />
-                        <span className="text-muted-foreground/60">Agent</span>
-                        <span className="ml-auto text-muted-foreground">
+                        <Globe className="h-3 w-3 text-muted-foreground/70" />
+                        <span className="text-muted-foreground/85">Agent</span>
+                        <span className="ml-auto text-foreground/85">
                           {job.agentId}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Calendar className="h-3 w-3 text-muted-foreground/40" />
-                        <span className="text-muted-foreground/60">Schedule</span>
-                        <span className="ml-auto font-mono text-muted-foreground">
+                        <Calendar className="h-3 w-3 text-muted-foreground/70" />
+                        <span className="text-muted-foreground/85">Schedule</span>
+                        <span className="ml-auto font-mono text-foreground/85">
                           {scheduleDisplay(job.schedule)}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Clock className="h-3 w-3 text-muted-foreground/40" />
-                        <span className="text-muted-foreground/60">Session</span>
-                        <span className="ml-auto text-muted-foreground">
+                        <Clock className="h-3 w-3 text-muted-foreground/70" />
+                        <span className="text-muted-foreground/85">Session</span>
+                        <span className="ml-auto text-foreground/85">
                           {job.sessionTarget || "default"}
                           {job.wakeMode && ` · wake: ${job.wakeMode}`}
                         </span>
                       </div>
                       {job.payload.model && (
                         <div className="flex items-center gap-2">
-                          <Cpu className="h-3 w-3 text-muted-foreground/40" />
-                          <span className="text-muted-foreground/60">Model</span>
-                          <span className="ml-auto font-mono text-xs text-violet-400">
+                          <Cpu className="h-3 w-3 text-muted-foreground/70" />
+                          <span className="text-muted-foreground/85">Model</span>
+                          <span className="ml-auto font-mono text-xs text-violet-700 dark:text-violet-300">
                             {job.payload.model}
                           </span>
                         </div>
                       )}
                       <div className="flex items-center gap-2">
-                        <FileText className="h-3 w-3 text-muted-foreground/40" />
-                        <span className="text-muted-foreground/60">Created</span>
-                        <span className="ml-auto text-muted-foreground">
+                        <FileText className="h-3 w-3 text-muted-foreground/70" />
+                        <span className="text-muted-foreground/85">Created</span>
+                        <span className="ml-auto text-foreground/85">
                           {fmtDate(job.createdAtMs)}
                         </span>
                       </div>
                       {job.updatedAtMs && (
                         <div className="flex items-center gap-2">
-                          <FileText className="h-3 w-3 text-muted-foreground/40" />
-                          <span className="text-muted-foreground/60">Updated</span>
-                          <span className="ml-auto text-muted-foreground">
+                          <FileText className="h-3 w-3 text-muted-foreground/70" />
+                          <span className="text-muted-foreground/85">Updated</span>
+                          <span className="ml-auto text-foreground/85">
                             {fmtDate(job.updatedAtMs)}
                           </span>
                         </div>
@@ -2178,25 +2450,25 @@ export function CronView() {
                     >
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div>
-                          <span className="text-muted-foreground/60">Mode</span>
-                          <p className="mt-0.5 font-medium text-foreground/70">
+                          <span className="text-muted-foreground/85">Mode</span>
+                          <p className="mt-0.5 font-medium text-foreground/90">
                             {job.delivery.mode || "none"}
                           </p>
                         </div>
                         <div>
-                          <span className="text-muted-foreground/60">Channel</span>
-                          <p className="mt-0.5 text-foreground/70">
+                          <span className="text-muted-foreground/85">Channel</span>
+                          <p className="mt-0.5 text-foreground/90">
                             {job.delivery.channel || "—"}
                           </p>
                         </div>
                         <div>
-                          <span className="text-muted-foreground/60">To (recipient)</span>
+                          <span className="text-muted-foreground/85">To (recipient)</span>
                           <p
                             className={cn(
                               "mt-0.5 font-mono",
                               job.delivery.to
-                                ? "text-foreground/70"
-                                : "text-amber-400"
+                                ? "text-foreground/90"
+                                : "text-amber-700 dark:text-amber-300"
                             )}
                           >
                             {job.delivery.to || "⚠ not set"}
@@ -2206,14 +2478,14 @@ export function CronView() {
 
                       {delivery.hasIssue && (
                         <div className="mt-2 flex items-center gap-2">
-                          <AlertTriangle className="h-3 w-3 shrink-0 text-amber-400" />
-                          <p className="text-xs text-amber-400">
+                          <AlertTriangle className="h-3 w-3 shrink-0 text-amber-700 dark:text-amber-300" />
+                          <p className="text-xs text-amber-700 dark:text-amber-200">
                             {delivery.issue}
                           </p>
                           <button
                             type="button"
                             onClick={() => setEditing(job.id)}
-                            className="ml-auto shrink-0 rounded bg-amber-500/15 px-2 py-1 text-xs font-medium text-amber-300 transition-colors hover:bg-amber-500/25"
+                            className="ml-auto shrink-0 rounded bg-amber-500/20 px-2 py-1 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200 dark:hover:bg-amber-500/25"
                           >
                             Fix →
                           </button>
@@ -2230,26 +2502,26 @@ export function CronView() {
                     </h3>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="rounded-lg border border-foreground/5 bg-muted/40 px-3 py-2 text-center">
-                        <p className="text-xs text-muted-foreground/60">Last Run</p>
-                        <p className="mt-0.5 text-xs font-medium text-foreground/70">
+                        <p className="text-xs text-muted-foreground/85">Last Run</p>
+                        <p className="mt-0.5 text-xs font-medium text-foreground/90">
                           {fmtAgo(st.lastRunAtMs)}
                         </p>
-                        <p className="text-xs text-muted-foreground/40">
+                        <p className="text-xs text-muted-foreground/75">
                           {fmtDate(st.lastRunAtMs)}
                         </p>
                       </div>
                       <div className="rounded-lg border border-foreground/5 bg-muted/40 px-3 py-2 text-center">
-                        <p className="text-xs text-muted-foreground/60">Next Run</p>
-                        <p className="mt-0.5 text-xs font-medium text-foreground/70">
+                        <p className="text-xs text-muted-foreground/85">Next Run</p>
+                        <p className="mt-0.5 text-xs font-medium text-foreground/90">
                           {fmtAgo(st.nextRunAtMs)}
                         </p>
-                        <p className="text-xs text-muted-foreground/40">
+                        <p className="text-xs text-muted-foreground/75">
                           {fmtDate(st.nextRunAtMs)}
                         </p>
                       </div>
                       <div className="rounded-lg border border-foreground/5 bg-muted/40 px-3 py-2 text-center">
-                        <p className="text-xs text-muted-foreground/60">Duration</p>
-                        <p className="mt-0.5 text-xs font-medium text-foreground/70">
+                        <p className="text-xs text-muted-foreground/85">Duration</p>
+                        <p className="mt-0.5 text-xs font-medium text-foreground/90">
                           {fmtDuration(st.lastDurationMs)}
                         </p>
                       </div>
@@ -2261,21 +2533,21 @@ export function CronView() {
                             : "border-foreground/5 bg-muted/40"
                         )}
                       >
-                        <p className="text-xs text-muted-foreground/60">Status</p>
+                        <p className="text-xs text-muted-foreground/85">Status</p>
                         <p
                           className={cn(
                             "mt-0.5 text-xs font-medium",
                             hasError
-                              ? "text-red-400"
-                              : st.lastStatus === "ok"
-                                ? "text-emerald-400"
-                                : "text-muted-foreground"
+                              ? "text-red-700 dark:text-red-300"
+                              : effectiveStatus === "ok"
+                                ? "text-emerald-700 dark:text-emerald-300"
+                                : "text-muted-foreground/90"
                           )}
                         >
-                          {st.lastStatus || "—"}
+                          {effectiveStatus || "—"}
                         </p>
-                        {st.consecutiveErrors ? (
-                          <p className="text-xs text-red-500">
+                        {hasError && st.consecutiveErrors ? (
+                          <p className="text-xs text-red-700 dark:text-red-300">
                             {st.consecutiveErrors} consecutive
                           </p>
                         ) : null}
@@ -2290,7 +2562,7 @@ export function CronView() {
                         <FileText className="h-3 w-3" />
                         Prompt
                       </h3>
-                      <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-foreground/5 bg-muted/40 p-3 text-xs leading-5 text-muted-foreground">
+                      <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-lg border border-foreground/10 bg-background/70 p-3 text-xs leading-5 text-foreground/90">
                         {job.payload.message}
                       </pre>
                     </div>
@@ -2307,7 +2579,7 @@ export function CronView() {
                         type="button"
                         onClick={() => fetchRuns(job.id)}
                         disabled={runsLoading === job.id}
-                        className="flex items-center gap-1 text-xs text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+                        className="flex items-center gap-1 text-xs text-muted-foreground/80 transition-colors hover:text-foreground/85"
                       >
                         {runsLoading === job.id ? (
                           <span className="inline-flex items-center gap-0.5">
@@ -2322,7 +2594,7 @@ export function CronView() {
                       </button>
                     </div>
                     {runsLoading === job.id && jobRuns.length === 0 ? (
-                      <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground/60">
+                      <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground/80">
                         <span className="inline-flex items-center gap-0.5">
                           <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
                           <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
@@ -2331,7 +2603,7 @@ export function CronView() {
                         Loading runs...
                       </div>
                     ) : jobRuns.length === 0 ? (
-                      <p className="text-xs text-muted-foreground/60">
+                      <p className="text-xs text-muted-foreground/85">
                         No runs recorded
                       </p>
                     ) : (
@@ -2355,8 +2627,8 @@ export function CronView() {
           className={cn(
             "fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg border px-4 py-2.5 text-xs shadow-xl backdrop-blur-sm",
             toast.type === "success"
-              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-300"
-              : "border-red-500/20 bg-red-500/10 text-red-300"
+              ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200"
+              : "border-red-500/20 bg-red-500/10 text-red-800 dark:text-red-200"
           )}
         >
           {toast.type === "success" ? (

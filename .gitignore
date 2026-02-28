@@ -47,3 +47,5 @@ next-env.d.ts
 # Others
 *.md
 .claude/
+*.png
+/e2e/

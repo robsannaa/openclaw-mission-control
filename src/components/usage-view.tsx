@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { AlertTriangle, Mail, RefreshCw, Sparkles, Trash2 } from "lucide-react";
 import {
   Area,
   Bar,
@@ -25,7 +26,15 @@ import {
   ChartLegendContent,
 } from "@/components/ui/chart";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
+import { Button } from "@/components/ui/button";
 import { LoadingState } from "@/components/ui/loading-state";
+import {
+  getTimeFormatServerSnapshot,
+  getTimeFormatSnapshot,
+  subscribeTimeFormatPreference,
+  withTimeFormat,
+  type TimeFormatPreference,
+} from "@/lib/time-format-preference";
 
 /* ── types ─────────────────────────────────────── */
 
@@ -95,6 +104,35 @@ type SessionEntry = {
 
 type AuthProvider = { provider: string; authKind: string; profiles: number };
 
+type DiagnosticsSource = {
+  ok: boolean;
+  error: string | null;
+};
+
+type MissingPricingModel = {
+  model: string;
+  sessions: number;
+  totalTokens: number;
+};
+
+type UsageDiagnostics = {
+  sources: {
+    gateway: DiagnosticsSource;
+    usageHistoryWrite: DiagnosticsSource;
+    historical: DiagnosticsSource;
+    modelStatus: DiagnosticsSource;
+    agentDirectory: DiagnosticsSource;
+    sessionStorage: DiagnosticsSource & { failedAgents: string[] };
+  };
+  pricing: {
+    coveredSessions: number;
+    uncoveredSessions: number;
+    coveragePct: number;
+    uncoveredModels: MissingPricingModel[];
+  };
+  warnings: string[];
+};
+
 type LiveCost = {
   totalEstimatedUsd: number;
   totalCacheReadTokens: number;
@@ -147,6 +185,105 @@ type UsageData = {
   agentModels: { agentId: string; primary: string; fallbacks: string[] }[];
   sessionFileSizes: { agentId: string; sizeBytes: number; fileCount: number }[];
   historical: HistoricalData;
+  diagnostics?: UsageDiagnostics;
+};
+
+type UsageAlarmTimeline = "last1h" | "last24h" | "last7d";
+
+type UsageAlarmRule = {
+  id: string;
+  fullModel: string;
+  timeline: UsageAlarmTimeline;
+  tokenLimit: number;
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type UsageAlarmEvaluation = {
+  ruleId: string;
+  status: "ok" | "no-model-data" | "no-data-in-window";
+  reason: string | null;
+  provider: string;
+  fullModel: string;
+  timeline: UsageAlarmTimeline;
+  tokenLimit: number;
+  observedTokens: number;
+  totalModelTokens: number;
+  sampleSessions: number;
+  staleSessions: number;
+  exceeded: boolean;
+  windowStart: number;
+  windowEnd: number;
+};
+
+type UsageAlarmProviderCapability = {
+  provider: string;
+  providerUsageApiKnown: boolean;
+  docsUrl: string | null;
+  note: string;
+};
+
+type UsageAlarmsPayload = {
+  ok: boolean;
+  monitorEnabled: boolean;
+  rules: UsageAlarmRule[];
+  evaluations: UsageAlarmEvaluation[];
+  alerts?: Array<{ id: string; message: string }>;
+  providerCapabilities: Record<string, UsageAlarmProviderCapability>;
+  warning?: string;
+  degraded?: boolean;
+};
+
+type OpenRouterCredits = {
+  total_credits: number;
+  total_usage: number;
+};
+
+type OpenRouterActivityRow = {
+  date: string;
+  model: string;
+  provider_name: string;
+  usage: number;
+  requests: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  reasoning_tokens: number;
+};
+
+type OpenRouterKeyUsage = {
+  key_hash: string;
+  label: string;
+  usage: number;
+  limit: number | null;
+  is_free_tier: boolean;
+  rate_limit: { requests: number; interval: string } | null;
+};
+
+type OpenRouterBillingData = {
+  available: true;
+  credits: OpenRouterCredits;
+  activity: OpenRouterActivityRow[];
+  keys: OpenRouterKeyUsage[];
+  fetchedAt: number;
+};
+
+type OpenRouterBillingUnavailable = {
+  available: false;
+  reason: string;
+};
+
+type OpenRouterBillingResult =
+  | OpenRouterBillingData
+  | OpenRouterBillingUnavailable;
+
+type OrModelRow = {
+  model: string;
+  usage: number;
+  requests: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  reasoning_tokens: number;
 };
 
 type ChartPoint = Record<string, string | number | undefined>;
@@ -173,6 +310,14 @@ const PERIOD_TITLES: Record<Period, string> = {
   last7d: "Last 7 Days",
   allTime: "All Time",
 };
+
+const USAGE_ALARM_TIMELINE_LABELS: Record<UsageAlarmTimeline, string> = {
+  last1h: "Last 1 hour",
+  last24h: "Last 24 hours",
+  last7d: "Last 7 days",
+};
+
+const SUPPORT_EMAIL = "roberto.sannazzaro@gmail.com";
 
 const USAGE_COLORS = {
   input: "var(--chart-1)",
@@ -211,6 +356,16 @@ const agentChartConfig = {
 const contextChartConfig = {
   sessions: { label: "Sessions", color: "var(--chart-2)" },
 } satisfies ChartConfig;
+
+const OR_MODEL_COLORS = [
+  "var(--chart-1)",
+  "var(--chart-2)",
+  "var(--chart-3)",
+  "var(--chart-4)",
+  "var(--chart-5, hsl(280 60% 55%))",
+  "var(--chart-6, hsl(200 60% 55%))",
+  "var(--chart-muted)",
+];
 
 function fmtTokens(n: number): string {
   if (n < 1000) return String(n);
@@ -252,6 +407,11 @@ function shortModel(model: string): string {
   return model.split("/").pop() || model;
 }
 
+function modelProvider(model: string): string {
+  const provider = String(model || "").split("/")[0]?.trim().toLowerCase();
+  return provider || "unknown";
+}
+
 function ratio(input: number, output: number) {
   const sum = input + output;
   if (!sum) return { inPct: 0, outPct: 0 };
@@ -261,23 +421,23 @@ function ratio(input: number, output: number) {
   };
 }
 
-function formatTimeTick(ts: number, period: Period): string {
+function formatTimeTick(ts: number, period: Period, timeFormat: TimeFormatPreference): string {
   const d = new Date(ts);
-  if (period === "last1h") return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  if (period === "last24h") return d.toLocaleTimeString("en-US", { hour: "numeric" });
+  if (period === "last1h") return d.toLocaleTimeString("en-US", withTimeFormat({ hour: "numeric", minute: "2-digit" }, timeFormat));
+  if (period === "last24h") return d.toLocaleTimeString("en-US", withTimeFormat({ hour: "numeric" }, timeFormat));
   if (period === "last7d") {
     const weekday = d.toLocaleDateString("en-US", { weekday: "short" });
-    const hour = d.toLocaleTimeString("en-US", { hour: "numeric" });
+    const hour = d.toLocaleTimeString("en-US", withTimeFormat({ hour: "numeric" }, timeFormat));
     return `${weekday} ${hour}`;
   }
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function labelForPoint(ts: number, period: Period): string {
+function labelForPoint(ts: number, period: Period, timeFormat: TimeFormatPreference): string {
   const d = new Date(ts);
-  if (period === "last1h") return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
-  if (period === "last24h") return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric" });
-  if (period === "last7d") return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric" });
+  if (period === "last1h") return d.toLocaleTimeString("en-US", withTimeFormat({ hour: "numeric", minute: "2-digit" }, timeFormat));
+  if (period === "last24h") return d.toLocaleString("en-US", withTimeFormat({ month: "short", day: "numeric", hour: "numeric" }, timeFormat));
+  if (period === "last7d") return d.toLocaleString("en-US", withTimeFormat({ month: "short", day: "numeric", hour: "numeric" }, timeFormat));
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
@@ -291,19 +451,44 @@ function fallbackSeriesFromBuckets(buckets: UsageData["buckets"]): Record<Period
   };
 }
 
+function buildSupportEmailUrl(errorMessage: string): string {
+  const timestamp = new Date().toISOString();
+  const href = typeof window !== "undefined" ? window.location.href : "unknown";
+  const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "unknown";
+  const body = [
+    "Hi Roberto,",
+    "",
+    "I hit an error in OpenClaw Mission Control (Usage page).",
+    "",
+    "Actual error:",
+    errorMessage || "unknown",
+    "",
+    "Context:",
+    `- Timestamp: ${timestamp}`,
+    `- Page: ${href}`,
+    `- User Agent: ${userAgent}`,
+    "",
+    "Please help me diagnose this.",
+  ].join("\n");
+
+  return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(SUPPORT_EMAIL)}&su=${encodeURIComponent("OpenClaw Mission Control — Usage page error")}&body=${encodeURIComponent(body)}`;
+}
+
 /* ── ui blocks ──────────────────────────────────── */
 
 function MetricTile({
   label,
   value,
   sub,
+  variant = "subtle",
 }: {
   label: string;
   value: string;
   sub?: string;
+  variant?: "subtle" | "surface";
 }) {
   return (
-    <div className="glass-subtle rounded-lg px-4 py-3.5">
+    <div className={cn(variant === "surface" ? "glass" : "glass-subtle", "rounded-lg px-4 py-3.5")}>
       <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">{label}</p>
       <p className="mt-1.5 text-xl font-semibold leading-none tabular-nums text-foreground">{value}</p>
       {sub && <p className="mt-1.5 text-xs text-muted-foreground/60">{sub}</p>}
@@ -340,17 +525,19 @@ function CostTrendTooltip({
   active,
   payload,
   label,
+  timeFormat,
 }: {
   active?: boolean;
   payload?: TooltipRow[];
   label?: number | string;
+  timeFormat: TimeFormatPreference;
 }) {
   if (!active || !payload?.length || typeof label !== "number") return null;
   const d = new Date(label);
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2 shadow-lg">
       <p className="text-xs font-medium text-foreground/90">
-        {d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric" })}
+        {d.toLocaleString("en-US", withTimeFormat({ month: "short", day: "numeric", hour: "numeric" }, timeFormat))}
       </p>
       <div className="mt-1.5 space-y-1 text-xs">
         {payload.map((row) => (
@@ -369,17 +556,49 @@ function CostTrendTooltip({
 }
 
 export function UsageView() {
+  const timeFormat = useSyncExternalStore(
+    subscribeTimeFormatPreference,
+    getTimeFormatSnapshot,
+    getTimeFormatServerSnapshot,
+  );
   const [data, setData] = useState<UsageData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<Period>("allTime");
   const [tokenFlowModel, setTokenFlowModel] = useState<string>("all");
+  const [alarms, setAlarms] = useState<UsageAlarmsPayload | null>(null);
+  const [alarmError, setAlarmError] = useState<string | null>(null);
+  const [alarmBusy, setAlarmBusy] = useState(false);
+  const [newAlarmModel, setNewAlarmModel] = useState("");
+  const [newAlarmTimeline, setNewAlarmTimeline] = useState<UsageAlarmTimeline>("last24h");
+  const [newAlarmLimit, setNewAlarmLimit] = useState("100000");
+  const [orBilling, setOrBilling] = useState<OpenRouterBillingResult | null>(null);
+  const [orLoading, setOrLoading] = useState(true);
 
   useEffect(() => {
     if (tokenFlowModel === "all" || !data) return;
     const hasModel = data.modelBreakdown.some((m) => m.model === tokenFlowModel);
     if (!hasModel) setTokenFlowModel("all");
   }, [data, tokenFlowModel]);
+
+  const modelOptions = useMemo(() => {
+    const all = new Set<string>();
+    for (const model of data?.modelConfig?.allowed || []) all.add(String(model));
+    for (const row of data?.modelBreakdown || []) {
+      all.add(row.fullModel || row.model);
+    }
+    for (const rule of alarms?.rules || []) {
+      all.add(rule.fullModel);
+    }
+    return Array.from(all)
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b));
+  }, [data, alarms]);
+
+  useEffect(() => {
+    if (newAlarmModel || modelOptions.length === 0) return;
+    setNewAlarmModel(modelOptions[0]);
+  }, [newAlarmModel, modelOptions]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -395,21 +614,102 @@ export function UsageView() {
     }
   }, []);
 
+  const fetchAlarmsStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/usage/alerts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "status" }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as UsageAlarmsPayload;
+      setAlarms(json);
+      setAlarmError(null);
+    } catch (err) {
+      setAlarmError(String(err));
+    }
+  }, []);
+
+  const fetchOrBilling = useCallback(async () => {
+    try {
+      const res = await fetch("/api/usage/openrouter", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const json = (await res.json()) as OpenRouterBillingResult;
+      setOrBilling(json);
+    } catch {
+      setOrBilling({ available: false, reason: "Failed to reach /api/usage/openrouter" });
+    } finally {
+      setOrLoading(false);
+    }
+  }, []);
+
+  const mutateAlarms = useCallback(
+    async (payload: Record<string, unknown>) => {
+      setAlarmBusy(true);
+      try {
+        const res = await fetch("/api/usage/alerts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          cache: "no-store",
+        });
+        const json = (await res.json().catch(() => null)) as { error?: string } | null;
+        if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+        await fetchAlarmsStatus();
+        setAlarmError(null);
+      } catch (err) {
+        setAlarmError(String(err));
+      } finally {
+        setAlarmBusy(false);
+      }
+    },
+    [fetchAlarmsStatus],
+  );
+
+  const createAlarm = useCallback(async () => {
+    const tokenLimit = Number(newAlarmLimit);
+    if (!newAlarmModel) {
+      setAlarmError("Select a model before creating an alarm.");
+      return;
+    }
+    if (!Number.isFinite(tokenLimit) || tokenLimit <= 0) {
+      setAlarmError("Token limit must be a positive number.");
+      return;
+    }
+    await mutateAlarms({
+      action: "create",
+      fullModel: newAlarmModel,
+      timeline: newAlarmTimeline,
+      tokenLimit: Math.floor(tokenLimit),
+    });
+  }, [mutateAlarms, newAlarmLimit, newAlarmModel, newAlarmTimeline]);
+
   useEffect(() => {
     void fetchData();
-  }, [fetchData]);
+    void fetchAlarmsStatus();
+    void fetchOrBilling();
+  }, [fetchData, fetchAlarmsStatus, fetchOrBilling]);
 
   useEffect(() => {
     const pollId = window.setInterval(() => {
-      if (document.visibilityState === "visible") void fetchData();
+      if (document.visibilityState === "visible") {
+        void fetchData();
+        void fetchAlarmsStatus();
+        void fetchOrBilling();
+      }
     }, 15000);
-    const onFocus = () => void fetchData();
+    const onFocus = () => {
+      void fetchData();
+      void fetchAlarmsStatus();
+      void fetchOrBilling();
+    };
     window.addEventListener("focus", onFocus);
     return () => {
       window.clearInterval(pollId);
       window.removeEventListener("focus", onFocus);
     };
-  }, [fetchData]);
+  }, [fetchData, fetchAlarmsStatus, fetchOrBilling]);
 
   const activeBucket = useMemo(() => (data ? data.buckets[period] : null), [data, period]);
 
@@ -468,31 +768,167 @@ export function UsageView() {
     return data.historical.costTimeSeries;
   }, [data]);
 
+  // OpenRouter: 30-day spend from activity
+  const orThirtyDaySpend = useMemo(() => {
+    if (!orBilling?.available) return 0;
+    return orBilling.activity.reduce((sum, r) => sum + r.usage, 0);
+  }, [orBilling]);
+
+  // OpenRouter: daily cost series grouped by date
+  const orDailyCostSeries = useMemo(() => {
+    if (!orBilling?.available) return [];
+    const byDate = new Map<string, number>();
+    for (const row of orBilling.activity) {
+      byDate.set(row.date, (byDate.get(row.date) || 0) + row.usage);
+    }
+    return Array.from(byDate.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([date, cost]) => ({ date, cost }));
+  }, [orBilling]);
+
+  // OpenRouter: model breakdown aggregated across all dates
+  const orModelBreakdown = useMemo((): OrModelRow[] => {
+    if (!orBilling?.available) return [];
+    const byModel = new Map<string, OrModelRow>();
+    for (const row of orBilling.activity) {
+      const existing = byModel.get(row.model);
+      if (existing) {
+        existing.usage += row.usage;
+        existing.requests += row.requests;
+        existing.prompt_tokens += row.prompt_tokens;
+        existing.completion_tokens += row.completion_tokens;
+        existing.reasoning_tokens += row.reasoning_tokens;
+      } else {
+        byModel.set(row.model, {
+          model: row.model,
+          usage: row.usage,
+          requests: row.requests,
+          prompt_tokens: row.prompt_tokens,
+          completion_tokens: row.completion_tokens,
+          reasoning_tokens: row.reasoning_tokens,
+        });
+      }
+    }
+    return Array.from(byModel.values()).sort((a, b) => b.usage - a.usage);
+  }, [orBilling]);
+
+  // OpenRouter: per-model per-day stacked data (top 6 + "other")
+  const orModelDailySeries = useMemo(() => {
+    if (!orBilling?.available || orBilling.activity.length === 0) return { data: [] as ChartPoint[], config: {} as ChartConfig, modelKeys: [] as string[] };
+    const topModels = orModelBreakdown.slice(0, 6).map((m) => m.model);
+    const topSet = new Set(topModels);
+    const modelKeys = [...topModels.map((m) => shortModel(m)), ...(orModelBreakdown.length > 6 ? ["other"] : [])];
+    const byDate = new Map<string, ChartPoint>();
+    for (const row of orBilling.activity) {
+      const key = topSet.has(row.model) ? shortModel(row.model) : "other";
+      if (!modelKeys.includes(key)) continue;
+      const pt = byDate.get(row.date) || { date: row.date };
+      pt[key] = ((pt[key] as number) || 0) + row.usage;
+      byDate.set(row.date, pt);
+    }
+    const sorted = Array.from(byDate.values()).sort((a, b) =>
+      String(a.date).localeCompare(String(b.date)),
+    );
+    const config: ChartConfig = {};
+    modelKeys.forEach((key, i) => {
+      config[key] = { label: key, color: OR_MODEL_COLORS[i % OR_MODEL_COLORS.length] };
+    });
+    return { data: sorted, config, modelKeys };
+  }, [orBilling, orModelBreakdown]);
+
   if (loading) {
     return <LoadingState label="Loading usage data..." size="lg" className="h-full" />;
   }
 
   if (error || !data) {
+    const actualError = (error || "Usage API returned empty data.").trim();
+    const gmailComposeHref = buildSupportEmailUrl(actualError);
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 text-muted-foreground">
-        <p className="text-sm">Failed to load usage data</p>
-        <button
-          type="button"
-          onClick={() => {
-            setLoading(true);
-            void fetchData();
-          }}
-          className="rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs text-foreground/80 hover:bg-muted"
-        >
-          Retry
-        </button>
-      </div>
+      <SectionLayout>
+        <SectionHeader
+          title={<span className="font-serif font-bold text-base">Usage</span>}
+          description="Cost estimation, token economics, cache metrics, and agent throughput."
+        />
+        <SectionBody width="narrow" padding="roomy" innerClassName="space-y-4">
+          <section className="glass rounded-2xl border border-red-500/25 bg-red-500/5 p-5 md:p-6">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-red-700 dark:text-red-200">
+                <AlertTriangle className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-sm font-semibold text-foreground">Failed to Load Usage Data</h2>
+                <p className="mt-1 text-xs text-muted-foreground/85">
+                  Mission Control could not fetch analytics from <code>/api/usage</code>. This is usually temporary
+                  (gateway restart, stale session metadata, or local API timeout).
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-foreground/10 bg-background/50 p-3">
+              <p className="text-xs font-medium text-foreground/90">What you can try now</p>
+              <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-muted-foreground/80">
+                <li>Retry once after a few seconds.</li>
+                <li>Ensure OpenClaw gateway is online from the dashboard sidebar status.</li>
+                <li>If this persists, send the prefilled support email below.</li>
+              </ul>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => {
+                  setLoading(true);
+                  void fetchData();
+                }}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Retry Loading Usage
+              </Button>
+              <Button asChild type="button" size="sm" variant="outline">
+                <a href={gmailComposeHref} target="_blank" rel="noopener noreferrer">
+                  <Mail className="h-3.5 w-3.5" />
+                  Email Support (Prefilled)
+                  <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                </a>
+              </Button>
+            </div>
+
+            <p className="mt-2 text-[11px] text-muted-foreground/70">
+              This opens Gmail with the exact runtime error and context prefilled.
+            </p>
+
+            <details className="mt-3 rounded-xl border border-foreground/10 bg-background/40 p-3">
+              <summary className="cursor-pointer text-xs font-medium text-foreground/85">
+                Technical Error Details
+              </summary>
+              <pre className="mt-2 overflow-auto whitespace-pre-wrap break-words rounded-md border border-foreground/10 bg-card/70 p-2 text-[11px] text-foreground/85">
+                {actualError}
+              </pre>
+            </details>
+          </section>
+        </SectionBody>
+      </SectionLayout>
     );
   }
 
   const { totals, liveCost, sessions, modelBreakdown, modelConfig, peakSession, sessionFileSizes, historical } = data;
+  const diagnostics = data.diagnostics;
+  const pricingDiagnostics = diagnostics?.pricing;
+  const hasPricingGap = (pricingDiagnostics?.uncoveredSessions || 0) > 0;
+  const pricedSessionCount = pricingDiagnostics?.coveredSessions ?? totals.sessions;
+  const costPerSession = pricedSessionCount > 0 ? liveCost.totalEstimatedUsd / pricedSessionCount : 0;
+  const diagnosticsWarnings = (diagnostics?.warnings || []).filter(
+    (warning) => !warning.includes("excluded from cost because pricing metadata is missing"),
+  );
+  const sourceErrors = diagnostics
+    ? Object.entries(diagnostics.sources).filter(([, source]) => source.error)
+    : [];
   const io = ratio(activeBucket?.input || 0, activeBucket?.output || 0);
-  const costPerSession = totals.sessions > 0 ? liveCost.totalEstimatedUsd / totals.sessions : 0;
+  const alarmEvaluationsById = new Map((alarms?.evaluations || []).map((row) => [row.ruleId, row]));
+  const selectedProvider = modelProvider(newAlarmModel);
+  const selectedProviderCapability = alarms?.providerCapabilities?.[selectedProvider]
+    || alarms?.providerCapabilities?.unknown;
 
   return (
     <SectionLayout>
@@ -503,31 +939,37 @@ export function UsageView() {
           <div className="flex items-center gap-2">
             <div className="inline-flex rounded-lg border border-border bg-muted p-1">
               {(Object.keys(PERIOD_LABELS) as Period[]).map((p) => (
-                <button
+                <Button
                   key={p}
                   type="button"
+                  size="sm"
+                  variant={period === p ? "secondary" : "ghost"}
                   onClick={() => setPeriod(p)}
                   className={cn(
-                    "rounded-lg px-3 py-1.5 text-xs font-medium transition-all duration-200",
+                    "h-8 rounded-md px-3 text-xs font-medium transition-all duration-200",
                     period === p
                       ? "bg-card text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   {PERIOD_LABELS[p]}
-                </button>
+                </Button>
               ))}
             </div>
-            <button
+            <Button
               type="button"
+              size="sm"
+              variant="outline"
               onClick={() => {
                 setLoading(true);
                 void fetchData();
+                void fetchAlarmsStatus();
               }}
-              className="rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs font-medium text-foreground/80 hover:bg-muted/80"
+              className="text-xs font-medium"
             >
+              <RefreshCw className="h-3.5 w-3.5" />
               Refresh
-            </button>
+            </Button>
           </div>
         }
       />
@@ -535,30 +977,276 @@ export function UsageView() {
       <SectionBody width="content" padding="regular" innerClassName="space-y-4 pb-8">
         {/* Stale sessions banner */}
         {totals.staleSessions > 0 && (
-          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-400">
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-2.5 text-xs text-amber-800 dark:text-amber-200">
             {totals.staleSessions} session{totals.staleSessions !== 1 ? "s have" : " has"} stale token counts
             &mdash; cost estimates may be outdated until the gateway refreshes.
           </div>
         )}
+        {hasPricingGap && pricingDiagnostics && (
+          <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-4 py-3 text-xs text-rose-800 dark:text-rose-100">
+            <p className="font-medium text-rose-900 dark:text-rose-50">Cost estimate is partial.</p>
+            <p className="mt-1 text-rose-800/90 dark:text-rose-100/90">
+              Pricing metadata is missing for {pricingDiagnostics.uncoveredSessions} session
+              {pricingDiagnostics.uncoveredSessions !== 1 ? "s" : ""}. Coverage is{" "}
+              {pricingDiagnostics.coveragePct}% ({pricingDiagnostics.coveredSessions}/{totals.sessions} sessions).
+            </p>
+            {pricingDiagnostics.uncoveredModels.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-rose-900/90 dark:text-rose-100/90">Models missing pricing metadata</summary>
+                <ul className="mt-1.5 list-disc space-y-1 pl-4 text-rose-800/90 dark:text-rose-100/90">
+                  {pricingDiagnostics.uncoveredModels.slice(0, 8).map((model) => (
+                    <li key={model.model}>
+                      {shortModel(model.model)} · {model.sessions} sessions · {fmtTokensLong(model.totalTokens)} tokens
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+        {(diagnosticsWarnings.length || sourceErrors.length > 0) && (
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-800 dark:text-amber-200">
+            <p className="font-medium text-amber-900 dark:text-amber-100">Diagnostics</p>
+            {diagnosticsWarnings.length ? (
+              <ul className="mt-1.5 list-disc space-y-1 pl-4 text-amber-800/90 dark:text-amber-200/90">
+                {diagnosticsWarnings.map((warning, index) => (
+                  <li key={`${warning}-${index}`}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
+            {sourceErrors.length > 0 && (
+              <details className="mt-2">
+                <summary className="cursor-pointer text-amber-900/90 dark:text-amber-200/90">Technical source errors</summary>
+                <ul className="mt-1.5 list-disc space-y-1 pl-4 text-amber-800/90 dark:text-amber-200/90">
+                  {sourceErrors.map(([sourceKey, source]) => (
+                    <li key={sourceKey}>
+                      {sourceKey}: {source.error}
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
+        )}
+
+        <Panel
+          title="Max Tokens Alarm"
+          subtitle="Persistent per-model token alarms with browser notification + chat message delivery."
+          actions={(
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void fetchAlarmsStatus()}
+              className="text-xs font-medium"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh alarms
+            </Button>
+          )}
+        >
+          <div className="grid gap-2 lg:grid-cols-[2fr_1fr_1fr_auto]">
+            <select
+              value={newAlarmModel}
+              onChange={(e) => setNewAlarmModel(e.target.value)}
+              className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground/90 focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {modelOptions.length === 0 && <option value="">No models available yet</option>}
+              {modelOptions.map((model) => (
+                <option key={model} value={model}>
+                  {shortModel(model)} ({modelProvider(model)})
+                </option>
+              ))}
+            </select>
+            <select
+              value={newAlarmTimeline}
+              onChange={(e) => setNewAlarmTimeline(e.target.value as UsageAlarmTimeline)}
+              className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground/90 focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              {(Object.keys(USAGE_ALARM_TIMELINE_LABELS) as UsageAlarmTimeline[]).map((timeline) => (
+                <option key={timeline} value={timeline}>
+                  {USAGE_ALARM_TIMELINE_LABELS[timeline]}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={1}
+              step={1000}
+              value={newAlarmLimit}
+              onChange={(e) => setNewAlarmLimit(e.target.value)}
+              placeholder="Token limit"
+              className="rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <Button
+              type="button"
+              size="sm"
+              disabled={alarmBusy || modelOptions.length === 0}
+              onClick={() => void createAlarm()}
+            >
+              Add alarm
+            </Button>
+          </div>
+
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-foreground/10 bg-card/40 px-3 py-2 text-xs">
+            <p className="text-foreground/80">
+              Monitor status:{" "}
+              <span className={cn(
+                "font-medium",
+                alarms?.monitorEnabled === false ? "text-red-700 dark:text-red-300" : "text-emerald-700 dark:text-emerald-300",
+              )}
+              >
+                {alarms?.monitorEnabled === false ? "paused" : "active"}
+              </span>
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant={alarms?.monitorEnabled === false ? "default" : "outline"}
+              disabled={alarmBusy}
+              onClick={() => void mutateAlarms({
+                action: "set-monitor",
+                monitorEnabled: alarms?.monitorEnabled === false,
+              })}
+              className="text-xs"
+            >
+              {alarms?.monitorEnabled === false ? "Enable monitor" : "Pause monitor"}
+            </Button>
+          </div>
+          <p className="mt-1 text-[11px] text-muted-foreground/65">
+            Desktop alerts require browser notification permission (Settings → Notifications & Chat).
+          </p>
+
+          {selectedProviderCapability && (
+            <div className="mt-2 rounded-lg border border-foreground/10 bg-background/50 px-3 py-2 text-xs text-muted-foreground/80">
+              <p>
+                Provider context ({selectedProvider}): {selectedProviderCapability.note} Alarms are evaluated from local
+                session telemetry for per-model token accuracy.
+              </p>
+              {selectedProviderCapability.docsUrl && (
+                <a
+                  href={selectedProviderCapability.docsUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-1 inline-block text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
+                >
+                  Provider docs
+                </a>
+              )}
+            </div>
+          )}
+
+          {(alarmError || alarms?.warning) && (
+            <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">
+              {alarmError || alarms?.warning}
+            </div>
+          )}
+
+          <div className="mt-3 space-y-2">
+            {(alarms?.rules || []).length === 0 ? (
+              <p className="rounded-lg border border-foreground/10 bg-card/40 px-3 py-2 text-xs text-muted-foreground/75">
+                No token alarms configured yet.
+              </p>
+            ) : (
+              (alarms?.rules || []).map((rule) => {
+                const evalRow = alarmEvaluationsById.get(rule.id);
+                const status = evalRow?.status || "no-model-data";
+                const exceeded = Boolean(evalRow?.exceeded);
+                const statusLabel = status === "ok"
+                  ? exceeded
+                    ? "limit exceeded"
+                    : "within limit"
+                  : status === "no-data-in-window"
+                    ? "no data in window"
+                    : "no model data";
+                const statusTone = status === "ok"
+                  ? exceeded
+                    ? "text-red-700 dark:text-red-300"
+                    : "text-emerald-700 dark:text-emerald-300"
+                  : "text-amber-700 dark:text-amber-300";
+                return (
+                  <div key={rule.id} className="rounded-lg border border-foreground/10 bg-card/40 px-3 py-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-foreground/90">
+                          {shortModel(rule.fullModel)}
+                          <span className="ml-1.5 text-[11px] text-muted-foreground/65">
+                            ({USAGE_ALARM_TIMELINE_LABELS[rule.timeline]})
+                          </span>
+                        </p>
+                        <p className="text-xs text-muted-foreground/70">
+                          Limit {fmtTokensLong(rule.tokenLimit)} tokens
+                          {evalRow
+                            ? ` · observed ${fmtTokensLong(evalRow.observedTokens)}`
+                            : ""}
+                        </p>
+                        {evalRow?.reason && (
+                          <p className="mt-0.5 text-[11px] text-muted-foreground/65">{evalRow.reason}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("text-xs font-medium", statusTone)}>{statusLabel}</span>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={rule.enabled ? "outline" : "default"}
+                          disabled={alarmBusy}
+                          onClick={() => void mutateAlarms({
+                            action: "toggle",
+                            ruleId: rule.id,
+                            enabled: !rule.enabled,
+                          })}
+                          className="h-7 px-2.5 text-[11px]"
+                        >
+                          {rule.enabled ? "Disable" : "Enable"}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          disabled={alarmBusy}
+                          onClick={() => void mutateAlarms({ action: "delete", ruleId: rule.id })}
+                          className="h-7 px-2 text-[11px] text-red-700 hover:text-red-800 dark:text-red-300 dark:hover:text-red-200"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </Panel>
 
         {/* Metric tiles */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <MetricTile
-            label="Estimated Cost"
+            variant="surface"
+            label={orBilling?.available ? "Estimated Cost (Local)" : "Estimated Cost"}
             value={fmtCost(liveCost.totalEstimatedUsd)}
-            sub={historical ? `${fmtCost(historical.totalEstimatedUsd)} historical` : "live sessions"}
+            sub={
+              hasPricingGap && pricingDiagnostics
+                ? `${pricingDiagnostics.coveragePct}% priced session coverage`
+                : historical
+                  ? `${fmtCost(historical.totalEstimatedUsd)} historical`
+                  : "live sessions"
+            }
           />
           <MetricTile
+            variant="surface"
             label="Cost / Session"
-            value={fmtCost(costPerSession || null)}
-            sub={`across ${totals.sessions} sessions`}
+            value={pricedSessionCount > 0 ? fmtCost(costPerSession) : "n/a"}
+            sub={`across ${pricedSessionCount} priced session${pricedSessionCount !== 1 ? "s" : ""}`}
           />
           <MetricTile
+            variant="surface"
             label={`Tokens · ${PERIOD_TITLES[period]}`}
             value={fmtTokens(activeBucket?.total || 0)}
             sub={`${io.inPct}% in / ${io.outPct}% out`}
           />
           <MetricTile
+            variant="surface"
             label="Sessions"
             value={String(activeBucket?.sessions || 0)}
             sub={`of ${totals.sessions} total`}
@@ -568,26 +1256,261 @@ export function UsageView() {
         {/* Cache + config row */}
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           <MetricTile
+            variant="surface"
             label="Cache Read"
             value={fmtTokens(liveCost.totalCacheReadTokens)}
             sub={fmtTokensLong(liveCost.totalCacheReadTokens)}
           />
           <MetricTile
+            variant="surface"
             label="Cache Write"
             value={fmtTokens(liveCost.totalCacheWriteTokens)}
             sub={fmtTokensLong(liveCost.totalCacheWriteTokens)}
           />
           <MetricTile
+            variant="surface"
             label="Models"
             value={String(totals.models)}
             sub={modelConfig?.primary ? `primary ${shortModel(modelConfig.primary)}` : ""}
           />
           <MetricTile
+            variant="surface"
             label="Agents"
             value={String(totals.agents)}
             sub={peakSession ? `peak ${peakSession.agentId}` : "active workers"}
           />
         </div>
+
+        {/* Provider Billing (OpenRouter) */}
+        {orLoading ? (
+          <Panel title="Provider Billing" subtitle="Loading OpenRouter billing data...">
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {[1, 2, 3, 4].map((i) => (
+                <div key={i} className="glass-subtle animate-pulse rounded-lg px-4 py-3.5">
+                  <div className="h-2.5 w-20 rounded bg-foreground/10" />
+                  <div className="mt-3 h-5 w-16 rounded bg-foreground/10" />
+                  <div className="mt-2 h-2 w-24 rounded bg-foreground/10" />
+                </div>
+              ))}
+            </div>
+          </Panel>
+        ) : orBilling?.available ? (
+          <Panel
+            title="Provider Billing"
+            subtitle="Real cost data from OpenRouter Management API"
+            actions={
+              <span className="text-[10px] text-muted-foreground/50">
+                Fetched {new Date(orBilling.fetchedAt).toLocaleTimeString("en-US", withTimeFormat({ hour: "numeric", minute: "2-digit" }, timeFormat))}
+              </span>
+            }
+          >
+            <div className="space-y-4">
+              {/* OR metric tiles */}
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <MetricTile
+                  label="Total Spent"
+                  value={fmtCost(orBilling.credits.total_usage)}
+                  sub={`of ${fmtCost(orBilling.credits.total_credits)} credits purchased`}
+                />
+                <MetricTile
+                  label="30-Day Spend"
+                  value={fmtCost(orThirtyDaySpend)}
+                  sub={`${orBilling.activity.length} activity rows`}
+                />
+                <MetricTile
+                  label="Balance"
+                  value={fmtCost(orBilling.credits.total_credits - orBilling.credits.total_usage)}
+                  sub="credits remaining"
+                />
+                <MetricTile
+                  label="Active Keys"
+                  value={String(orBilling.keys.length)}
+                  sub={orBilling.keys.filter((k) => k.is_free_tier).length > 0 ? "includes free tier" : "paid keys"}
+                />
+              </div>
+
+              {/* Daily Cost by Model chart */}
+              {orModelDailySeries.data.length > 1 && (
+                <div>
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
+                    Daily Cost by Model (30 days)
+                  </p>
+                  <ChartContainer config={orModelDailySeries.config} className="h-56 w-full">
+                    <ComposedChart data={orModelDailySeries.data} margin={{ top: 4, right: 6, left: 0, bottom: 0 }}>
+                      <CartesianGrid stroke={USAGE_COLORS.grid} strokeDasharray="3 3" vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 10, fill: USAGE_COLORS.tick }}
+                        axisLine={false}
+                        tickLine={false}
+                        minTickGap={40}
+                      />
+                      <YAxis
+                        tickFormatter={(v) => `$${Number(v).toFixed(2)}`}
+                        tick={{ fontSize: 10, fill: USAGE_COLORS.tick }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={54}
+                      />
+                      <ChartTooltip
+                        cursor={false}
+                        content={
+                          <ChartTooltipContent
+                            formatter={(value) => fmtCost(Number(value))}
+                          />
+                        }
+                      />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      {orModelDailySeries.modelKeys.map((key, i) => (
+                        <Area
+                          key={key}
+                          type="monotone"
+                          dataKey={key}
+                          name={key}
+                          stackId="or-models"
+                          stroke={OR_MODEL_COLORS[i % OR_MODEL_COLORS.length]}
+                          fill={OR_MODEL_COLORS[i % OR_MODEL_COLORS.length]}
+                          fillOpacity={0.3}
+                          strokeWidth={1.5}
+                        />
+                      ))}
+                    </ComposedChart>
+                  </ChartContainer>
+                </div>
+              )}
+
+              {/* Daily Total Cost trend */}
+              {orDailyCostSeries.length > 1 && (
+                <div>
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
+                    Daily Total Cost (30 days)
+                  </p>
+                  <ChartContainer
+                    config={{ cost: { label: "Daily Cost", color: "var(--chart-2)" } } satisfies ChartConfig}
+                    className="h-40 w-full"
+                  >
+                    <ComposedChart data={orDailyCostSeries} margin={{ top: 4, right: 6, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="orDailyCostFill" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="var(--chart-2)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="var(--chart-2)" stopOpacity={0.02} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke={USAGE_COLORS.grid} strokeDasharray="3 3" vertical={false} />
+                      <XAxis
+                        dataKey="date"
+                        tick={{ fontSize: 10, fill: USAGE_COLORS.tick }}
+                        axisLine={false}
+                        tickLine={false}
+                        minTickGap={40}
+                      />
+                      <YAxis
+                        tickFormatter={(v) => `$${Number(v).toFixed(2)}`}
+                        tick={{ fontSize: 10, fill: USAGE_COLORS.tick }}
+                        axisLine={false}
+                        tickLine={false}
+                        width={54}
+                      />
+                      <ChartTooltip
+                        cursor={false}
+                        content={
+                          <ChartTooltipContent
+                            formatter={(value) => fmtCost(Number(value))}
+                          />
+                        }
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="cost"
+                        name="Daily Cost"
+                        stroke="var(--chart-2)"
+                        strokeWidth={1.5}
+                        fill="url(#orDailyCostFill)"
+                      />
+                    </ComposedChart>
+                  </ChartContainer>
+                </div>
+              )}
+
+              {/* Top Models by Real Cost */}
+              {orModelBreakdown.length > 0 && (
+                <div>
+                  <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">
+                    Top Models by Real Cost
+                  </p>
+                  <div className="space-y-2">
+                    {orModelBreakdown.slice(0, 8).map((m) => {
+                      const pct = orThirtyDaySpend > 0 ? Math.round((m.usage / orThirtyDaySpend) * 100) : 0;
+                      const totalTokens = m.prompt_tokens + m.completion_tokens + m.reasoning_tokens;
+                      return (
+                        <div key={m.model} className="glass-subtle rounded-lg px-3 py-2.5">
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-xs font-semibold text-foreground/90">{shortModel(m.model)}</p>
+                              <p className="text-xs text-muted-foreground/60">
+                                {m.requests.toLocaleString("en-US")} requests · {fmtTokens(totalTokens)} tokens
+                              </p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                                {fmtCost(m.usage)}
+                              </p>
+                              <p className="text-xs text-muted-foreground/60">{pct}% of 30d</p>
+                            </div>
+                          </div>
+                          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-foreground/[0.04]">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${Math.max(2, pct)}%`,
+                                background: `linear-gradient(90deg, var(--chart-4), var(--chart-2))`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </Panel>
+        ) : orBilling ? (
+          <Panel title="Provider Billing" subtitle="OpenRouter Management API">
+            <div className="space-y-3">
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-800 dark:text-amber-200">
+                {orBilling.reason}
+              </div>
+              <div className="rounded-lg border border-foreground/10 bg-background/50 p-4">
+                <p className="text-xs font-medium text-foreground/90">Setup Guide</p>
+                <ol className="mt-2 list-decimal space-y-1.5 pl-4 text-xs text-muted-foreground/80">
+                  <li>
+                    Go to{" "}
+                    <a
+                      href="https://openrouter.ai/settings/keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-blue-700 hover:underline dark:text-blue-300"
+                    >
+                      openrouter.ai/settings/keys
+                    </a>{" "}
+                    and create a <strong>Management API key</strong>.
+                  </li>
+                  <li>
+                    Add the key to <code className="rounded bg-foreground/10 px-1.5 py-0.5">~/.openclaw/.env</code>:
+                    <pre className="mt-1 rounded-md border border-foreground/10 bg-card/70 px-3 py-2 text-[11px] text-foreground/85">
+                      OPENROUTER_MANAGEMENT_KEY=sk-or-mgmt-...
+                    </pre>
+                  </li>
+                  <li>Refresh this page. Billing data will appear automatically.</li>
+                </ol>
+                <p className="mt-3 text-[11px] text-muted-foreground/60">
+                  This key is read-only and only accesses billing and usage data. It cannot make model requests or modify your account.
+                </p>
+              </div>
+            </div>
+          </Panel>
+        ) : null}
 
         {/* Historical Cost Trend chart */}
         {costTimeSeries.length > 1 && (
@@ -605,7 +1528,7 @@ export function UsageView() {
                   dataKey="ts"
                   tickFormatter={(v) => {
                     const d = new Date(Number(v));
-                    return d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric" });
+                    return d.toLocaleString("en-US", withTimeFormat({ month: "short", day: "numeric", hour: "numeric" }, timeFormat));
                   }}
                   tick={{ fontSize: 10, fill: USAGE_COLORS.tick }}
                   axisLine={false}
@@ -629,7 +1552,7 @@ export function UsageView() {
                   tickLine={false}
                   width={54}
                 />
-                <ChartTooltip content={<CostTrendTooltip />} cursor={false} />
+                <ChartTooltip content={<CostTrendTooltip timeFormat={timeFormat} />} cursor={false} />
                 <ChartLegend content={<ChartLegendContent />} />
                 <Area
                   yAxisId="cost"
@@ -691,7 +1614,7 @@ export function UsageView() {
                   <CartesianGrid stroke={USAGE_COLORS.grid} strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="ts"
-                    tickFormatter={(v) => formatTimeTick(Number(v), period)}
+                    tickFormatter={(v) => formatTimeTick(Number(v), period, timeFormat)}
                     tick={{ fontSize: 10, fill: USAGE_COLORS.tick }}
                     axisLine={false}
                     tickLine={false}
@@ -718,7 +1641,7 @@ export function UsageView() {
                     cursor={false}
                     content={
                       <ChartTooltipContent
-                        labelFormatter={(value) => labelForPoint(Number(value), period)}
+                        labelFormatter={(value) => labelForPoint(Number(value), period, timeFormat)}
                       />
                     }
                   />
@@ -908,7 +1831,16 @@ export function UsageView() {
                         <div className="text-right">
                           <p className="text-xs font-semibold text-foreground/90">
                             {fmtTokens(m.totalTokens)}
-                            <span className="ml-1.5 text-emerald-400">{fmtCost(m.estimatedCostUsd)}</span>
+                            <span
+                              className={cn(
+                                "ml-1.5",
+                                m.estimatedCostUsd == null
+                                  ? "text-amber-700 dark:text-amber-300"
+                                  : "text-emerald-700 dark:text-emerald-300",
+                              )}
+                            >
+                              {m.estimatedCostUsd == null ? "unpriced" : fmtCost(m.estimatedCostUsd)}
+                            </span>
                           </p>
                           <p className="text-xs text-muted-foreground/60">{pct}% of total</p>
                         </div>
@@ -1003,12 +1935,12 @@ export function UsageView() {
                       <div className="flex items-center gap-1.5">
                         <p className="truncate text-xs font-semibold text-foreground/90">{s.agentId} · {shortModel(s.model)}</p>
                         {s.thinkingLevel && (
-                          <span className="shrink-0 rounded-md border border-violet-500/20 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-400">
+                          <span className="shrink-0 rounded-md border border-violet-500/20 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:text-violet-300">
                             think:{s.thinkingLevel}
                           </span>
                         )}
                         {!s.totalTokensFresh && (
-                          <span className="shrink-0 rounded-md border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-400">
+                          <span className="shrink-0 rounded-md border border-amber-500/20 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300">
                             stale
                           </span>
                         )}
@@ -1018,7 +1950,16 @@ export function UsageView() {
                     <div className="text-right">
                       <p className="text-xs font-semibold text-foreground/90">
                         {fmtTokens(s.totalTokens)}
-                        <span className="ml-1.5 text-emerald-400">{fmtCost(s.estimatedCostUsd)}</span>
+                        <span
+                          className={cn(
+                            "ml-1.5",
+                            s.estimatedCostUsd == null
+                              ? "text-amber-700 dark:text-amber-300"
+                              : "text-emerald-700 dark:text-emerald-300",
+                          )}
+                        >
+                          {s.estimatedCostUsd == null ? "unpriced" : fmtCost(s.estimatedCostUsd)}
+                        </span>
                       </p>
                       <p className="text-xs text-muted-foreground/60">{p}% context</p>
                     </div>

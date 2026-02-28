@@ -237,6 +237,38 @@ const MODEL_META: Record<string, ModelMeta> = {
   },
 };
 
+/* ── Dynamic pricing lookup helper ────────────────── */
+
+/**
+ * Look up dynamic pricing for a model key from an externally-provided map,
+ * trying multiple key formats (direct, strip openrouter/ prefix, bare name).
+ */
+function lookupDynamicPricing(
+  key: string,
+  cache: Map<string, ModelPricing>,
+): ModelPricing | null {
+  if (cache.size === 0) return null;
+
+  // Direct match (e.g. "moonshotai/kimi-k2.5")
+  if (cache.has(key)) return cache.get(key)!;
+
+  // Strip "openrouter/" prefix (e.g. "openrouter/moonshotai/kimi-k2.5" → "moonshotai/kimi-k2.5")
+  if (key.startsWith("openrouter/")) {
+    const stripped = key.slice("openrouter/".length);
+    if (cache.has(stripped)) return cache.get(stripped)!;
+  }
+
+  // Bare name scan: if key has no slash, find a cache entry ending with "/{key}"
+  if (!key.includes("/")) {
+    const suffix = `/${key}`;
+    for (const [id, pricing] of cache) {
+      if (id.endsWith(suffix)) return pricing;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Look up enriched metadata for a model key.
  * Returns null if no metadata exists (falls back to raw key display).
@@ -274,6 +306,7 @@ export function getModelMeta(key: string): ModelMeta | null {
 /**
  * Estimate the USD cost for a set of token counts given a full model key.
  * Returns null if no pricing data is available for the model.
+ * Checks static MODEL_META first, then falls back to dynamicPricing map if provided.
  */
 export function estimateCostUsd(
   fullModel: string,
@@ -281,10 +314,12 @@ export function estimateCostUsd(
   outputTokens: number,
   cacheReadTokens = 0,
   cacheWriteTokens = 0,
+  dynamicPricing?: Map<string, ModelPricing>,
 ): number | null {
   const meta = getModelMeta(fullModel);
-  if (!meta?.pricing) return null;
-  const p = meta.pricing;
+  const p = meta?.pricing
+    ?? (dynamicPricing ? lookupDynamicPricing(fullModel, dynamicPricing) : null);
+  if (!p) return null;
   let cost =
     (inputTokens / 1_000_000) * p.inputPer1M +
     (outputTokens / 1_000_000) * p.outputPer1M;

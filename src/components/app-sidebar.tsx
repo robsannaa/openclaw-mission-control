@@ -53,7 +53,7 @@ export function AppSidebar() {
               className={cn(
                 "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                 section === item.section
-                  ? "bg-violet-600/20 text-violet-300"
+                  ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground/90"
               )}
             >

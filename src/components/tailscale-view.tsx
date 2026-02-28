@@ -469,7 +469,7 @@ export function TailscaleView() {
                 <button
                   type="button"
                   onClick={() => void runAdvanced()}
-                  className="rounded-md bg-violet-600 px-3 py-2 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-60"
+                  className="rounded-md bg-primary text-primary-foreground px-3 py-2 text-xs font-medium hover:bg-primary/90 disabled:opacity-60"
                   disabled={!runtime?.installed || saving || loading || runtimeBusy !== null}
                 >
                   Run
@@ -587,7 +587,7 @@ export function TailscaleView() {
             <button
               type="button"
               onClick={() => void save()}
-              className="rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-60"
+              className="rounded-md bg-primary text-primary-foreground px-3 py-2 text-sm font-medium hover:bg-primary/90 disabled:opacity-60"
               disabled={loading || saving || !baseHash || !hasUnsaved}
             >
               {saving ? "Saving..." : "Save"}

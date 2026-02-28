@@ -7,6 +7,7 @@ import {
   useCallback,
   useRef,
   useMemo,
+  useSyncExternalStore,
 } from "react";
 import { useChat } from "@ai-sdk/react";
 import { TextStreamChatTransport } from "ai";
@@ -26,6 +27,13 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { addUnread, clearUnread, setChatActive } from "@/lib/chat-store";
+import {
+  getTimeFormatServerSnapshot,
+  getTimeFormatSnapshot,
+  subscribeTimeFormatPreference,
+  withTimeFormat,
+  type TimeFormatPreference,
+} from "@/lib/time-format-preference";
 
 /* ── types ─────────────────────────────────────── */
 
@@ -53,13 +61,12 @@ function agentSubtitle(agent: Agent): string {
   return agent.id;
 }
 
-function formatTime(d: Date | undefined) {
+function formatTime(d: Date | undefined, timeFormat: TimeFormatPreference) {
   if (!d) return "";
-  return d.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
+  return d.toLocaleTimeString(
+    "en-US",
+    withTimeFormat({ hour: "numeric", minute: "2-digit" }, timeFormat),
+  );
 }
 
 function formatModel(model: string) {
@@ -249,6 +256,11 @@ function ChatPanel({
   isVisible: boolean;
   availableModels: Array<{ key: string; name: string }>;
 }) {
+  const timeFormat = useSyncExternalStore(
+    subscribeTimeFormatPreference,
+    getTimeFormatSnapshot,
+    getTimeFormatServerSnapshot,
+  );
   const [inputValue, setInputValue] = useState("");
   const [modelOverride, setModelOverride] = useState<string | null>(null);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -502,7 +514,7 @@ function ChatPanel({
                     className={cn(
                       "max-w-md rounded-xl px-4 py-3 text-xs",
                       isUser
-                        ? "bg-violet-600/20 text-foreground/90"
+                        ? "bg-accent text-foreground"
                         : "bg-muted/80 text-foreground/70"
                     )}
                   >
@@ -545,7 +557,8 @@ function ChatPanel({
                         "createdAt" in message
                           ? (message as unknown as { createdAt: Date })
                               .createdAt
-                          : new Date()
+                          : new Date(),
+                        timeFormat,
                       )}
                     </div>
                   </div>
@@ -557,7 +570,7 @@ function ChatPanel({
             {isLoading && (
               <div className="mb-6 flex gap-3">
                 <div
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/30 bg-violet-500/10 text-xs"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-xs"
                 >
                   <span className="text-sm">{emoji}</span>
                 </div>
@@ -756,7 +769,7 @@ function ChatPanel({
               className={cn(
                 "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors",
                 (inputValue.trim() || attachedFiles.length > 0) && !isLoading
-                  ? "bg-violet-600 text-white hover:bg-violet-500"
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "bg-muted text-muted-foreground/60"
               )}
             >

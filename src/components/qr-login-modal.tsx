@@ -1,7 +1,14 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { QrCode, RefreshCw, Check, X, AlertTriangle } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  AlertTriangle,
+  Check,
+  Loader2,
+  QrCode,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type QrLoginModalProps = {
@@ -11,9 +18,9 @@ type QrLoginModalProps = {
   onClose: () => void;
 };
 
-type StreamState = "connecting" | "scanning" | "success" | "error" | "timeout";
+type StreamState = "connecting" | "scanning" | "success" | "error";
 
-const CHANNEL_LABELS: Record<string, string> = {
+const CHANNEL_LABELS: Record<QrLoginModalProps["channel"], string> = {
   whatsapp: "WhatsApp",
   signal: "Signal",
 };
@@ -27,197 +34,192 @@ export function QrLoginModal({
   const [state, setState] = useState<StreamState>("connecting");
   const [qrText, setQrText] = useState("");
   const [logs, setLogs] = useState<string[]>([]);
-  const [errorMsg, setErrorMsg] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+
   const eventSourceRef = useRef<EventSource | null>(null);
   const mountedRef = useRef(true);
+  const notifiedSuccessRef = useRef(false);
 
-  const connect = useCallback(() => {
-    // Close any existing connection.
+  const finishSuccess = useCallback(() => {
+    if (notifiedSuccessRef.current) return;
+    notifiedSuccessRef.current = true;
+    setState("success");
+    onSuccess?.();
+  }, [onSuccess]);
+
+  const closeStream = useCallback(() => {
     eventSourceRef.current?.close();
+    eventSourceRef.current = null;
+  }, []);
 
-    setState("connecting");
-    setQrText("");
-    setErrorMsg("");
+  const connect = useCallback((resetUi = true) => {
+    closeStream();
+    notifiedSuccessRef.current = false;
+    if (resetUi) {
+      setState("connecting");
+      setQrText("");
+      setLogs([]);
+      setErrorMessage("");
+    }
 
     const params = new URLSearchParams({ channel });
     if (account) params.set("account", account);
 
-    const es = new EventSource(`/api/channels/qr?${params}`);
+    const es = new EventSource(`/api/channels/qr?${params.toString()}`);
     eventSourceRef.current = es;
 
     es.onmessage = (event) => {
       if (!mountedRef.current) return;
+
       try {
-        const data = JSON.parse(event.data) as {
-          type: string;
+        const payload = JSON.parse(event.data) as {
+          type?: string;
           data?: string;
         };
 
-        switch (data.type) {
-          case "qr":
-            if (data.data) {
-              setQrText(data.data);
-              setState("scanning");
+        switch (payload.type) {
+          case "qr": {
+            if (!payload.data) return;
+            setQrText(payload.data);
+            setState("scanning");
+            return;
+          }
+          case "log": {
+            if (!payload.data) return;
+            setLogs((prev) => [...prev.slice(-49), payload.data as string]);
+            const lower = payload.data.toLowerCase();
+            if (
+              lower.includes("authenticated") ||
+              lower.includes("login successful") ||
+              lower.includes("logged in")
+            ) {
+              finishSuccess();
+              closeStream();
             }
-            break;
-
-          case "log":
-            if (data.data) {
-              setLogs((prev) => [...prev.slice(-30), data.data!]);
-              // Detect success patterns in log output.
-              const lower = data.data.toLowerCase();
-              if (
-                lower.includes("authenticated") ||
-                lower.includes("logged in") ||
-                lower.includes("successfully")
-              ) {
-                setState("success");
-                onSuccess?.();
-                es.close();
-              }
-            }
-            break;
-
-          case "done":
-            if (data.data?.toLowerCase().includes("successful")) {
-              setState("success");
-              onSuccess?.();
+            return;
+          }
+          case "done": {
+            const lower = (payload.data || "").toLowerCase();
+            if (lower.includes("successful")) {
+              finishSuccess();
             } else {
               setState("error");
-              setErrorMsg(data.data || "Login process ended");
+              setErrorMessage(payload.data || "Login process ended unexpectedly.");
             }
-            es.close();
-            break;
-
-          case "error":
+            closeStream();
+            return;
+          }
+          case "error": {
             setState("error");
-            setErrorMsg(data.data || "Unknown error");
-            es.close();
-            break;
-
-          case "ping":
-            // Keepalive — no action needed.
-            break;
+            setErrorMessage(payload.data || "Login failed.");
+            closeStream();
+            return;
+          }
+          default:
+            return;
         }
       } catch {
-        // Ignore malformed SSE data.
+        // Ignore malformed stream payloads.
       }
     };
 
     es.onerror = () => {
-      if (!mountedRef.current) return;
-      // EventSource auto-reconnects, but if the state is still "connecting"
-      // after the first error, the endpoint likely isn't available.
-      if (state === "connecting") {
-        setState("error");
-        setErrorMsg("Could not connect to login service. Is the gateway running?");
-      }
+      if (!mountedRef.current || notifiedSuccessRef.current) return;
+      setState("error");
+      setErrorMessage("Could not connect to the login session.");
+      closeStream();
     };
-  }, [channel, account, onSuccess, state]);
+  }, [account, channel, closeStream, finishSuccess]);
 
   useEffect(() => {
     mountedRef.current = true;
-    connect();
-    return () => {
-      mountedRef.current = false;
-      eventSourceRef.current?.close();
-    };
-    // Only run on mount (connect is stable via useCallback deps).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    const timer = window.setTimeout(() => connect(false), 0);
 
-  const label = CHANNEL_LABELS[channel] || channel;
+    return () => {
+      window.clearTimeout(timer);
+      mountedRef.current = false;
+      closeStream();
+    };
+  }, [closeStream, connect]);
+
+  const label = CHANNEL_LABELS[channel];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="relative mx-4 w-full max-w-md rounded-2xl border border-foreground/10 bg-card p-6 shadow-2xl">
-        {/* Header */}
+      <div className="mx-4 w-full max-w-lg rounded-2xl border border-foreground/10 bg-card p-6 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <QrCode className="h-5 w-5 text-violet-400" />
-            <h2 className="text-sm font-semibold">{label} Login</h2>
+          <div className="flex items-center gap-2.5">
+            <QrCode className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+            <h2 className="text-sm font-semibold text-foreground">{label} Login</h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Close QR login"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* ── Connecting ──────────────────────────────── */}
         {state === "connecting" && (
           <div className="flex flex-col items-center gap-3 py-10">
-            <span className="inline-flex items-center gap-1">
-              <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:0ms]" />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:150ms]" />
-              <span className="h-2 w-2 animate-bounce rounded-full bg-violet-400 [animation-delay:300ms]" />
-            </span>
-            <p className="text-sm text-muted-foreground">
-              Starting login session...
-            </p>
+            <Loader2 className="h-8 w-8 animate-spin text-blue-600 dark:text-blue-400" />
+            <p className="text-sm text-muted-foreground">Starting login session...</p>
           </div>
         )}
 
-        {/* ── Scanning (QR visible) ──────────────────── */}
         {state === "scanning" && qrText && (
           <div className="flex flex-col items-center gap-4">
-            <p className="text-xs text-muted-foreground">
-              Scan this QR code with your{" "}
-              <span className="font-medium text-foreground">{label}</span> app
+            <p className="text-center text-xs text-muted-foreground">
+              Scan this QR code with your <span className="font-medium text-foreground">{label}</span> app
             </p>
-            <div className="overflow-hidden rounded-lg border border-foreground/10 bg-black p-3">
+            <div className="rounded-lg border border-foreground/10 bg-white p-3">
               <pre
                 className={cn(
-                  "select-none whitespace-pre font-mono text-white",
-                  "text-[5px] leading-[6px]",
-                  "sm:text-[6px] sm:leading-[7px]",
+                  "overflow-auto whitespace-pre text-black",
+                  "text-[6px] leading-[1] sm:text-[8px]",
                 )}
+                style={{ fontFamily: '"DejaVu Sans Mono", "Geist Mono", monospace' }}
               >
                 {qrText}
               </pre>
             </div>
             <p className="text-center text-[11px] text-muted-foreground/60">
-              QR code refreshes automatically. Keep this window open until login
-              completes.
+              QR code refreshes automatically. Keep this window open until login completes.
             </p>
           </div>
         )}
 
-        {/* ── Success ────────────────────────────────── */}
         {state === "success" && (
           <div className="flex flex-col items-center gap-3 py-10">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10">
               <Check className="h-8 w-8 text-emerald-400" />
             </div>
-            <p className="text-sm font-medium text-emerald-300">
-              Login successful!
-            </p>
+            <p className="text-sm font-medium text-emerald-300">Login successful!</p>
             <p className="text-center text-xs text-muted-foreground">
-              {label} is now connected. A gateway restart may be needed to
-              activate the channel.
+              {label} is connected. You can finish onboarding and start chatting with your agent.
             </p>
             <button
+              type="button"
               onClick={onClose}
-              className="mt-2 rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-medium text-white transition hover:bg-emerald-500"
+              className="mt-2 rounded-md bg-emerald-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-500"
             >
               Done
             </button>
           </div>
         )}
 
-        {/* ── Error ──────────────────────────────────── */}
         {state === "error" && (
           <div className="flex flex-col items-center gap-3 py-10">
             <div className="flex h-14 w-14 items-center justify-center rounded-full bg-red-500/10">
               <AlertTriangle className="h-8 w-8 text-red-400" />
             </div>
-            <p className="text-sm text-red-300">
-              {errorMsg || "Login failed"}
-            </p>
+            <p className="text-center text-sm text-red-300">{errorMessage || "Login failed."}</p>
             <button
+              type="button"
               onClick={connect}
-              className="mt-1 flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-muted/80"
+              className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80"
             >
               <RefreshCw className="h-3 w-3" />
               Retry
@@ -225,10 +227,9 @@ export function QrLoginModal({
           </div>
         )}
 
-        {/* ── Log output (collapsible) ───────────────── */}
         {logs.length > 0 && (
           <details className="mt-4">
-            <summary className="cursor-pointer text-[11px] text-muted-foreground/60 hover:text-muted-foreground">
+            <summary className="cursor-pointer text-[11px] text-muted-foreground/60 transition-colors hover:text-muted-foreground">
               Show login log ({logs.length} entries)
             </summary>
             <pre className="mt-2 max-h-32 overflow-auto rounded-md bg-muted/50 p-2 text-[11px] leading-relaxed text-muted-foreground">

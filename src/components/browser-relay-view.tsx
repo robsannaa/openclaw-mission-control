@@ -635,7 +635,7 @@ export function BrowserRelayView() {
                 primaryAction &&
                 void runAction(primaryAction.action, primaryAction.payload)
               }
-              className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-300 hover:bg-violet-500/15 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-60"
               disabled={loading || actionBusy !== null || !primaryAction}
             >
               <Sparkles className="h-3.5 w-3.5" />

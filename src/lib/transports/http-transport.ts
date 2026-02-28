@@ -98,9 +98,16 @@ export class HttpTransport implements OpenClawClient {
   async run(
     args: string[],
     timeout = 15000,
-    _stdin?: string,
+    stdin?: string,
   ): Promise<string> {
     const command = `openclaw ${args.join(" ")}`;
+    if (stdin) {
+      const result = await this.invoke<
+        { output?: string; stdout?: string; result?: string } | string
+      >("exec", { command, stdin }, timeout);
+      if (typeof result === "string") return result;
+      return result.output || result.stdout || result.result || JSON.stringify(result);
+    }
     return this.execCommand(command, timeout);
   }
 

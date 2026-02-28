@@ -166,13 +166,13 @@ export async function POST(request: NextRequest) {
             10000,
           );
           return NextResponse.json({ ok: true, action, name });
-        } catch (err) {
+        } catch {
           // Fallback: try CLI command
           try {
             await runCli(["hooks", enabling ? "enable" : "disable", name], 10000);
             return NextResponse.json({ ok: true, action, name, viaCli: true });
           } catch (cliErr) {
-            return NextResponse.json({ error: String(err) }, { status: 500 });
+            return NextResponse.json({ error: String(cliErr) }, { status: 500 });
           }
         }
       }

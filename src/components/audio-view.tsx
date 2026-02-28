@@ -301,7 +301,7 @@ function ProviderCard({
                 <button
                   onClick={() => onTest(provider.id, activeVoice || undefined)}
                   disabled={!provider.configured}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-violet-500/30 bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Play className="h-3 w-3" />
                   Play
@@ -318,7 +318,7 @@ function ProviderCard({
             <div className="pt-1">
               <button
                 onClick={() => onTest(provider.id, activeVoice || undefined)}
-                className="flex items-center gap-2 rounded-lg bg-violet-600/20 px-3 py-2 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-600/30"
+                className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
               >
                 <Play className="h-3.5 w-3.5" />
                 Test {provider.name}
@@ -616,7 +616,7 @@ function TtsTestPanel({
       <button
         onClick={() => onTest(text, effectiveProviderId || undefined, effectiveVoice || undefined)}
         disabled={testing || !text.trim() || !effectiveProviderId}
-        className="flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+        className="flex items-center gap-2 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/90 disabled:opacity-50"
       >
         {testing ? (
           <>
@@ -992,7 +992,7 @@ function TtsSettingsPanel({
             disabled={loading}
             className={cn(
               "relative h-5 w-9 rounded-full transition-colors",
-              summarize ? "bg-violet-500" : "bg-muted"
+              summarize ? "bg-primary" : "bg-muted"
             )}
           >
             <span

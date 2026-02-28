@@ -4,7 +4,9 @@ import { join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
 import { runCliJson } from "@/lib/openclaw-cli";
 import { fetchGatewaySessions } from "@/lib/gateway-sessions";
+import type { NormalizedGatewaySession } from "@/lib/gateway-sessions";
 import { estimateCostUsd } from "@/lib/model-metadata";
+import { fetchOpenRouterPricing } from "@/lib/openrouter-pricing";
 import { appendSessionSnapshots, aggregateHistory } from "@/lib/usage-history";
 
 const OPENCLAW_HOME = getOpenClawHome();
@@ -64,6 +66,35 @@ type ActivityPoint = {
 
 type SessionWithAgent = SessionEntry & { agentId: string };
 
+type DiagnosticsSource = {
+  ok: boolean;
+  error: string | null;
+};
+
+type MissingPricingModel = {
+  model: string;
+  sessions: number;
+  totalTokens: number;
+};
+
+type UsageDiagnostics = {
+  sources: {
+    gateway: DiagnosticsSource;
+    usageHistoryWrite: DiagnosticsSource;
+    historical: DiagnosticsSource;
+    modelStatus: DiagnosticsSource;
+    agentDirectory: DiagnosticsSource;
+    sessionStorage: DiagnosticsSource & { failedAgents: string[] };
+  };
+  pricing: {
+    coveredSessions: number;
+    uncoveredSessions: number;
+    coveragePct: number;
+    uncoveredModels: MissingPricingModel[];
+  };
+  warnings: string[];
+};
+
 async function readJsonSafe<T>(path: string, fallback: T): Promise<T> {
   try {
     const raw = await readFile(path, "utf-8");
@@ -118,6 +149,19 @@ function buildActivitySeries(
   };
 }
 
+function getErrorCode(err: unknown): string | null {
+  if (typeof err === "object" && err !== null && "code" in err) {
+    const code = (err as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+  }
+  return null;
+}
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message.slice(0, 280);
+  return String(err).slice(0, 280);
+}
+
 /* ── GET /api/usage ──────────────────────────────── */
 
 export async function GET() {
@@ -131,6 +175,23 @@ export async function GET() {
     const defaultModelCfg = defaults.model as Record<string, unknown> | undefined;
     const defaultPrimary = (defaultModelCfg?.primary as string) || "unknown";
     const defaultFallbacks = (defaultModelCfg?.fallbacks as string[]) || [];
+    const diagnostics: UsageDiagnostics = {
+      sources: {
+        gateway: { ok: true, error: null },
+        usageHistoryWrite: { ok: true, error: null },
+        historical: { ok: true, error: null },
+        modelStatus: { ok: true, error: null },
+        agentDirectory: { ok: true, error: null },
+        sessionStorage: { ok: true, error: null, failedAgents: [] },
+      },
+      pricing: {
+        coveredSessions: 0,
+        uncoveredSessions: 0,
+        coveragePct: 100,
+        uncoveredModels: [],
+      },
+      warnings: [],
+    };
 
     // Collect all agent IDs
     const agentIds: string[] = [];
@@ -142,14 +203,37 @@ export async function GET() {
       for (const d of dirs) {
         if (d.isDirectory() && !agentIds.includes(d.name)) agentIds.push(d.name);
       }
-    } catch { /* ok */ }
+    } catch (err) {
+      if (getErrorCode(err) !== "ENOENT") {
+        diagnostics.sources.agentDirectory.ok = false;
+        diagnostics.sources.agentDirectory.error = errorMessage(err);
+        diagnostics.warnings.push("Agent directory scan failed; agent totals may be incomplete.");
+      }
+    }
 
     // 2. Read sessions from gateway source of truth
     const allSessions: SessionWithAgent[] = [];
-    const liveSessions = await fetchGatewaySessions(12000).catch(() => []);
+    let liveSessions: NormalizedGatewaySession[] = [];
+    try {
+      liveSessions = await fetchGatewaySessions(12000);
+    } catch (err) {
+      diagnostics.sources.gateway.ok = false;
+      diagnostics.sources.gateway.error = errorMessage(err);
+      diagnostics.warnings.push("Live gateway sessions are unavailable; live usage may be incomplete.");
+    }
 
-    // Fire-and-forget CSV snapshot (never blocks response)
-    appendSessionSnapshots(liveSessions).catch(() => {});
+    try {
+      await appendSessionSnapshots(liveSessions);
+    } catch (err) {
+      diagnostics.sources.usageHistoryWrite.ok = false;
+      diagnostics.sources.usageHistoryWrite.error = errorMessage(err);
+      diagnostics.warnings.push("Failed to persist usage snapshots; historical trend may lag.");
+    }
+    // Fetch dynamic OpenRouter pricing as fallback for models not in static metadata
+    const dynamicPricing = await fetchOpenRouterPricing();
+
+    const missingPricingModels = new Map<string, MissingPricingModel>();
+    let missingPricingSessions = 0;
 
     for (const s of liveSessions) {
       const cost = estimateCostUsd(
@@ -158,7 +242,19 @@ export async function GET() {
         s.outputTokens,
         s.cacheReadTokens,
         s.cacheWriteTokens,
+        dynamicPricing,
       );
+      if (cost == null) {
+        missingPricingSessions += 1;
+        const prev = missingPricingModels.get(s.fullModel) || {
+          model: s.fullModel,
+          sessions: 0,
+          totalTokens: 0,
+        };
+        prev.sessions += 1;
+        prev.totalTokens += s.totalTokens;
+        missingPricingModels.set(s.fullModel, prev);
+      }
       allSessions.push({
         key: s.key,
         kind: s.kind,
@@ -355,7 +451,11 @@ export async function GET() {
     let modelStatus: ModelStatusData | null = null;
     try {
       modelStatus = await runCliJson<ModelStatusData>(["models", "status"], 10000);
-    } catch { /* ok */ }
+    } catch (err) {
+      diagnostics.sources.modelStatus.ok = false;
+      diagnostics.sources.modelStatus.error = errorMessage(err);
+      diagnostics.warnings.push("Model routing metadata is unavailable right now.");
+    }
 
     // Per-agent model configs
     const agentModels: { agentId: string; primary: string; fallbacks: string[] }[] = [];
@@ -384,7 +484,19 @@ export async function GET() {
           }
         }
         sessionFileSizes.push({ agentId, sizeBytes: totalSize, fileCount: count });
-      } catch { /* ok */ }
+      } catch (err) {
+        if (getErrorCode(err) === "ENOENT") continue;
+        diagnostics.sources.sessionStorage.ok = false;
+        if (!diagnostics.sources.sessionStorage.error) {
+          diagnostics.sources.sessionStorage.error = errorMessage(err);
+        }
+        diagnostics.sources.sessionStorage.failedAgents.push(agentId);
+      }
+    }
+    if (!diagnostics.sources.sessionStorage.ok) {
+      diagnostics.warnings.push(
+        `Session storage metrics failed for ${diagnostics.sources.sessionStorage.failedAgents.length} agent(s).`,
+      );
     }
 
     // Convert Sets to arrays for JSON
@@ -412,7 +524,30 @@ export async function GET() {
     }
 
     // Load historical aggregates (never blocks if CSV missing)
-    const historical = await aggregateHistory().catch(() => null);
+    let historical = null;
+    try {
+      historical = await aggregateHistory();
+    } catch (err) {
+      diagnostics.sources.historical.ok = false;
+      diagnostics.sources.historical.error = errorMessage(err);
+      diagnostics.warnings.push("Historical usage aggregation failed; trend charts may be missing.");
+    }
+    const uncoveredModels = Array.from(missingPricingModels.values())
+      .sort((a, b) => b.sessions - a.sessions);
+    const coveredSessions = allSessions.length - missingPricingSessions;
+    diagnostics.pricing = {
+      coveredSessions,
+      uncoveredSessions: missingPricingSessions,
+      coveragePct: allSessions.length
+        ? Math.round((coveredSessions / allSessions.length) * 100)
+        : 100,
+      uncoveredModels,
+    };
+    if (missingPricingSessions > 0) {
+      diagnostics.warnings.push(
+        `${missingPricingSessions} session(s) are excluded from cost because pricing metadata is missing.`,
+      );
+    }
 
     return NextResponse.json({
       totals: {
@@ -463,6 +598,7 @@ export async function GET() {
       agentModels,
       sessionFileSizes,
       historical,
+      diagnostics,
     });
   } catch (err) {
     console.error("Usage API error:", err);

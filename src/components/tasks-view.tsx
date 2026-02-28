@@ -22,6 +22,7 @@ import {
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/ui/loading-state";
 import { SectionLayout } from "@/components/section-layout";
+import { getTimeFormatSnapshot, withTimeFormat } from "@/lib/time-format-preference";
 
 /* ── types ─────────────────────────────────────── */
 
@@ -62,6 +63,7 @@ const PRIORITIES = ["high", "medium", "low"];
 /* ── component ─────────────────────────────────── */
 
 export function TasksView() {
+  const timeFormat = getTimeFormatSnapshot();
   const [data, setData] = useState<KanbanData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | null>(null);
@@ -482,7 +484,20 @@ export function TasksView() {
                   <div>
                     <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Completed</span>
                     <p className="text-foreground/90">
-                      {new Date((task as Task & Record<string, unknown>).completedAt as string | number).toLocaleString()}
+                      {new Date((task as Task & Record<string, unknown>).completedAt as string | number).toLocaleString(
+                        undefined,
+                        withTimeFormat(
+                          {
+                            year: "numeric",
+                            month: "numeric",
+                            day: "numeric",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            second: "2-digit",
+                          },
+                          timeFormat,
+                        ),
+                      )}
                     </p>
                   </div>
                 )}
@@ -847,7 +862,7 @@ function AddTaskInline({
           type="button"
           onClick={submit}
           disabled={!title.trim()}
-          className="rounded bg-violet-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+          className="rounded bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40"
         >
           Add
         </button>
@@ -1032,7 +1047,7 @@ function BoardOnboarding({
               <button
                 type="button"
                 onClick={initBoard}
-                className="flex items-center gap-2.5 rounded-xl bg-violet-600 px-7 py-3.5 text-xs font-medium text-white shadow-lg shadow-violet-500/20 transition-all hover:bg-violet-500 hover:shadow-violet-500/30 active:scale-95"
+                className="flex items-center gap-2.5 rounded-xl bg-primary text-primary-foreground px-7 py-3.5 text-xs font-medium transition-all hover:bg-primary/90 active:scale-95"
               >
                 <Rocket className="h-4.5 w-4.5" />
                 Set Up Task Board
@@ -1105,7 +1120,7 @@ function BoardOnboarding({
             <button
               type="button"
               onClick={() => setAddingToColumn("backlog")}
-              className="flex items-center gap-2 rounded-xl bg-violet-600 px-6 py-3 text-xs font-medium text-white shadow-lg shadow-violet-500/20 transition-all hover:bg-violet-500 hover:shadow-violet-500/30"
+              className="flex items-center gap-2 rounded-xl bg-primary text-primary-foreground px-6 py-3 text-xs font-medium transition-all hover:bg-primary/90"
             >
               <Plus className="h-4.5 w-4.5" />
               Add a task
@@ -1318,7 +1333,7 @@ function EditTaskInline({
           type="button"
           onClick={save}
           disabled={!title.trim()}
-          className="flex items-center gap-1 rounded bg-violet-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+          className="flex items-center gap-1 rounded bg-primary text-primary-foreground px-2.5 py-1 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40"
         >
           <Check className="h-3 w-3" /> Save
         </button>

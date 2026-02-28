@@ -222,7 +222,7 @@ function AgentNodeComponent({ data }: NodeProps) {
           : "border-foreground/10 bg-card hover:border-foreground/15"
       )}
     >
-      <Handle type="target" position={Position.Left} className="!bg-violet-500 !border-violet-400 !w-2 !h-2" />
+      <Handle type="target" position={Position.Left} className="!bg-primary !border-primary !w-2 !h-2" />
       <Handle type="source" position={Position.Right} className="!bg-blue-500 !border-blue-400 !w-2 !h-2" />
       <Handle type="source" position={Position.Bottom} id="sub" className="!bg-cyan-500 !border-cyan-400 !w-2 !h-2" />
       <Handle type="target" position={Position.Top} id="parent" className="!bg-cyan-500 !border-cyan-400 !w-2 !h-2" />
@@ -1683,7 +1683,7 @@ function ModelPicker({
                   type="button"
                   onClick={handleSaveKey}
                   disabled={!apiKey.trim() || savingKey}
-                  className="shrink-0 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                  className="shrink-0 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40"
                 >
                   {savingKey ? (
                     <span className="inline-flex items-center gap-0.5">
@@ -2022,7 +2022,7 @@ function ChannelBindingPicker({
                   type="button"
                   onClick={() => handleBindChannel(selectedChannel)}
                   disabled={disabled}
-                  className="shrink-0 rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                  className="shrink-0 rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40"
                 >
                   Bind
                 </button>
@@ -2079,7 +2079,7 @@ function ChannelBindingPicker({
                       type="button"
                       onClick={handleSetupToken}
                       disabled={!tokenInput.trim() || saving}
-                      className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+                      className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40"
                     >
                       {saving ? (
                         <span className="flex items-center gap-1.5"><span className="inline-flex items-center gap-0.5"><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" /><span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" /></span> Connecting...</span>
@@ -2117,7 +2117,7 @@ function ChannelBindingPicker({
                   <div className="flex items-center gap-2">
                     <Link
                       href="/terminal"
-                      className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 inline-flex items-center gap-1.5"
+                      className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-medium transition-colors hover:bg-primary/90 inline-flex items-center gap-1.5"
                     >
                       Open Terminal
                     </Link>
@@ -2147,7 +2147,7 @@ function ChannelBindingPicker({
                   <div className="flex items-center gap-2">
                     <Link
                       href="/terminal"
-                      className="rounded-lg bg-violet-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 inline-flex items-center gap-1.5"
+                      className="rounded-lg bg-primary text-primary-foreground px-3 py-2 text-xs font-medium transition-colors hover:bg-primary/90 inline-flex items-center gap-1.5"
                     >
                       Open Terminal
                     </Link>
@@ -2574,7 +2574,7 @@ function AddAgentModal({
             type="button"
             onClick={handleCreate}
             disabled={busy || !name.trim() || success}
-            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40"
           >
             {busy ? (
               <>
@@ -3348,7 +3348,7 @@ function EditAgentModal({
             type="button"
             onClick={handleSave}
             disabled={mutating || success}
-            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40"
           >
             {busy ? (
               <>
@@ -3742,7 +3742,7 @@ function WorkspaceFilesModal({
               onOpenDocument(workspacePath, null);
               onClose();
             }}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-2 text-xs font-medium text-white transition-colors hover:bg-violet-500"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-medium transition-colors hover:bg-primary/90"
           >
             Open Workspace in Documents
             <ExternalLink className="h-3 w-3" />

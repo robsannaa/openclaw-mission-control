@@ -421,7 +421,7 @@ function BooleanField({
       disabled={disabled}
       className={cn(
         "relative h-6 w-11 rounded-full transition-colors",
-        value ? "bg-violet-500" : "bg-muted",
+        value ? "bg-primary" : "bg-muted",
         disabled && "opacity-50"
       )}
     >
@@ -821,7 +821,7 @@ function GenericValueEditor({
         disabled={disabled}
         className={cn(
           "relative h-6 w-11 rounded-full transition-colors shrink-0",
-          value ? "bg-violet-500" : "bg-muted",
+          value ? "bg-primary" : "bg-muted",
           disabled && "opacity-50"
         )}
       >
@@ -1883,7 +1883,7 @@ export function ConfigEditor() {
             type="button"
             onClick={saveChanges}
             disabled={saving}
-            className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-4 py-1.5 text-xs font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-4 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-50"
           >
             {saving ? (
               <span className="inline-flex items-center gap-0.5">

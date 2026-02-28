@@ -9,10 +9,12 @@ import {
   Settings2, Package, Cpu,
   FileText, Terminal, Globe, Wrench, ArrowLeft,
   Info, CircleStop, Play, Copy, Star,
+  ChevronRight, ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
+import { Switch } from "@/components/ui/switch";
 import { ApiWarningBadge } from "@/components/ui/api-warning-badge";
 
 /* ── Types ──────────────────────────────────────── */
@@ -68,19 +70,19 @@ type SkillTestResult = {
 const SKILL_ORIGIN_META: Record<SkillOrigin, { title: string; description: string }> = {
   bundled: {
     title: "Bundled Skills",
-    description: "Built into your OpenClaw install. Toggle controls policy only; runtime still depends on requirements.",
+    description: "Built into OpenClaw. Turn on to let your agents use them; some may need extra setup first.",
   },
   workspace: {
     title: "Workspace Skills",
-    description: "Installed for this workspace (typically via ClawHub).",
+    description: "Installed for this project (e.g. from ClawHub). Turn on to use.",
   },
   shared: {
     title: "Shared Local Skills",
-    description: "Loaded from local shared skill directories (for example ~/.openclaw/skills).",
+    description: "Loaded from a shared folder on your computer. Turn on to use.",
   },
   other: {
     title: "Other Sources",
-    description: "Custom or external skill sources.",
+    description: "Custom or external skills. Turn on to use.",
   },
 };
 
@@ -99,12 +101,14 @@ function missingCount(m: Missing): number {
 function getAvailability(skill: Pick<Skill, "eligible" | "missing" | "blockedByAllowlist">): {
   state: AvailabilityState;
   label: string;
+  labelShort: string;
   badgeClass: string;
 } {
   if (skill.blockedByAllowlist) {
     return {
       state: "blocked",
       label: "Blocked",
+      labelShort: "Blocked",
       badgeClass: "border-red-500/30 bg-red-500/10 text-red-300",
     };
   }
@@ -112,6 +116,7 @@ function getAvailability(skill: Pick<Skill, "eligible" | "missing" | "blockedByA
     return {
       state: "ready",
       label: "Ready",
+      labelShort: "Ready",
       badgeClass: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
     };
   }
@@ -119,12 +124,14 @@ function getAvailability(skill: Pick<Skill, "eligible" | "missing" | "blockedByA
     return {
       state: "needs-setup",
       label: "Needs setup",
+      labelShort: "Setup",
       badgeClass: "border-amber-500/30 bg-amber-500/10 text-amber-300",
     };
   }
   return {
     state: "unavailable",
     label: "Unavailable",
+    labelShort: "Unavailable",
     badgeClass: "border-zinc-500/30 bg-zinc-500/10 text-muted-foreground",
   };
 }
@@ -143,6 +150,15 @@ function sourceLabel(source: string, bundled?: boolean): string {
   if (normalized.includes("workspace")) return "Workspace • Installed";
   if (normalized.includes("managed") || normalized.includes("local")) return "Shared • Local";
   return `Custom • ${source}`;
+}
+
+/** Short label for card badges to avoid wrapping */
+function sourceLabelShort(source: string, bundled?: boolean): string {
+  const normalized = (source || "").toLowerCase();
+  if (bundled || normalized.includes("bundled")) return "Bundled";
+  if (normalized.includes("workspace")) return "Workspace";
+  if (normalized.includes("managed") || normalized.includes("local")) return "Shared";
+  return "Custom";
 }
 
 function sourceColor(source: string): string {
@@ -182,41 +198,9 @@ function runtimeMessage(skill: Skill, availability: ReturnType<typeof getAvailab
 function ToastBar({ toast, onDone }: { toast: Toast; onDone: () => void }) {
   useEffect(() => { const t = setTimeout(onDone, 3500); return () => clearTimeout(t); }, [onDone]);
   return (
-    <div className={cn("fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg border px-4 py-2.5 text-sm font-medium shadow-xl backdrop-blur-sm", toast.type === "success" ? "border-emerald-500/30 bg-emerald-950/80 text-emerald-300" : "border-red-500/30 bg-red-950/80 text-red-300")}>
+    <div className={cn("glass-strong fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg px-4 py-2.5 text-sm font-medium", toast.type === "success" ? "text-emerald-700 dark:text-emerald-300" : "text-red-600 dark:text-red-300")}>
       <div className="flex items-center gap-2">{toast.type === "success" ? <Check className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}{toast.msg}</div>
     </div>
-  );
-}
-
-/* ── Toggle Switch ──────────────────────────────── */
-
-function ToggleSwitch({ checked, onChange, disabled, size = "md", color }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; size?: "sm" | "md"; color?: "green" | "amber" | "default" }) {
-  const w = size === "sm" ? "w-8" : "w-10";
-  const h = size === "sm" ? "h-4" : "h-5";
-  const dot = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
-  const translate = size === "sm" ? "translate-x-3.5" : "translate-x-4";
-  const checkedColor = color === "amber" ? "bg-amber-500" : "bg-emerald-500";
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={(e) => { e.stopPropagation(); onChange(!checked); }}
-      className={cn(
-        "relative inline-flex shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:cursor-not-allowed disabled:opacity-50",
-        w, h,
-        checked ? checkedColor : "bg-foreground/20"
-      )}
-    >
-      <span
-        className={cn(
-          "pointer-events-none inline-block transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
-          dot,
-          checked ? translate : "translate-x-0"
-        )}
-      />
-    </button>
   );
 }
 
@@ -362,9 +346,9 @@ function InstallTerminal({
   };
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-xl border border-foreground/10 bg-zinc-950">
+    <div className="glass flex flex-col overflow-hidden rounded-lg">
       {/* Terminal header */}
-      <div className="flex items-center justify-between border-b border-white/10 bg-white/5 px-4 py-2">
+      <div className="flex items-center justify-between border-b border-border px-4 py-2">
         <div className="flex items-center gap-3">
           {/* Traffic lights */}
           <div className="flex items-center gap-1.5">
@@ -373,13 +357,13 @@ function InstallTerminal({
             <div className="h-3 w-3 rounded-full bg-emerald-500/80" />
           </div>
           <div className="flex items-center gap-2">
-            <Terminal className="h-3.5 w-3.5 text-white/40" />
-            <span className="text-xs font-medium text-white/60">
+            <Terminal className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium text-muted-foreground">
               {kind} install {pkg}
             </span>
           </div>
           {running && (
-            <span className="flex items-center gap-1.5 text-xs text-emerald-400">
+            <span className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
               <span className="relative flex h-2 w-2">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
@@ -388,7 +372,7 @@ function InstallTerminal({
             </span>
           )}
           {!running && exitCode !== null && (
-            <span className={cn("text-xs font-medium", exitCode === 0 ? "text-emerald-400" : "text-red-400")}>
+            <span className={cn("text-xs font-medium", exitCode === 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400")}>
               {exitCode === 0 ? "Done" : `Failed (${exitCode})`} — {formatElapsed(elapsed)}
             </span>
           )}
@@ -398,7 +382,7 @@ function InstallTerminal({
             <button
               type="button"
               onClick={handleAbort}
-              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-red-400 transition hover:bg-red-500/10"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-red-600 dark:text-red-400 transition hover:bg-red-500/10"
             >
               <CircleStop className="h-3 w-3" />
               Stop
@@ -407,7 +391,7 @@ function InstallTerminal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1 text-white/40 transition hover:bg-white/10 hover:text-white/70"
+            className="rounded-md p-1 text-muted-foreground transition hover:bg-muted hover:text-foreground"
           >
             <X className="h-3.5 w-3.5" />
           </button>
@@ -417,7 +401,7 @@ function InstallTerminal({
       {/* Terminal body */}
       <div
         ref={scrollRef}
-        className="max-h-80 min-h-48 overflow-y-auto p-4 font-mono text-xs leading-5"
+        className="max-h-80 min-h-48 overflow-y-auto bg-muted/30 p-4 font-mono text-xs leading-5 text-foreground/90"
       >
         {lines.map((line, i) => (
           <span
@@ -425,17 +409,17 @@ function InstallTerminal({
             className={cn(
               "whitespace-pre-wrap break-all",
               line.stream === "stderr"
-                ? "text-red-400/90"
+                ? "text-red-600 dark:text-red-400"
                 : line.stream === "system"
-                  ? "text-cyan-400/90 font-semibold"
-                  : "text-white/75"
+                  ? "text-foreground font-semibold"
+                  : "text-muted-foreground"
             )}
           >
             {line.text}
           </span>
         ))}
         {running && (
-          <span className="inline-block h-4 w-1.5 animate-pulse bg-white/60" />
+          <span className="inline-block h-4 w-1.5 animate-pulse bg-foreground/50" />
         )}
       </div>
     </div>
@@ -452,6 +436,7 @@ function SkillPlayground({ skillName }: { skillName: string }) {
   const [result, setResult] = useState<SkillTestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [showCommandPreview, setShowCommandPreview] = useState(false);
 
   const commandMessage = useMemo(() => {
     const prompt = input.trim();
@@ -535,29 +520,26 @@ function SkillPlayground({ skillName }: { skillName: string }) {
   }, [commandPreview]);
 
   return (
-    <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-3">
+    <div className="glass-subtle rounded-lg p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="flex items-center gap-2 text-xs font-semibold text-foreground/90">
-          <Terminal className="h-4 w-4 text-cyan-400" />
-          Skill Playground
+        <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          <Terminal className="h-3.5 w-3.5" />
+          Try this skill
         </h3>
-        <span className="rounded border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-300">
-          Browser test runner
-        </span>
       </div>
 
       <p className="text-xs leading-relaxed text-muted-foreground">
-        Runs this skill through OpenClaw with the slash command path. Use this to validate behavior without leaving Mission Control.
+        Send a test message below to see if this skill works. Pick an agent and optional input, then run the test.
       </p>
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <label className="space-y-1 md:min-w-48 md:max-w-48">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground/75">Agent</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Agent</span>
           <select
             value={agentId}
             onChange={(e) => setAgentId(e.target.value)}
             disabled={running}
-            className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-2.5 py-2 text-xs text-foreground/90 outline-none transition-colors focus:border-cyan-500/40 disabled:opacity-50"
+            className="w-full rounded-lg border border-border bg-card px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:ring-2 focus:ring-ring disabled:opacity-50"
           >
             {agents.map((agent) => (
               <option key={agent.id} value={agent.id}>
@@ -568,40 +550,50 @@ function SkillPlayground({ skillName }: { skillName: string }) {
         </label>
 
         <label className="space-y-1 md:min-w-48 md:max-w-48">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground/75">Input (optional)</span>
+          <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Input (optional)</span>
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="example: list my currently playing songs"
             disabled={running}
-            className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 outline-none transition-colors focus:border-cyan-500/40 disabled:opacity-50"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-xs text-foreground outline-none transition-colors focus:ring-2 focus:ring-ring disabled:opacity-50"
           />
         </label>
       </div>
 
-      <div className="rounded-lg border border-foreground/10 bg-foreground/5 p-2.5">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/70">Command preview</p>
-        <div className="mt-1 flex items-start gap-2">
-          <code className="min-w-0 flex-1 break-all rounded bg-foreground/5 px-2 py-1 text-xs text-foreground/80">
-            {commandPreview}
-          </code>
-          <button
-            type="button"
-            onClick={() => void copyCommand()}
-            className="inline-flex items-center gap-1 rounded-md border border-foreground/10 bg-foreground/5 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-foreground/10"
-          >
-            <Copy className="h-3 w-3" />
-            {copied ? "Copied" : "Copy"}
-          </button>
+      {showCommandPreview ? (
+        <div className="rounded-lg border border-border bg-muted/30 p-2.5 space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Run in terminal</p>
+            <button type="button" onClick={() => setShowCommandPreview(false)} className="text-xs text-muted-foreground hover:text-foreground">Hide</button>
+          </div>
+          <div className="flex items-start gap-2">
+            <code className="min-w-0 flex-1 break-all rounded bg-background/50 px-2 py-1 font-mono text-xs text-foreground">
+              {commandPreview}
+            </code>
+            <button
+              type="button"
+              onClick={() => void copyCommand()}
+              className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted"
+            >
+              <Copy className="h-3 w-3" />
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <button type="button" onClick={() => setShowCommandPreview(true)} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
+          <Terminal className="h-3.5 w-3.5" />
+          Show command for terminal
+        </button>
+      )}
 
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => void runTest()}
           disabled={running}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-cyan-500 disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
         >
           {running ? (
             <span className="inline-flex items-center gap-0.5">
@@ -612,26 +604,26 @@ function SkillPlayground({ skillName }: { skillName: string }) {
           ) : (
             <Play className="h-3.5 w-3.5" />
           )}
-          {running ? "Running..." : "Run Skill Test"}
+          {running ? "Running..." : "Run test"}
         </button>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+        <div className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-700 dark:text-red-200">
           {error}
         </div>
       )}
 
       {result && (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground/80">
-            <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-300">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="rounded border border-emerald-500/25 bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700 dark:text-emerald-300">
               completed
             </span>
             <span>agent: {result.agentId}</span>
             <span>duration: {(result.durationMs / 1000).toFixed(1)}s</span>
           </div>
-          <pre className="max-h-80 overflow-auto rounded-lg border border-foreground/10 bg-zinc-950 p-3 text-xs leading-relaxed text-cyan-100 whitespace-pre-wrap break-words">
+          <pre className="max-h-80 overflow-auto rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words">
             {result.output || "(no output)"}
           </pre>
         </div>
@@ -643,8 +635,8 @@ function SkillPlayground({ skillName }: { skillName: string }) {
 /* ── Skill Card (list view) ─────────────────────── */
 
 function skillStatus(skill: Skill): { label: string; color: string; toggleColor: "green" | "amber" | "default" } {
-  if (skill.disabled) return { label: "Configured off", color: "text-muted-foreground/60", toggleColor: "default" };
-  return { label: "Configured on", color: "text-emerald-400", toggleColor: "green" };
+  if (skill.disabled) return { label: "Off", color: "text-muted-foreground/60", toggleColor: "default" };
+  return { label: "On", color: "text-emerald-400", toggleColor: "green" };
 }
 
 function SkillCard({ skill, onClick, onToggle, toggling }: { skill: Skill; onClick: () => void; onToggle: (enabled: boolean) => void; toggling?: boolean }) {
@@ -654,17 +646,17 @@ function SkillCard({ skill, onClick, onToggle, toggling }: { skill: Skill; onCli
   const status = skillStatus(skill);
   return (
     <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
-      className={cn("w-full cursor-pointer rounded-xl border p-3.5 text-left transition-all hover:scale-105", skill.disabled ? "border-foreground/5 bg-foreground/5 opacity-60 hover:opacity-90" : availability.state === "ready" ? "border-foreground/10 bg-foreground/5 hover:border-foreground/15" : "border-foreground/5 bg-foreground/5 opacity-75 hover:opacity-100 hover:border-foreground/10")}
+      className={cn("glass w-full rounded-lg p-3.5 text-left transition-colors", skill.disabled && "opacity-60 hover:opacity-90")}
     >
       <div className="flex items-start gap-3">
         <span className="text-sm leading-none mt-0.5">{skill.emoji || "\u26A1"}</span>
-        <div className="min-w-0 flex-1">
+        <button
+          type="button"
+          onClick={onClick}
+          className="min-w-0 flex-1 text-left cursor-pointer group"
+        >
           <div className="flex items-center gap-2">
-            <p className={cn("text-xs font-semibold", skill.disabled ? "text-foreground/50 line-through" : "text-foreground/90")}>{skill.name}</p>
+            <p className={cn("text-xs font-semibold group-hover:text-foreground", skill.disabled ? "text-foreground/50 line-through" : "text-foreground/90")}>{skill.name}</p>
             {skill.disabled ? (
               <span className="rounded bg-red-500/15 px-1.5 py-0.5 text-xs font-medium text-red-400/80">DISABLED</span>
             ) : availability.state === "ready" ? (
@@ -677,13 +669,16 @@ function SkillCard({ skill, onClick, onToggle, toggling }: { skill: Skill; onCli
             {skill.always && <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-xs text-amber-400">ALWAYS</span>}
           </div>
           <p className="mt-0.5 text-xs leading-snug text-muted-foreground break-words">{skill.description}</p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className={cn("rounded border px-1.5 py-0.5 text-xs font-medium", sourceColor(skill.source))}>{sourceLabel(skill.source, skill.bundled)}</span>
-            <span className={cn("rounded border px-1.5 py-0.5 text-xs font-medium", availability.badgeClass)}>{availability.label}</span>
-            {!skill.disabled && missing && <span className="text-xs text-muted-foreground/80">{missingTotal} requirement{missingTotal === 1 ? "" : "s"} missing</span>}
+          <div className="mt-2 flex flex-nowrap items-center gap-1.5 overflow-hidden">
+            <span className={cn("shrink-0 rounded border px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide whitespace-nowrap", sourceColor(skill.source))} title={sourceLabel(skill.source, skill.bundled)}>{sourceLabelShort(skill.source, skill.bundled)}</span>
+            <span className={cn("shrink-0 rounded border px-1 py-0.5 text-[10px] font-medium uppercase tracking-wide whitespace-nowrap", availability.badgeClass)} title={availability.label}>{availability.labelShort ?? availability.label}</span>
+            {!skill.disabled && missing && <span className="shrink-0 text-[10px] text-muted-foreground whitespace-nowrap">{missingTotal} missing</span>}
           </div>
-        </div>
-        <div className="flex flex-col items-center gap-1 mt-0.5">
+          <span className="mt-1.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-muted-foreground group-hover:text-foreground">
+            View details <ChevronRight className="h-3 w-3" />
+          </span>
+        </button>
+        <div className="flex flex-col items-center gap-1 mt-0.5 shrink-0" onClick={(e) => e.stopPropagation()} role="group" aria-label="Use this skill">
           {toggling ? (
             <span className="inline-flex items-center gap-0.5">
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
@@ -691,17 +686,17 @@ function SkillCard({ skill, onClick, onToggle, toggling }: { skill: Skill; onCli
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
             </span>
           ) : (
-            <ToggleSwitch
+            <Switch
               checked={!skill.disabled}
-              onChange={(enabled) => onToggle(enabled)}
+              onCheckedChange={(checked) => onToggle(checked)}
               size="sm"
-              color={status.toggleColor}
+              disabled={toggling}
             />
           )}
-          <span className={cn("text-xs font-medium", status.color)}>
+          <span className={cn("text-xs font-medium", status.color)} title="Turn this skill on or off for your agents">
             {status.label}
           </span>
-          <span className="text-xs text-muted-foreground/60">Config</span>
+          <span className="text-xs text-muted-foreground/60">Use</span>
         </div>
       </div>
     </div>
@@ -715,7 +710,9 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [showMd, setShowMd] = useState(false);
+  const [showTechnicalDetails, setShowTechnicalDetails] = useState(false);
   const [installTerminal, setInstallTerminal] = useState<{ kind: string; pkg: string; label: string } | null>(null);
+  const installSectionRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -753,10 +750,10 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* Back + header */}
-      <div className="shrink-0 border-b border-foreground/10 px-4 md:px-6 py-4">
-        <button type="button" onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground/70 mb-3"><ArrowLeft className="h-3.5 w-3.5" />Back to Skills</button>
+      <div className="shrink-0 border-b border-border px-4 md:px-6 py-4">
+        <button type="button" onClick={onBack} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground mb-3"><ArrowLeft className="h-3.5 w-3.5" />Back to Skills</button>
         <div className="flex items-start gap-4">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-violet-500/10 text-xl">{detail.emoji || "\u26A1"}</div>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/50 text-xl">{detail.emoji || "\u26A1"}</div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-3">
               <h1 className="text-sm font-semibold text-foreground">{detail.name}</h1>
@@ -767,7 +764,7 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
             <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{detail.description}</p>
             <div className="mt-2 flex items-center gap-3 text-xs">
               <span className={cn("rounded border px-1.5 py-0.5 text-xs font-medium", sourceColor(detail.source))}>{sourceLabel(detail.source, detail.bundled)}</span>
-              {detail.homepage && <a href={detail.homepage} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-violet-400 hover:underline"><Globe className="h-3 w-3" />Homepage</a>}
+              {detail.homepage && <a href={detail.homepage} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-foreground underline decoration-muted-foreground/50 underline-offset-2 hover:decoration-foreground"><Globe className="h-3 w-3" />Homepage</a>}
             </div>
             <p className="mt-2 text-xs text-muted-foreground/70">{sourceHint(detail.source)}</p>
           </div>
@@ -776,9 +773,9 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-4 md:px-6 py-5 space-y-5">
-        {/* Actions bar */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-foreground/5 px-4 py-2.5">
+        {/* Hero row: Use + Status (and optional CTA) */}
+        <div className="flex flex-wrap items-stretch gap-3">
+          <div className="glass-subtle flex items-center gap-3 rounded-lg px-4 py-3 min-w-0">
             <div className="flex items-center gap-2">
               {(busy === "enable-skill" || busy === "disable-skill") ? (
                 <span className="inline-flex items-center gap-0.5">
@@ -787,49 +784,53 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
                   <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
                 </span>
               ) : (
-                <ToggleSwitch
+                <Switch
                   checked={!detail.disabled}
-                  onChange={(enabled) => doAction(enabled ? "enable-skill" : "disable-skill", { name: detail.name })}
+                  onCheckedChange={(enabled) => doAction(enabled ? "enable-skill" : "disable-skill", { name: detail.name })}
                   disabled={busy !== null}
-                  color={detail.disabled ? "default" : "green"}
                 />
               )}
               <div>
                 <p className={cn("text-xs font-medium", detail.disabled ? "text-muted-foreground" : "text-emerald-400")}>
-                  {detail.disabled ? "Policy: Disabled" : "Policy: Enabled"}
+                  {detail.disabled ? "Off" : "On"}
                 </p>
                 <p className="text-xs text-muted-foreground/60">
-                  {detail.disabled
-                    ? "skills.entries.<skill>.enabled = false"
-                    : "skills.entries.<skill>.enabled = true"}
+                  {detail.disabled ? "Agents cannot use this." : "Agents can use this when needed."}
                 </p>
               </div>
             </div>
           </div>
-          <div className="rounded-xl border border-foreground/10 bg-foreground/5 px-3 py-2">
-            <p className="text-xs uppercase tracking-wider text-muted-foreground/60">Runtime</p>
+          <div className="glass-subtle rounded-lg px-4 py-3 min-w-0 flex-1" title="Whether this skill is ready to use right now">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Status</p>
             <p className={cn("mt-0.5 text-xs font-medium", availability.state === "ready" ? "text-emerald-400" : availability.state === "blocked" ? "text-red-400" : availability.state === "needs-setup" ? "text-amber-400" : "text-muted-foreground")}>{availability.label}</p>
             <p className="mt-1 text-xs text-muted-foreground/70">{runtime}</p>
           </div>
-          {detail.skillMd && (
-            <button onClick={() => setShowMd(!showMd)} className="flex items-center gap-1.5 rounded-lg bg-foreground/10 px-3 py-2 text-xs font-medium text-foreground/70 hover:bg-foreground/10">
-              <FileText className="h-3.5 w-3.5" />{showMd ? "Hide" : "View"} SKILL.md
+          {missing && detail.install.length > 0 && (
+            <button
+              type="button"
+              onClick={() => installSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })}
+              className="shrink-0 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/15 px-4 py-3 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              Install what’s missing
             </button>
           )}
         </div>
 
         <SkillPlayground skillName={detail.name} />
 
+
         {/* Requirements section */}
         {hasReqs && (
-          <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-3">
-            <h3 className="flex items-center gap-2 text-xs font-semibold text-foreground/90"><Package className="h-4 w-4 text-amber-400" />Requirements</h3>
+          <div className="glass-subtle rounded-lg p-4 space-y-3">
+            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><Package className="h-3.5 w-3.5" />Requirements</h3>
+            <p className="text-xs text-muted-foreground">This skill needs the following to work. Green check = already available; red = still needed.</p>
             <div className="space-y-2">
               {detail.requirements.bins.length > 0 && (
                 <div className="flex items-start gap-3">
                   <Terminal className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">CLI tools required</p>
+                    <p className="text-xs font-medium text-muted-foreground">Tools required</p>
                     <div className="mt-1 flex flex-wrap gap-1.5">{detail.requirements.bins.map((b) => {
                       const isMissing = detail.missing.bins.includes(b);
                       return (<span key={b} className={cn("flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-mono", isMissing ? "border-red-500/20 bg-red-500/10 text-red-400" : "border-emerald-500/20 bg-emerald-500/10 text-emerald-400")}>{isMissing ? <XCircle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}{b}</span>);
@@ -841,7 +842,7 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
                 <div className="flex items-start gap-3">
                   <Settings2 className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">Environment variables</p>
+                    <p className="text-xs font-medium text-muted-foreground">Environment variables (e.g. API keys)</p>
                     <div className="mt-1 flex flex-wrap gap-1.5">{detail.requirements.env.map((e) => {
                       const isMissing = detail.missing.env.includes(e);
                       return (<span key={e} className={cn("flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-mono", isMissing ? "border-red-500/20 bg-red-500/10 text-red-400" : "border-emerald-500/20 bg-emerald-500/10 text-emerald-400")}>{isMissing ? <XCircle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}{e}</span>);
@@ -853,7 +854,7 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
                 <div className="flex items-start gap-3">
                   <Wrench className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
                   <div>
-                    <p className="text-xs font-medium text-muted-foreground">Config keys</p>
+                    <p className="text-xs font-medium text-muted-foreground">Settings this skill needs</p>
                     <div className="mt-1 flex flex-wrap gap-1.5">{detail.requirements.config.map((c) => {
                       const isMissing = detail.missing.config.includes(c);
                       return (<span key={c} className={cn("flex items-center gap-1 rounded-lg border px-2 py-1 text-xs", isMissing ? "border-red-500/20 bg-red-500/10 text-red-400" : "border-emerald-500/20 bg-emerald-500/10 text-emerald-400")}>{isMissing ? <XCircle className="h-3 w-3" /> : <CheckCircle className="h-3 w-3" />}{c}</span>);
@@ -879,22 +880,23 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
 
         {/* Install options */}
         {missing && detail.install.length > 0 && (
-          <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
-            <h3 className="flex items-center gap-2 text-xs font-semibold text-amber-300"><Download className="h-4 w-4" />Install Missing Dependencies</h3>
+          <div ref={installSectionRef} className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+            <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300"><Download className="h-3.5 w-3.5" />Install what’s missing</h3>
+            <p className="text-xs text-amber-800/90 dark:text-amber-200/90">This skill needs the following to work. Click Install to add them (when available).</p>
             <div className="space-y-2">{detail.install.map((inst) => {
               const supportedKinds = ["brew", "npm", "pip"];
               const canInstall = supportedKinds.includes(inst.kind) && inst.bins && inst.bins.length > 0;
               return (
-                <div key={inst.id} className="flex items-center justify-between rounded-lg border border-foreground/10 bg-muted/50 px-4 py-3">
+                <div key={inst.id} className="glass-subtle flex items-center justify-between rounded-lg px-4 py-3">
                   <div>
                     <p className="text-xs font-medium text-foreground/90">{inst.label}</p>
-                    <p className="text-xs text-muted-foreground">Method: {inst.kind}{inst.bins ? " \u2022 Installs: " + inst.bins.join(", ") : ""}</p>
+                    <p className="text-xs text-muted-foreground">{inst.kind}{inst.bins ? " \u2022 installs " + inst.bins.join(", ") : ""}</p>
                   </div>
                   {canInstall ? (
                     <button
                       onClick={() => setInstallTerminal({ kind: inst.kind, pkg: inst.bins![0], label: inst.label })}
                       disabled={installTerminal !== null}
-                      className="flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50"
+                      className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
                     >
                       <Terminal className="h-3 w-3" />Install
                     </button>
@@ -929,41 +931,60 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
 
         {/* All good */}
         {!missing && detail.eligible && (
-          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-            <p className="flex items-center gap-2 text-sm font-medium text-emerald-300"><CheckCircle className="h-4 w-4" />All requirements met — this skill is active and available to your agents.</p>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
+            <p className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"><CheckCircle className="h-4 w-4" />All requirements met — this skill is active and available to your agents.</p>
           </div>
         )}
 
-        {/* Skill config */}
-        {detail.skillConfig && Object.keys(detail.skillConfig).length > 0 && (
-          <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-2">
-            <h3 className="flex items-center gap-2 text-xs font-semibold text-foreground/90"><Settings2 className="h-4 w-4 text-muted-foreground" />Configuration</h3>
-            <p className="text-xs text-muted-foreground">Current tool config for <code className="rounded bg-foreground/10 px-1 text-muted-foreground">tools.{detail.skillKey || detail.name}</code></p>
-            <pre className="rounded-lg bg-muted p-3 text-xs text-muted-foreground overflow-auto max-h-72">{JSON.stringify(detail.skillConfig, null, 2)}</pre>
-          </div>
-        )}
-
-        {/* File info */}
-        <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-2">
-          <h3 className="flex items-center gap-2 text-xs font-semibold text-foreground/90"><Info className="h-4 w-4 text-muted-foreground" />Details</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div className="rounded-lg border border-foreground/5 bg-muted/50 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Skill Key</p><p className="text-xs font-mono text-foreground/70 mt-0.5">{detail.skillKey || detail.name}</p></div>
-            <div className="rounded-lg border border-foreground/5 bg-muted/50 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Source</p><p className="text-xs text-foreground/70 mt-0.5">{detail.source}</p></div>
-            <div className="col-span-2 rounded-lg border border-foreground/5 bg-muted/50 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">File Path</p><p className="text-xs font-mono text-muted-foreground mt-0.5 break-all">{detail.filePath}</p></div>
-            <div className="col-span-2 rounded-lg border border-foreground/5 bg-muted/50 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">Base Directory</p><p className="text-xs font-mono text-muted-foreground mt-0.5 break-all">{detail.baseDir}</p></div>
-          </div>
-        </div>
-
-        {/* SKILL.md content */}
-        {showMd && detail.skillMd && (
-          <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <h3 className="flex items-center gap-2 text-xs font-semibold text-foreground/90"><FileText className="h-4 w-4 text-muted-foreground" />SKILL.md</h3>
-              <button onClick={() => setShowMd(false)} className="rounded p-1 text-muted-foreground hover:text-foreground/70"><X className="h-3.5 w-3.5" /></button>
+        {/* Technical details: collapsible (Details + Config + SKILL.md) */}
+        <div className="glass-subtle rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowTechnicalDetails((v) => !v)}
+            className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:bg-muted/30 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <Info className="h-3.5 w-3.5" />
+              Technical details
+            </span>
+            <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", showTechnicalDetails && "rotate-180")} />
+          </button>
+          {showTechnicalDetails && (
+            <div className="border-t border-border space-y-4 p-4">
+              {/* File info */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Where this skill lives</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-border bg-muted/30 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Skill key</p><p className="text-xs font-mono text-foreground mt-0.5">{detail.skillKey || detail.name}</p></div>
+                  <div className="rounded-lg border border-border bg-muted/30 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Source</p><p className="text-xs text-foreground mt-0.5">{detail.source}</p></div>
+                  <div className="col-span-2 rounded-lg border border-border bg-muted/30 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">File path</p><p className="text-xs font-mono text-muted-foreground mt-0.5 break-all">{detail.filePath}</p></div>
+                  <div className="col-span-2 rounded-lg border border-border bg-muted/30 px-3 py-2"><p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Folder</p><p className="text-xs font-mono text-muted-foreground mt-0.5 break-all">{detail.baseDir}</p></div>
+                </div>
+              </div>
+              {/* Skill config */}
+              {detail.skillConfig && Object.keys(detail.skillConfig).length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Configuration</p>
+                  <pre className="rounded-lg border border-border bg-muted/30 p-3 font-mono text-xs text-muted-foreground overflow-auto max-h-72">{JSON.stringify(detail.skillConfig, null, 2)}</pre>
+                </div>
+              )}
+              {/* SKILL.md */}
+              {detail.skillMd && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"><FileText className="h-3.5 w-3.5" />SKILL.md</span>
+                    <button type="button" onClick={() => setShowMd((m) => !m)} className="text-xs font-medium text-foreground hover:underline">
+                      {showMd ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                  {showMd && (
+                    <pre className="max-h-96 overflow-auto rounded-lg border border-border bg-muted/30 p-4 font-mono text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">{detail.skillMd}</pre>
+                  )}
+                </div>
+              )}
             </div>
-            <pre className="max-h-96 overflow-auto rounded-lg bg-muted p-4 text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap break-words">{detail.skillMd}</pre>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -1213,32 +1234,33 @@ function ClawHubPanel({
 
   return (
     <div className="space-y-3">
+      <p className="text-xs text-muted-foreground">Browse and install skills from the catalog. Install adds them to your project; then turn them on from Local Skills.</p>
       <div className="flex flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-foreground/10 bg-muted/40 px-2.5 py-1.5 min-w-44">
-          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
+        <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 min-w-44">
+          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
           <input
             placeholder="Search skills..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50 text-foreground/80"
+            className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground text-foreground"
           />
         </div>
-        <button type="button" onClick={() => { setMode("trending"); void fetchExplore(); }} className={cn("rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors", mode === "trending" && !query ? "bg-foreground/10 text-foreground/80" : "text-muted-foreground hover:bg-muted/60")}>
+        <button type="button" onClick={() => { setMode("trending"); void fetchExplore(); }} className={cn("rounded-lg border border-border bg-muted px-2.5 py-1.5 text-xs font-medium transition-colors", mode === "trending" && !query ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted/80")}>
           Trending
         </button>
-        <div className="flex rounded-md border border-foreground/10 p-0.5">
-          <button type="button" onClick={() => setViewFilter("all")} className={cn("rounded px-2 py-1 text-sm font-medium transition-colors", viewFilter === "all" ? "bg-foreground/10 text-foreground/80" : "text-muted-foreground hover:text-foreground/70")}>
+        <div className="inline-flex rounded-lg border border-border bg-muted p-0.5">
+          <button type="button" onClick={() => setViewFilter("all")} className={cn("rounded-md px-2 py-1 text-xs font-medium transition-colors", viewFilter === "all" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
             All
           </button>
-          <button type="button" onClick={() => setViewFilter("installed")} className={cn("rounded px-2 py-1 text-sm font-medium transition-colors", viewFilter === "installed" ? "bg-foreground/10 text-foreground/80" : "text-muted-foreground hover:text-foreground/70")}>
+          <button type="button" onClick={() => setViewFilter("installed")} className={cn("rounded-md px-2 py-1 text-xs font-medium transition-colors", viewFilter === "installed" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
             Installed ({Object.keys(installed).length})
           </button>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className="text-xs text-muted-foreground/60 shrink-0">Sort:</span>
-          <div className="flex rounded-md border border-foreground/10 p-0.5">
+          <span className="text-xs text-muted-foreground shrink-0">Sort:</span>
+          <div className="inline-flex rounded-lg border border-border bg-muted p-0.5">
             {(["trending", "stars", "downloads", "name"] as const).map((s) => (
-              <button key={s} type="button" onClick={() => setSortBy(s)} className={cn("rounded px-2 py-1 text-xs font-medium transition-colors", sortBy === s ? "bg-foreground/10 text-foreground/80" : "text-muted-foreground hover:text-foreground/70")}>
+              <button key={s} type="button" onClick={() => setSortBy(s)} className={cn("rounded-md px-2 py-1 text-xs font-medium transition-colors", sortBy === s ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
                 {s === "trending" ? "Trending" : s === "stars" ? "Stars" : s === "downloads" ? "Downloads" : "Name"}
               </button>
             ))}
@@ -1256,14 +1278,14 @@ function ClawHubPanel({
         {loading && viewFilter === "all" ? (
           <div className="flex items-center justify-center py-12">
             <span className="inline-flex items-center gap-1">
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:0ms]" />
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:150ms]" />
-              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground/50 [animation-delay:300ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:0ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:150ms]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:300ms]" />
             </span>
           </div>
         ) : sortedItems.length === 0 ? (
-          <div className="rounded-lg border border-foreground/10 bg-foreground/5 px-4 py-6 text-center text-xs text-muted-foreground/70">
-            {viewFilter === "installed" ? "No ClawHub skills installed yet. Use Trending or search, then Install." : "No skills found."}
+          <div className="glass-subtle rounded-lg px-4 py-6 text-center text-xs text-muted-foreground">
+            {viewFilter === "installed" ? "No skills installed from ClawHub yet. Try Trending or search, then click Install on one you like." : "No skills found. Try a different search."}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
@@ -1277,27 +1299,27 @@ function ClawHubPanel({
               return (
                 <div
                   key={item.slug}
-                  className="rounded-xl border border-white/20 dark:border-white/10 p-2.5 shadow-sm backdrop-blur-md bg-white/70 dark:bg-white/10"
+                  className="glass w-full rounded-lg p-3.5 text-left transition-colors"
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-medium text-foreground">{item.displayName || item.slug}</p>
+                      <p className="truncate text-xs font-semibold text-foreground">{item.displayName || item.slug}</p>
                       {item.developer && (
-                        <p className="mt-0.5 text-xs text-muted-foreground/80 truncate" title={item.developer}>
+                        <p className="mt-0.5 text-xs text-muted-foreground truncate" title={item.developer}>
                           by {item.developer}
                         </p>
                       )}
-                      <p className="mt-0.5 text-xs leading-snug text-foreground/80 dark:text-foreground/90 break-words">
+                      <p className="mt-0.5 text-xs leading-snug text-muted-foreground break-words">
                         {item.summary || item.slug}
                       </p>
                     </div>
-                    <span className={cn("shrink-0 rounded border px-1 py-0.5 text-xs font-medium leading-none", isInstalled ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400" : "border-foreground/10 text-muted-foreground")}>
+                    <span className={cn("shrink-0 rounded-md border px-1.5 py-0.5 text-xs font-medium leading-none", isInstalled ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" : "border-border text-muted-foreground")}>
                       {isInstalled ? installedVersion : `v${item.version || "latest"}`}
                     </span>
                   </div>
                   <div className="mt-2 flex items-center justify-between gap-2">
                     {viewFilter === "all" && typeof item.stars === "number" && (
-                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground/70">
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                         <Star className="h-3 w-3 fill-amber-500/80 text-amber-500/80 shrink-0" />
                         {item.stars}
                       </span>
@@ -1308,17 +1330,17 @@ function ClawHubPanel({
                           type="button"
                           disabled={isBusy}
                           onClick={() => void updateSkill(item.slug)}
-                          className="rounded border border-amber-500/30 bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-500/25 dark:hover:bg-amber-500/20 disabled:opacity-50"
+                          className="rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
                         >
                           {isBusy && busyAction === "update" ? "…" : "Update"}
                         </button>
                       )}
                       {isInstalled && (
-                        <button type="button" disabled={isBusy} onClick={() => void uninstallSkill(item.slug)} className="rounded border border-red-500/20 px-2 py-0.5 text-xs text-red-500/90 hover:bg-red-500/10 disabled:opacity-50">
+                        <button type="button" disabled={isBusy} onClick={() => void uninstallSkill(item.slug)} className="rounded-md border border-border bg-card px-2 py-0.5 text-xs text-red-600 dark:text-red-400 hover:bg-red-500/10 disabled:opacity-50">
                           Delete
                         </button>
                       )}
-                      <button type="button" disabled={isBusy} onClick={() => void installSkill(item.slug, item.version)} className="rounded bg-violet-600 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-violet-500 disabled:opacity-50">
+                      <button type="button" disabled={isBusy} onClick={() => void installSkill(item.slug, item.version)} className="rounded-md border border-border bg-card px-2.5 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50">
                         {installLabel}
                       </button>
                     </div>
@@ -1529,33 +1551,33 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
         className="py-2 md:py-3"
         title={
           <span className="flex items-center gap-2 text-xs">
-            <Wrench className="h-5 w-5 text-violet-400" />
+            <Wrench className="h-5 w-5 text-muted-foreground" />
             Skills
           </span>
         }
-        description="Browse, install, and configure skills. Click any skill for details."
+        description="Skills are tools your agents can use (e.g. search, calendar). Turn them on or off; click a skill for more."
         descriptionClassName="text-sm text-muted-foreground"
         meta={null}
         actions={
           <div className="flex items-center gap-2">
             <ApiWarningBadge warning={apiWarning} degraded={apiDegraded} />
-            <div className="inline-flex rounded-lg border border-foreground/10 bg-muted/50 p-1">
+            <div className="inline-flex rounded-lg border border-border bg-muted p-0.5">
               <button
                 type="button"
                 onClick={() => switchTab("skills")}
-                className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", tab === "skills" ? "bg-violet-500/15 text-violet-300" : "text-muted-foreground hover:text-foreground/80")}
+                className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", tab === "skills" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
               >
                 Local Skills
               </button>
               <button
                 type="button"
                 onClick={() => switchTab("clawhub")}
-                className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", tab === "clawhub" ? "bg-violet-500/15 text-violet-300" : "text-muted-foreground hover:text-foreground/80")}
+                className={cn("rounded-md px-2.5 py-1 text-xs font-medium transition-colors", tab === "clawhub" ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}
               >
                 ClawHub
               </button>
             </div>
-            <button type="button" onClick={fetchAll} className="flex items-center gap-1.5 rounded-lg border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/80"><RefreshCw className="h-3 w-3" />Refresh</button>
+            <button type="button" onClick={fetchAll} className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted"><RefreshCw className="h-3 w-3" />Refresh</button>
           </div>
         }
       />
@@ -1564,49 +1586,52 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
         <SectionBody width="wide" padding="compact" innerClassName="space-y-4">
           {/* Summary + search in one scrollable area with the list */}
           {summary && (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-              <SumCard value={summary.total} label="Total" color="text-foreground/80" />
-              <SumCard value={summary.eligible} label="Ready" color="text-emerald-600 dark:text-emerald-400" border="border-emerald-500/15" bg="bg-emerald-500/5" />
-              <SumCard value={workspaceCount} label="Workspace" color="text-violet-600 dark:text-violet-400" border="border-violet-500/15" bg="bg-violet-500/5" />
-              <SumCard value={summary.disabled} label="Disabled" color="text-muted-foreground" border="border-foreground/10" bg="bg-foreground/5" />
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <SumCard value={summary.total} label="Total" color="text-foreground" />
+              <SumCard value={summary.eligible} label="Ready" color="text-emerald-600 dark:text-emerald-400" border="border-emerald-500/20" bg="bg-emerald-500/5" title="On and ready for agents to use" />
+              <SumCard value={workspaceCount} label="Installed" color="text-violet-600 dark:text-violet-400" border="border-violet-500/20" bg="bg-violet-500/5" title="Installed in this project (e.g. from ClawHub)" />
+              <SumCard value={summary.disabled} label="Off" color="text-muted-foreground" border="border-border" bg="bg-muted/30" title="Turned off" />
             </div>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-foreground/10 bg-muted/40 px-2.5 py-1.5 min-w-44">
-              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/50" />
-              <input placeholder="Search skills..." value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground/50 text-foreground/80" />
-              {search && <button onClick={() => setSearch("")} className="text-muted-foreground/50 hover:text-muted-foreground"><X className="h-3.5 w-3.5" /></button>}
+            <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5 min-w-44">
+              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <input placeholder="Search skills..." value={search} onChange={(e) => setSearch(e.target.value)} className="flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground text-foreground" />
+              {search && <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
             </div>
-            <div className="flex gap-1">{(["all", "eligible", "unavailable", "bundled", "workspace"] as const).map((f) => (
-              <button key={f} type="button" onClick={() => setFilter(f)} className={cn("rounded-md px-2 py-1 text-xs font-medium transition-colors", filter === f ? "bg-foreground/10 text-foreground/80" : "text-muted-foreground hover:bg-muted/60")}>
-                {f === "all" ? "All" : f === "eligible" ? "Ready" : f === "unavailable" ? "Unavailable" : f === "bundled" ? "Bundled" : "Workspace"}
-              </button>
-            ))}</div>
+            <div className="inline-flex flex-wrap gap-1 rounded-lg border border-border bg-muted p-0.5">
+              {(["all", "eligible", "unavailable", "bundled", "workspace"] as const).map((f) => (
+                <button key={f} type="button" onClick={() => setFilter(f)} className={cn("rounded-md px-2 py-1 text-xs font-medium transition-colors", filter === f ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground")}>
+                  {f === "all" ? "All" : f === "eligible" ? "Ready" : f === "unavailable" ? "Unavailable" : f === "bundled" ? "Bundled" : "Workspace"}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="space-y-4">
           {grouped.map((section) => (
-            <section key={section.origin} className="rounded-lg border border-foreground/10 bg-foreground/5 p-3">
-              <h3 className="text-xs font-medium text-foreground/80 border-b border-foreground/5 pb-2">
-                {section.title} <span className="text-muted-foreground/60 font-normal">({section.skills.length})</span>
+            <section key={section.origin} className="glass-subtle rounded-lg p-4">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground border-b border-border pb-2">
+                {section.title} <span className="font-normal">({section.skills.length})</span>
               </h3>
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-3 columns-1 gap-x-4 sm:columns-2 lg:columns-3">
                 {section.skills.map((s) => (
-                  <SkillCard
-                    key={s.name}
-                    skill={s}
-                    onClick={() => router.push(`/skills/${encodeURIComponent(s.name)}`)}
-                    onToggle={(enabled) => handleToggleSkill(s.name, enabled)}
-                    toggling={togglingSkill === s.name}
-                  />
+                  <div key={s.name} className="break-inside-avoid mb-2">
+                    <SkillCard
+                      skill={s}
+                      onClick={() => router.push(`/skills/${encodeURIComponent(s.name)}`)}
+                      onToggle={(enabled) => handleToggleSkill(s.name, enabled)}
+                      toggling={togglingSkill === s.name}
+                    />
+                  </div>
                 ))}
               </div>
             </section>
           ))}
           {filtered.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-12">
-              <Search className="h-8 w-8 text-muted-foreground/40 mb-3" />
-              <p className="text-sm text-muted-foreground">No skills match your search</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Try different keywords or change the filter.</p>
+            <div className="glass-subtle flex flex-col items-center justify-center rounded-lg py-12">
+              <Search className="h-8 w-8 text-muted-foreground mb-3" />
+              <p className="text-sm text-muted-foreground">No skills found</p>
+              <p className="text-xs text-muted-foreground mt-1">Try a different search or filter.</p>
             </div>
           )}
           </div>
@@ -1628,10 +1653,10 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
 
 /* ── Summary Card ───────────────────────────────── */
 
-function SumCard({ value, label, color, border, bg }: { value: number; label: string; color: string; border?: string; bg?: string }) {
+function SumCard({ value, label, color, border, bg, title }: { value: number; label: string; color: string; border?: string; bg?: string; title?: string }) {
   return (
-    <div className={cn("rounded-lg border px-2.5 py-1.5", border || "border-foreground/10", bg || "bg-foreground/5")}>
-      <p className={cn("text-xs font-semibold leading-tight", color)}>{value}</p>
+    <div className={cn("rounded-lg border px-3 py-2", border || "border-border", bg || "bg-muted/30")} title={title}>
+      <p className={cn("text-sm font-semibold tabular-nums leading-tight", color)}>{value}</p>
       <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
     </div>
   );

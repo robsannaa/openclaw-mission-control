@@ -538,7 +538,7 @@ export function SubagentsManagerView({
               type="button"
               onClick={() => void saveDefaults()}
               disabled={loading || saving || !baseHash}
-              className="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
             >
               Save Defaults
             </button>
@@ -864,7 +864,7 @@ export function SubagentsManagerView({
             type="button"
             onClick={() => void executeCommand()}
             disabled={running}
-            className="inline-flex items-center gap-1 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50"
           >
             {running ? (
               <span className="inline-flex items-center gap-0.5">

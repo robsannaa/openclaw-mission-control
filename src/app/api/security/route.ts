@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
-import { runCliJson } from "@/lib/openclaw-cli";
+import { runCliJson, runCliCaptureBoth } from "@/lib/openclaw-cli";
 
 export const dynamic = "force-dynamic";
 
@@ -296,6 +296,21 @@ export async function POST(request: NextRequest) {
         cache,
         warning: warning || undefined,
       });
+    }
+
+    if (action === "check-secrets") {
+      const { stdout, stderr } = await runCliCaptureBoth(["secrets", "audit", "--check"], 15000);
+      return NextResponse.json({ ok: true, action, output: stdout || stderr || "No output." });
+    }
+
+    if (action === "check-models") {
+      try {
+        const data = await runCliJson<unknown>(["models", "status"], 15000);
+        return NextResponse.json({ ok: true, action, models: data });
+      } catch {
+        const { stdout, stderr } = await runCliCaptureBoth(["models", "status"], 15000);
+        return NextResponse.json({ ok: true, action, output: stdout || stderr });
+      }
     }
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 });

@@ -438,7 +438,7 @@ export function TerminalView() {
                 type="button"
                 onClick={createTab}
                 disabled={creating}
-                className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-violet-500 disabled:opacity-50"
+                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 {creating ? "Creating..." : "Open Terminal"}
               </button>

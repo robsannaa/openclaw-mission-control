@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { InlineSpinner } from "@/components/ui/loading-state";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
+import { getTimeFormatSnapshot, withTimeFormat } from "@/lib/time-format-preference";
 
 type AccountsResponse = {
   generatedAt: number;
@@ -537,7 +538,7 @@ function SecretsPanel() {
               type="button"
               onClick={() => void handleConfigure({ apply: true })}
               disabled={configuring || loading}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-400 transition-colors hover:bg-violet-500/20 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-40"
               title="Run secrets configure --apply: auto-map plaintext secrets to SecretRefs"
             >
               {configuring ? <InlineSpinner size="sm" /> : <Wrench className="h-3 w-3" />}
@@ -581,6 +582,7 @@ function SecretsPanel() {
 }
 
 export function AccountsKeysView() {
+  const timeFormat = getTimeFormatSnapshot();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [revealSecrets, setRevealSecrets] = useState(false);
@@ -749,7 +751,20 @@ export function AccountsKeysView() {
         description="Complete visibility into channels, integrations, env keys, and discovered credential sources OpenClaw can access."
         meta={
           data
-            ? `Last sync: ${new Date(data.generatedAt).toLocaleString()}`
+            ? `Last sync: ${new Date(data.generatedAt).toLocaleString(
+                undefined,
+                withTimeFormat(
+                  {
+                    year: "numeric",
+                    month: "numeric",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  },
+                  timeFormat,
+                ),
+              )}`
             : "Loading source-of-truth snapshot…"
         }
         actions={

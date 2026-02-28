@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gatewayCall } from "@/lib/openclaw-cli";
+import { runCliCaptureBoth } from "@/lib/openclaw-cli";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
+import { randomBytes } from "crypto";
 
 export const dynamic = "force-dynamic";
 const OPENCLAW_HOME = getOpenClawHome();
@@ -73,6 +75,214 @@ async function gatewayCallWithRetry<T>(
     }
   }
   throw lastErr;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function lowerError(err: unknown): string {
+  return String(err || "").toLowerCase();
+}
+
+function isHashConflictError(err: unknown): boolean {
+  const msg = lowerError(err);
+  return (
+    msg.includes("hash mismatch") ||
+    msg.includes("stale base hash") ||
+    msg.includes("base hash mismatch") ||
+    msg.includes("config conflict")
+  );
+}
+
+function isInvalidConfigError(err: unknown): boolean {
+  const msg = lowerError(err);
+  return msg.includes("invalid config") || msg.includes("config validation failed");
+}
+
+function isRateLimitError(err: unknown): boolean {
+  const msg = lowerError(err);
+  return msg.includes("rate limit exceeded") || msg.includes("retry after");
+}
+
+function getByDottedPath(obj: unknown, path: string): unknown {
+  if (!isRecord(obj)) return undefined;
+  if (Object.prototype.hasOwnProperty.call(obj, path)) {
+    return (obj as Record<string, unknown>)[path];
+  }
+  const parts = path.split(".");
+  let cur: unknown = obj;
+  for (const part of parts) {
+    if (!isRecord(cur)) return undefined;
+    cur = (cur as Record<string, unknown>)[part];
+  }
+  return cur;
+}
+
+function withDottedPathValue(
+  obj: Record<string, unknown>,
+  path: string,
+  value: unknown
+): Record<string, unknown> {
+  if (Object.prototype.hasOwnProperty.call(obj, path)) {
+    return obj;
+  }
+  return {
+    ...obj,
+    [path]: value,
+  };
+}
+
+function ensureGatewayAuthPatchDefaults(
+  patchObj: Record<string, unknown>,
+  currentParsed: Record<string, unknown> | null
+): Record<string, unknown> {
+  const modeRaw = getByDottedPath(patchObj, "gateway.auth.mode");
+  const mode = typeof modeRaw === "string" ? modeRaw.trim().toLowerCase() : "";
+  if (!mode) return patchObj;
+
+  let next = { ...patchObj };
+
+  if (mode === "token") {
+    const existingToken =
+      (typeof getByDottedPath(next, "gateway.auth.token") === "string" &&
+        String(getByDottedPath(next, "gateway.auth.token"))) ||
+      (typeof getByDottedPath(currentParsed, "gateway.auth.token") === "string" &&
+        String(getByDottedPath(currentParsed, "gateway.auth.token"))) ||
+      "";
+    if (!existingToken.trim()) {
+      next = withDottedPathValue(next, "gateway.auth.token", randomBytes(24).toString("hex"));
+    }
+  }
+
+  return next;
+}
+
+type ConfigSetEntry = {
+  path: string;
+  value: unknown;
+};
+
+const MAX_CONFIG_SET_FALLBACK_ENTRIES = 24;
+
+function collectConfigSetEntries(
+  patchObj: Record<string, unknown>,
+  prefix = ""
+): ConfigSetEntry[] {
+  const entries: ConfigSetEntry[] = [];
+  for (const [key, value] of Object.entries(patchObj)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (isRecord(value) && Object.keys(value).length > 0 && !key.includes(".")) {
+      entries.push(...collectConfigSetEntries(value, path));
+      continue;
+    }
+    entries.push({ path, value });
+  }
+  return entries;
+}
+
+function buildConfigSetFallbackEntries(
+  patchObj: Record<string, unknown>,
+  rawProvided: boolean
+): { entries: ConfigSetEntry[] | null; reason?: string } {
+  if (rawProvided) {
+    return { entries: null, reason: "raw payload is not eligible for fallback" };
+  }
+
+  const entries = collectConfigSetEntries(patchObj).filter((entry) => entry.path.trim().length > 0);
+  if (entries.length === 0) {
+    return { entries: null, reason: "empty patch payload" };
+  }
+  if (entries.length > MAX_CONFIG_SET_FALLBACK_ENTRIES) {
+    return {
+      entries: null,
+      reason: `patch has ${entries.length} entries (limit: ${MAX_CONFIG_SET_FALLBACK_ENTRIES})`,
+    };
+  }
+
+  for (const entry of entries) {
+    if (entry.value === undefined) {
+      return { entries: null, reason: `unsupported undefined value for ${entry.path}` };
+    }
+    const encoded = JSON.stringify(entry.value);
+    if (encoded === undefined) {
+      return { entries: null, reason: `failed to encode JSON value for ${entry.path}` };
+    }
+  }
+
+  return { entries };
+}
+
+async function applyConfigSetFallback(entries: ConfigSetEntry[]): Promise<{
+  updatedPaths: string[];
+  failures: Array<{ path: string; error: string }>;
+}> {
+  const failures: Array<{ path: string; error: string }> = [];
+  const updatedPaths: string[] = [];
+
+  for (const entry of entries) {
+    try {
+      const encoded = JSON.stringify(entry.value);
+      if (encoded === undefined) {
+        throw new Error("Value cannot be encoded as JSON");
+      }
+      const setResult = await runCliCaptureBoth(
+        ["config", "set", "--strict-json", entry.path, encoded],
+        20000
+      );
+      if (setResult.code !== 0) {
+        const details = String(setResult.stderr || setResult.stdout || "").trim();
+        throw new Error(details || `config set exited with code ${String(setResult.code)}`);
+      }
+      updatedPaths.push(entry.path);
+    } catch (err) {
+      failures.push({ path: entry.path, error: String(err || "unknown error") });
+    }
+  }
+
+  return { updatedPaths, failures };
+}
+
+async function readConfigHashAndParsed(): Promise<{
+  baseHash: string;
+  parsed: Record<string, unknown>;
+}> {
+  const configData = await gatewayCallWithRetry<Record<string, unknown>>(
+    "config.get",
+    undefined,
+    10000,
+    1
+  );
+  return {
+    baseHash: String(configData.hash || "").trim(),
+    parsed: isRecord(configData.parsed) ? (configData.parsed as Record<string, unknown>) : {},
+  };
+}
+
+async function runDoctorFixCapture(): Promise<{
+  ok: boolean;
+  output: string;
+}> {
+  const { stdout, stderr, code } = await runCliCaptureBoth(["doctor", "--fix"], 60000);
+  const output = String(stdout || stderr || "").trim();
+  return {
+    ok: code === 0,
+    output,
+  };
+}
+
+function friendlyPatchError(err: unknown): string {
+  const raw = String(err || "");
+  if (isRateLimitError(err)) {
+    return "OpenClaw is temporarily rate-limiting config changes. Please wait a minute and try again.";
+  }
+  if (isInvalidConfigError(err)) {
+    return "OpenClaw rejected this change because the local config is invalid. Mission Control tried to repair it automatically, but the change still could not be applied.";
+  }
+  if (isHashConflictError(err)) {
+    return "Your config changed in another session. Please retry once.";
+  }
+  return raw;
 }
 
 /**
@@ -169,7 +379,10 @@ export async function GET(request: NextRequest) {
  *   OR: { raw: "{ agents: { defaults: { workspace: '~/new' } } }", baseHash: "..." }
  */
 /** Validate config payload before sending to gateway. */
-function validateConfigPayload(raw: string | undefined, patch: Record<string, unknown> | undefined): { ok: true; patchRaw: string } | { ok: false; error: string } {
+function validateConfigPayload(
+  raw: string | undefined,
+  patch: Record<string, unknown> | undefined
+): { ok: true; patchObj: Record<string, unknown> } | { ok: false; error: string } {
   if (raw !== undefined) {
     if (typeof raw !== "string") {
       return { ok: false, error: "raw must be a JSON string" };
@@ -184,13 +397,13 @@ function validateConfigPayload(raw: string | undefined, patch: Record<string, un
     if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
       return { ok: false, error: "Config must be a JSON object (not array or primitive)" };
     }
-    return { ok: true, patchRaw: raw };
+    return { ok: true, patchObj: parsed as Record<string, unknown> };
   }
   if (patch !== undefined) {
     if (patch === null || typeof patch !== "object" || Array.isArray(patch)) {
       return { ok: false, error: "patch must be a JSON object" };
     }
-    return { ok: true, patchRaw: JSON.stringify(patch) };
+    return { ok: true, patchObj: patch };
   }
   return { ok: false, error: "raw or patch required" };
 }
@@ -215,23 +428,133 @@ export async function PATCH(request: NextRequest) {
     if (!validated.ok) {
       return NextResponse.json({ error: validated.error }, { status: 400 });
     }
-    const patchRaw = validated.patchRaw;
+    const rawProvided = raw !== undefined;
+    let workingPatchObj = validated.patchObj;
+    let workingBaseHash = String(baseHash || "").trim();
 
-    const result = await gatewayCall<Record<string, unknown>>(
-      "config.patch",
-      {
-        raw: patchRaw,
-        baseHash,
-        restartDelayMs: 2000,
-      },
-      20000
-    );
+    const applyPatch = async (
+      patchObj: Record<string, unknown>,
+      hash: string
+    ): Promise<Record<string, unknown>> => {
+      return gatewayCallWithRetry<Record<string, unknown>>(
+        "config.patch",
+        {
+          raw: JSON.stringify(patchObj),
+          baseHash: hash,
+          restartDelayMs: 2000,
+        },
+        20000,
+        1
+      );
+    };
 
-    return NextResponse.json({ ok: true, result });
+    const touchesGatewayAuthMode =
+      typeof getByDottedPath(workingPatchObj, "gateway.auth.mode") === "string";
+
+    if (touchesGatewayAuthMode) {
+      try {
+        const latest = await readConfigHashAndParsed();
+        workingPatchObj = ensureGatewayAuthPatchDefaults(
+          workingPatchObj,
+          latest.parsed
+        );
+      } catch {
+        workingPatchObj = ensureGatewayAuthPatchDefaults(workingPatchObj, null);
+      }
+    }
+
+    let result: Record<string, unknown> | null = null;
+    let repaired = false;
+    let finalPatchError: unknown = null;
+    let doctorOutput: string | undefined;
+
+    try {
+      result = await applyPatch(workingPatchObj, workingBaseHash);
+    } catch (firstErr) {
+      if (isRateLimitError(firstErr)) {
+        finalPatchError = firstErr;
+      } else if (isInvalidConfigError(firstErr)) {
+        const doctor = await runDoctorFixCapture();
+        repaired = doctor.ok;
+        doctorOutput = doctor.output || undefined;
+        try {
+          const latest = await readConfigHashAndParsed();
+          if (latest.baseHash) {
+            workingBaseHash = latest.baseHash;
+          }
+          workingPatchObj = ensureGatewayAuthPatchDefaults(
+            workingPatchObj,
+            latest.parsed
+          );
+          result = await applyPatch(workingPatchObj, workingBaseHash);
+        } catch (retryErr) {
+          finalPatchError = retryErr;
+        }
+      } else if (isHashConflictError(firstErr)) {
+        try {
+          const latest = await readConfigHashAndParsed();
+          if (!latest.baseHash) {
+            throw firstErr;
+          }
+          workingBaseHash = latest.baseHash;
+          workingPatchObj = ensureGatewayAuthPatchDefaults(
+            workingPatchObj,
+            latest.parsed
+          );
+          result = await applyPatch(workingPatchObj, workingBaseHash);
+        } catch (retryErr) {
+          finalPatchError = retryErr;
+        }
+      } else {
+        finalPatchError = firstErr;
+      }
+    }
+
+    if (!result) {
+      const fallbackCandidate = buildConfigSetFallbackEntries(workingPatchObj, rawProvided);
+      if (fallbackCandidate.entries && fallbackCandidate.entries.length > 0) {
+        const fallback = await applyConfigSetFallback(fallbackCandidate.entries);
+        if (fallback.failures.length === 0) {
+          return NextResponse.json({
+            ok: true,
+            result: {
+              method: "config.set",
+              updatedPaths: fallback.updatedPaths,
+            },
+            repairedConfig: repaired || undefined,
+            fallbackUsed: true,
+            fallbackMessage:
+              "Saved using compatibility mode because the gateway rejected live patching.",
+          });
+        }
+      }
+
+      const details = String(finalPatchError || "Unknown config.patch failure");
+      const responseBody: Record<string, unknown> = {
+        error: friendlyPatchError(finalPatchError || details),
+        details,
+      };
+      if (doctorOutput) {
+        responseBody.doctorOutput = doctorOutput;
+      }
+      if (fallbackCandidate.reason) {
+        responseBody.fallback = fallbackCandidate.reason;
+      }
+      return NextResponse.json(
+        responseBody,
+        { status: isRateLimitError(finalPatchError) ? 429 : 400 }
+      );
+    }
+
+    return NextResponse.json({
+      ok: true,
+      result,
+      repairedConfig: repaired || undefined,
+    });
   } catch (err) {
     const msg = String(err);
     console.error("Config PATCH error:", msg);
-    return NextResponse.json({ error: msg }, { status: 400 });
+    return NextResponse.json({ error: friendlyPatchError(msg), details: msg }, { status: 400 });
   }
 }
 

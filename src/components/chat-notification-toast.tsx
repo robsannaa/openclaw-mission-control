@@ -93,7 +93,7 @@ export function ChatNotificationToast() {
           <button
             type="button"
             onClick={() => goToChat(toast.id)}
-            className="shrink-0 rounded-lg bg-violet-600/20 px-3 py-1.5 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-600/30 hover:text-violet-200"
+            className="shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
           >
             View
           </button>

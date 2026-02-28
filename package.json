@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/dashboard",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Mission Control — open-source OpenClaw GUI and AI agent dashboard for managing local AI agents, models, memory, and skills",
   "keywords": [
     "openclaw",
@@ -22,9 +22,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/openclaw/dashboard.git"
+    "url": "https://github.com/robsannaa/openclaw-mission-control.git"
   },
-  "homepage": "https://github.com/openclaw/dashboard",
+  "homepage": "https://github.com/robsannaa/openclaw-mission-control",
   "bin": {
     "openclaw-dashboard": "./bin/cli.mjs"
   },

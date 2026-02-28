@@ -81,7 +81,7 @@ export function OpenClawUpdateBanner() {
           <button
             type="button"
             onClick={() => setShowChangelog(true)}
-            className="flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/20 px-2 py-1 text-xs font-medium text-violet-200 transition-colors hover:bg-violet-500/30"
+            className="flex items-center gap-1 rounded-md border border-border bg-card px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
           >
             <FileText className="h-3 w-3" />
             View changelog
@@ -91,7 +91,7 @@ export function OpenClawUpdateBanner() {
               href={info.releaseUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-600 px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-violet-500"
+              className="flex items-center gap-1 rounded-md border border-border bg-primary text-primary-foreground px-2 py-1 text-xs font-medium transition-colors hover:bg-primary/90"
             >
               <ExternalLink className="h-3 w-3" />
               Update
@@ -156,7 +156,7 @@ export function OpenClawUpdateBanner() {
                     href={info.releaseUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-500"
+                    className="flex items-center gap-1 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium hover:bg-primary/90"
                   >
                     <ExternalLink className="h-3 w-3" />
                     Open release page

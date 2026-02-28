@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, useSyncExternalStore } from "react";
 import {
   Search,
   RefreshCw,
@@ -17,6 +17,13 @@ import {
 import { cn } from "@/lib/utils";
 import { SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
+import {
+  getTimeFormatServerSnapshot,
+  getTimeFormatSnapshot,
+  subscribeTimeFormatPreference,
+  withTimeFormat,
+  type TimeFormatPreference,
+} from "@/lib/time-format-preference";
 
 type LogEntry = {
   line: number;
@@ -80,16 +87,14 @@ function sourceClass(source: string): string {
   }
 }
 
-function formatLogTime(time: string): string {
+function formatLogTime(time: string, timeFormat: TimeFormatPreference): string {
   if (!time) return "";
   try {
     const d = new Date(time);
-    return d.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
+    return d.toLocaleTimeString(
+      "en-US",
+      withTimeFormat({ hour: "2-digit", minute: "2-digit", second: "2-digit" }, timeFormat),
+    );
   } catch {
     return time;
   }
@@ -109,6 +114,11 @@ function formatLogDate(time: string): string {
 }
 
 export function LogsView() {
+  const timeFormat = useSyncExternalStore(
+    subscribeTimeFormatPreference,
+    getTimeFormatSnapshot,
+    getTimeFormatServerSnapshot,
+  );
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [stats, setStats] = useState<LogStats>({ info: 0, warn: 0, error: 0 });
@@ -409,7 +419,7 @@ export function LogsView() {
                       )}
                     >
                     <span className="w-16 shrink-0 text-foreground/45 dark:text-muted-foreground/60">
-                      {formatLogTime(entry.time)}
+                      {formatLogTime(entry.time, timeFormat)}
                     </span>
                     <LevelIcon
                       className={cn("mt-0.5 h-3 w-3 shrink-0", style.iconClass)}
