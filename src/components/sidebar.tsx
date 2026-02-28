@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   ListChecks,
   Clock,
+  CalendarDays,
   MessageSquare,
   Radio,
   Brain,
@@ -73,6 +74,7 @@ const navItems: NavItem[] = [
   { section: "agents", label: "Subagents", icon: Users2, href: "/agents?tab=subagents", tab: "subagents", isSubItem: true },
   // ── Work ──
   { group: "Work", section: "tasks", label: "Tasks", icon: ListChecks, href: "/tasks" },
+  { section: "calendar", label: "Calendar", icon: CalendarDays, href: "/calendar" },
   { section: "sessions", label: "Sessions", icon: MessageSquare, href: "/sessions" },
   { section: "cron", label: "Cron Jobs", icon: Clock, href: "/cron" },
   { section: "cron", label: "Heartbeat", icon: Heart, href: "/heartbeat", tab: "heartbeat", isSubItem: true },
@@ -120,6 +122,7 @@ function deriveSectionFromPath(pathname: string): string | null {
     "chat",
     "agents",
     "tasks",
+    "calendar",
     "sessions",
     "cron",
     "heartbeat",
