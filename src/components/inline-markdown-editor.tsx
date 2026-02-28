@@ -232,6 +232,8 @@ export function InlineMarkdownEditor({
               setIsEditing((prev) => !prev);
             }}
             className="rounded-md border border-foreground/10 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-pressed={isEditing}
+            aria-label={isEditing ? "Switch to preview mode" : "Switch to edit mode"}
           >
             {isEditing ? "Preview" : "Edit"}
           </button>

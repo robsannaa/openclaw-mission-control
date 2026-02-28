@@ -261,6 +261,7 @@ export function MemoryView() {
   const [workspaceFilesCollapsed, setWorkspaceFilesCollapsed] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasInitializedCollapse = useRef(false);
+  const hasLoadedWorkspaceFilesCollapse = useRef(false);
   const jumpTarget = searchParams.get("memoryPath") || searchParams.get("memoryFile");
 
   // Context menu state
@@ -744,11 +745,14 @@ export function MemoryView() {
       setWorkspaceFilesCollapsed(raw === "1");
     } catch {
       // ignore storage errors
+    } finally {
+      hasLoadedWorkspaceFilesCollapse.current = true;
     }
   }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (!hasLoadedWorkspaceFilesCollapse.current) return;
     try {
       window.localStorage.setItem(
         WORKSPACE_FILES_COLLAPSED_KEY,
@@ -1032,6 +1036,8 @@ export function MemoryView() {
                   <button
                     type="button"
                     onClick={() => setWorkspaceFilesCollapsed((prev) => !prev)}
+                    aria-expanded={!workspaceFilesCollapsed}
+                    aria-controls="workspace-files-list"
                     className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-muted-foreground"
                   >
                     {workspaceFilesCollapsed ? (
@@ -1064,8 +1070,10 @@ export function MemoryView() {
                     </button>
                   )}
                 </div>
-                {!workspaceFilesCollapsed && (
-                  <div className="space-y-1.5">
+                <div
+                  id="workspace-files-list"
+                  className={cn("space-y-1.5", workspaceFilesCollapsed && "hidden")}
+                >
                     {filteredWorkspaceFiles.map((file) => {
                       const key = `workspace:${file.name}`;
                       const selectedHere = selected === key;
@@ -1107,8 +1115,7 @@ export function MemoryView() {
                         </button>
                       );
                     })}
-                  </div>
-                )}
+                </div>
               </div>
             )}
 
