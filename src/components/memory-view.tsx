@@ -25,6 +25,7 @@ import { InlineMarkdownEditor } from "./inline-markdown-editor";
 import { MemoryGraphView } from "./memory-graph-view";
 import { SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
+import { SaveShortcut } from "@/components/ui/save-shortcut";
 
 type CtxMenuState = { x: number; y: number; entry: DailyEntry } | null;
 
@@ -218,6 +219,7 @@ function normalizeMemoryPath(rawPath: string): string {
 
 const JOURNAL_PREFIX = "journal:";
 const AGENT_MEMORY_PREFIX = "agent-memory:";
+const WORKSPACE_FILES_COLLAPSED_KEY = "memory.workspace-files-collapsed";
 
 function journalKey(file: string): string {
   return `${JOURNAL_PREFIX}${file}`;
@@ -256,8 +258,10 @@ export function MemoryView() {
   const [indexingFile, setIndexingFile] = useState<string | null>(null);
   const [reindexingAll, setReindexingAll] = useState(false);
   const [collapsedPeriods, setCollapsedPeriods] = useState<Set<string>>(new Set());
+  const [workspaceFilesCollapsed, setWorkspaceFilesCollapsed] = useState(false);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasInitializedCollapse = useRef(false);
+  const hasLoadedWorkspaceFilesCollapse = useRef(false);
   const jumpTarget = searchParams.get("memoryPath") || searchParams.get("memoryFile");
 
   // Context menu state
@@ -733,6 +737,32 @@ export function MemoryView() {
     void fetchMemoryData(true);
   }, [fetchMemoryData]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = window.localStorage.getItem(WORKSPACE_FILES_COLLAPSED_KEY);
+      if (raw == null) return;
+      setWorkspaceFilesCollapsed(raw === "1");
+    } catch {
+      // ignore storage errors
+    } finally {
+      hasLoadedWorkspaceFilesCollapse.current = true;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!hasLoadedWorkspaceFilesCollapse.current) return;
+    try {
+      window.localStorage.setItem(
+        WORKSPACE_FILES_COLLAPSED_KEY,
+        workspaceFilesCollapsed ? "1" : "0"
+      );
+    } catch {
+      // ignore storage errors
+    }
+  }, [workspaceFilesCollapsed]);
+
   const clearSearchJumpParams = useCallback(() => {
     const next = new URLSearchParams(searchParams.toString());
     let changed = false;
@@ -1003,12 +1033,23 @@ export function MemoryView() {
             {filteredWorkspaceFiles.length > 0 && (
               <div className="mb-4">
                 <div className="mb-2 flex items-center gap-2 px-1">
-                  <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/60">
-                    Workspace Files
-                  </span>
-                  <span className="rounded bg-muted/80 px-1.5 py-0.5 text-xs text-muted-foreground">
-                    {filteredWorkspaceFiles.length}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setWorkspaceFilesCollapsed((prev) => !prev)}
+                    aria-expanded={!workspaceFilesCollapsed}
+                    aria-controls="workspace-files-list"
+                    className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-muted-foreground"
+                  >
+                    {workspaceFilesCollapsed ? (
+                      <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                    <span>Workspace Files</span>
+                    <span className="rounded bg-muted/80 px-1.5 py-0.5 text-xs text-muted-foreground">
+                      {filteredWorkspaceFiles.length}
+                    </span>
+                  </button>
                   {hasUnindexedWorkspaceFiles && (
                     <button
                       type="button"
@@ -1029,48 +1070,51 @@ export function MemoryView() {
                     </button>
                   )}
                 </div>
-                <div className="space-y-1.5">
-                  {filteredWorkspaceFiles.map((file) => {
-                    const key = `workspace:${file.name}`;
-                    const selectedHere = selected === key;
-                    const badge = vectorBadge(file);
-                    const BadgeIcon = badge.Icon;
-                    return (
-                      <button
-                        key={file.name}
-                        type="button"
-                        onClick={() => loadWorkspaceFile(file)}
-                        className={cn(
-                          "w-full rounded-lg border px-3 py-2 text-left transition-colors",
-                          selectedHere
-                            ? "border-indigo-500/35 bg-indigo-500/10 ring-1 ring-indigo-400/20"
-                            : "border-foreground/10 bg-foreground/5 hover:bg-foreground/8"
-                        )}
-                      >
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
-                          <span className="flex-1 truncate text-xs font-medium text-foreground/90">
-                            {file.name}
-                          </span>
-                        </div>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-xs font-medium",
-                              badge.className
-                            )}
-                          >
-                            <BadgeIcon className="h-2.5 w-2.5" />
-                            {badge.label}
-                          </span>
-                          <span className="text-xs text-muted-foreground/70">
-                            {file.words > 0 ? `${file.words}w` : "empty"}
-                            {file.mtime ? ` • ${formatAgo(file.mtime)}` : ""}
-                          </span>
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div
+                  id="workspace-files-list"
+                  className={cn("space-y-1.5", workspaceFilesCollapsed && "hidden")}
+                >
+                    {filteredWorkspaceFiles.map((file) => {
+                      const key = `workspace:${file.name}`;
+                      const selectedHere = selected === key;
+                      const badge = vectorBadge(file);
+                      const BadgeIcon = badge.Icon;
+                      return (
+                        <button
+                          key={file.name}
+                          type="button"
+                          onClick={() => loadWorkspaceFile(file)}
+                          className={cn(
+                            "w-full rounded-lg border px-3 py-2 text-left transition-colors",
+                            selectedHere
+                              ? "border-indigo-500/35 bg-indigo-500/10 ring-1 ring-indigo-400/20"
+                              : "border-foreground/10 bg-foreground/5 hover:bg-foreground/8"
+                          )}
+                        >
+                          <div className="flex items-center gap-2">
+                            <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                            <span className="flex-1 truncate text-xs font-medium text-foreground/90">
+                              {file.name}
+                            </span>
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            <span
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-full border px-1 py-0.5 text-xs font-medium",
+                                badge.className
+                              )}
+                            >
+                              <BadgeIcon className="h-2.5 w-2.5" />
+                              {badge.label}
+                            </span>
+                            <span className="text-xs text-muted-foreground/70">
+                              {file.words > 0 ? `${file.words}w` : "empty"}
+                              {file.mtime ? ` • ${formatAgo(file.mtime)}` : ""}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -1449,11 +1493,12 @@ export function MemoryView() {
                   {detailMeta.mtime && ` • ${formatAgo(detailMeta.mtime)}`}
                   {detailMeta.kind !== "workspace-file" && (
                     <>
-                      {" • Click to edit • "}
-                      <kbd className="rounded bg-muted px-1 py-0.5 text-xs font-mono text-muted-foreground">
-                        &#8984;S
-                      </kbd>{" "}
-                      to save
+                      {" • Use "}
+                      <span className="inline-flex items-center rounded-md border border-foreground/10 bg-card/50 px-1.5 py-0.5 text-[11px] font-medium text-foreground/80">
+                        Edit
+                      </span>
+                      {" to modify • "}
+                      <SaveShortcut /> to save
                     </>
                   )}
                   {detailMeta.kind === "workspace-file" && " • Read-only workspace file"}

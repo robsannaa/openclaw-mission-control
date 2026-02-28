@@ -4,6 +4,7 @@ import { useRef, useState, useCallback, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import { SaveShortcut } from "@/components/ui/save-shortcut";
 
 /* ── types ────────────────────────────────────────── */
 
@@ -20,6 +21,8 @@ type Props = {
   className?: string;
   /** Placeholder when content is empty */
   placeholder?: string;
+  /** Initial panel mode */
+  defaultMode?: "preview" | "edit";
 };
 
 /* ── Preview styling (matches MarkdownContent / docs) ── */
@@ -139,9 +142,11 @@ export function InlineMarkdownEditor({
   onSave,
   className,
   placeholder = "Write your markdown here…",
+  defaultMode = "preview",
 }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [localValue, setLocalValue] = useState(content);
+  const [isEditing, setIsEditing] = useState(defaultMode === "edit");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastEmittedRef = useRef(content);
 
@@ -152,6 +157,14 @@ export function InlineMarkdownEditor({
       queueMicrotask(() => setLocalValue(content));
     }
   }, [content]);
+
+  useEffect(() => {
+    setIsEditing(defaultMode === "edit");
+  }, [defaultMode]);
+
+  useEffect(() => {
+    if (isEditing) textareaRef.current?.focus();
+  }, [isEditing]);
 
   const emitChange = useCallback(
     (md: string) => {
@@ -203,39 +216,65 @@ export function InlineMarkdownEditor({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 rounded-lg border border-foreground/[0.08] bg-foreground/[0.02] overflow-hidden",
+        "flex h-full min-h-0 flex-col rounded-lg border border-foreground/[0.08] bg-foreground/[0.02] overflow-hidden",
         className
       )}
     >
-      <textarea
-        ref={textareaRef}
-        value={localValue}
-        onChange={handleChange}
-        onBlur={handleBlur}
-        onKeyDown={handleKeyDown}
-        placeholder={placeholder}
-        spellCheck={true}
-        className={cn(
-          "min-h-[12rem] w-full resize-y rounded-none border-0 bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50",
-          "focus:outline-none focus:ring-0",
-          "font-mono leading-relaxed caret-violet-500"
-        )}
-        aria-label="Markdown editor"
-      />
-      <div className="border-t border-foreground/[0.06] bg-card/30 px-4 py-3">
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-          Preview
-        </p>
-        <div className="min-h-[6rem] overflow-y-auto text-left">
-          {localValue.trim() ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={previewComponents}>
-              {localValue}
-            </ReactMarkdown>
-          ) : (
-            <p className="text-sm italic text-muted-foreground/50">Nothing to preview yet.</p>
-          )}
+      <div className="border-b border-foreground/[0.06] bg-card/30 px-4 py-2">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+            {isEditing ? "Editor" : "Preview"}
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              if (isEditing) textareaRef.current?.blur();
+              setIsEditing((prev) => !prev);
+            }}
+            className="rounded-md border border-foreground/10 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-pressed={isEditing}
+            aria-label={isEditing ? "Switch to preview mode" : "Switch to edit mode"}
+          >
+            {isEditing ? "Preview" : "Edit"}
+          </button>
         </div>
       </div>
+
+      {isEditing ? (
+        <textarea
+          ref={textareaRef}
+          value={localValue}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          spellCheck={true}
+          className={cn(
+            "h-full min-h-0 w-full flex-1 resize-none rounded-none border-0 bg-transparent px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground/50",
+            "focus:outline-none focus:ring-0",
+            "font-mono leading-relaxed caret-violet-500"
+          )}
+          aria-label="Markdown editor"
+        />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+          <div className="h-full text-left">
+            {localValue.trim() ? (
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={previewComponents}>
+                {localValue}
+              </ReactMarkdown>
+            ) : (
+              <p className="text-sm italic text-muted-foreground/50">Nothing to preview yet.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isEditing && (
+        <div className="border-t border-foreground/[0.06] bg-card/20 px-4 py-2 text-[11px] text-muted-foreground/70">
+          Press <SaveShortcut keyClassName="text-[10px]" /> to save.
+        </div>
+      )}
     </div>
   );
 }
