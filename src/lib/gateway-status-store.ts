@@ -43,7 +43,18 @@ async function poll() {
   if (inFlight || typeof window === "undefined") return;
   inFlight = true;
   try {
-    const res = await fetch("/api/gateway", { cache: "no-store" });
+    // Abort if the API doesn't respond within 15s — prevents the poll
+    // from hanging when the server-side CLI timeout is long (30s).
+    const res = await fetch("/api/gateway", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) {
+      // Proxy 502, 503, etc. — treat as offline without trying to parse HTML.
+      setSnapshot({ status: "offline", health: null });
+      switchToOfflinePolling();
+      return;
+    }
     const data = await res.json();
     const nextStatus = ((data.status as GatewayStatus) || "offline");
     setSnapshot({
@@ -55,9 +66,15 @@ async function poll() {
       fastPollCount = 0;
       switchToNormalPolling();
       setSnapshot({ restarting: false });
+    } else if (nextStatus === "offline" || nextStatus === "degraded") {
+      switchToOfflinePolling();
+    } else if (fastPollCount === 0) {
+      // Ensure we're on normal interval when healthy and not in fast mode.
+      switchToNormalPolling();
     }
   } catch {
     setSnapshot({ status: "offline", health: null });
+    switchToOfflinePolling();
   } finally {
     inFlight = false;
   }
@@ -74,6 +91,16 @@ function switchToNormalPolling() {
   pollTimer = setInterval(() => {
     void poll();
   }, 12000);
+}
+
+/** Poll every 5s when offline — detect recovery faster. */
+function switchToOfflinePolling() {
+  // Don't downgrade from fast polling (restart recovery).
+  if (fastPollCount > 0) return;
+  clearPollTimer();
+  pollTimer = setInterval(() => {
+    void poll();
+  }, 5000);
 }
 
 function switchToFastPolling() {

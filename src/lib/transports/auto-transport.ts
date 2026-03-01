@@ -17,7 +17,11 @@ export class AutoTransport implements OpenClawClient {
   private preferHttp = false;
   private lastProbe = 0;
   private probing: Promise<void> | null = null;
-  private readonly probeIntervalMs = 60_000;
+  // Re-probe quickly after a fallback (15s) so HTTP is rediscovered fast.
+  // Use a longer interval (60s) when the transport is stable.
+  private readonly probeIntervalStableMs = 60_000;
+  private readonly probeIntervalRecoveryMs = 15_000;
+  private inRecovery = false;
 
   getTransport(): TransportMode {
     return "auto";
@@ -25,7 +29,10 @@ export class AutoTransport implements OpenClawClient {
 
   /** Probe Gateway availability and cache the result. */
   private async probe(): Promise<void> {
-    if (Date.now() - this.lastProbe < this.probeIntervalMs) return;
+    const interval = this.inRecovery
+      ? this.probeIntervalRecoveryMs
+      : this.probeIntervalStableMs;
+    if (Date.now() - this.lastProbe < interval) return;
     // Deduplicate concurrent probes.
     if (this.probing) return this.probing;
     this.probing = (async () => {
@@ -39,6 +46,7 @@ export class AutoTransport implements OpenClawClient {
           signal: AbortSignal.timeout(2000),
         });
         this.preferHttp = res.ok;
+        if (res.ok) this.inRecovery = false;
       } catch {
         this.preferHttp = false;
       } finally {
@@ -64,7 +72,10 @@ export class AutoTransport implements OpenClawClient {
     } catch (err) {
       if (primary === this.http) {
         // Mark HTTP as unavailable and retry with CLI.
+        // Enter recovery mode so the next probe fires in 15s instead
+        // of 60s — rediscovers HTTP quickly after a transient failure.
         this.preferHttp = false;
+        this.inRecovery = true;
         this.lastProbe = Date.now();
         return fn(this.cli);
       }

@@ -33,13 +33,24 @@ export async function GET() {
       ["health"],
       30000
     );
+    // Validate the response has the expected shape — a malformed or empty
+    // response should not silently report "degraded".
+    if (!health || typeof health !== "object") {
+      return NextResponse.json({
+        status: "offline",
+        health: { ok: false, error: "Unexpected health check response" },
+      });
+    }
     return NextResponse.json({
       status: health.ok ? "online" : "degraded",
       health,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const isTimeout = message.includes("timed out") || message.includes("TIMEOUT") || message.includes("aborted");
+    const isTimeout =
+      message.includes("timed out") ||
+      message.includes("TIMEOUT") ||
+      message.includes("aborted");
     return NextResponse.json({
       status: "offline",
       health: {
