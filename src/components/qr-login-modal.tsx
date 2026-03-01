@@ -218,7 +218,7 @@ export function QrLoginModal({
             <p className="text-center text-sm text-red-300">{errorMessage || "Login failed."}</p>
             <button
               type="button"
-              onClick={connect}
+              onClick={() => connect()}
               className="mt-1 inline-flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/80"
             >
               <RefreshCw className="h-3 w-3" />

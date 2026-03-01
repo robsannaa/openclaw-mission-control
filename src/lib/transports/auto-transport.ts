@@ -30,12 +30,11 @@ export class AutoTransport implements OpenClawClient {
     if (this.probing) return this.probing;
     this.probing = (async () => {
       try {
-        const token = process.env.OPENCLAW_GATEWAY_TOKEN;
-        if (!token) {
-          // HTTP transport requires a token; fall back to CLI.
-          this.preferHttp = false;
-          return;
-        }
+        // Try reaching the Gateway over HTTP regardless of whether a
+        // token is configured. Loopback and same-network connections
+        // are often trusted without auth. If auth IS required for
+        // actual commands, withFallback() will catch the 401/403 and
+        // retry via CLI — then the next probe cycle re-evaluates.
         const res = await this.http.gatewayFetch("/", {
           signal: AbortSignal.timeout(2000),
         });
