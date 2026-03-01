@@ -9,6 +9,7 @@ import { ChatNotificationToast } from "@/components/chat-notification-toast";
 import { RestartAnnouncementBar } from "@/components/restart-announcement-bar";
 import { SetupGate } from "@/components/setup-gate";
 import { UsageAlertMonitor } from "@/components/usage-alert-monitor";
+import { OpenClawUpdateBanner } from "@/components/openclaw-update-banner";
 
 const figtree = Figtree({
   variable: "--font-figtree",
@@ -119,6 +120,7 @@ export default function RootLayout({
             </div>
             <AgentChatPanel />
             <ChatNotificationToast />
+            <OpenClawUpdateBanner />
             <UsageAlertMonitor />
           </SetupGate>
         </ThemeProvider>

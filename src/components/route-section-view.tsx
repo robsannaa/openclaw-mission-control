@@ -4,7 +4,6 @@ import dynamic from "next/dynamic";
 import { useEffect } from "react";
 import { DashboardView } from "@/components/dashboard-view";
 import { ChatView } from "@/components/chat-view";
-import { OpenClawUpdateBanner } from "@/components/openclaw-update-banner";
 import { setChatActive } from "@/lib/chat-store";
 
 function SectionLoading() {
@@ -224,10 +223,7 @@ export function RouteSectionView({ section }: { section: DashboardSection }) {
       </div>
 
       {!isChatSection && (
-        <>
-          <OpenClawUpdateBanner />
-          <SectionContent section={section} />
-        </>
+        <SectionContent section={section} />
       )}
     </>
   );
