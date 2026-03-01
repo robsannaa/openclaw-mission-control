@@ -39,9 +39,9 @@ function TerminalPane({
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<unknown>(null);
   const fitRef = useRef<unknown>(null);
-  const sseRef = useRef<AbortController | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const inputTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initRef = useRef(false);
 
   useEffect(() => {
@@ -51,7 +51,6 @@ function TerminalPane({
     let disposed = false;
 
     (async () => {
-      // Dynamic import to avoid SSR issues
       const { Terminal } = await import("@xterm/xterm");
       const { FitAddon } = await import("@xterm/addon-fit");
       const { WebLinksAddon } = await import("@xterm/addon-web-links");
@@ -69,9 +68,9 @@ function TerminalPane({
         theme: {
           background: "#0c0c0c",
           foreground: "#d4d4d8",
-          cursor: "#a78bfa",
+          cursor: "#c87941",
           cursorAccent: "#0c0c0c",
-          selectionBackground: "#7c3aed40",
+          selectionBackground: "#c8794140",
           selectionForeground: "#ffffff",
           black: "#09090b",
           red: "#ef4444",
@@ -100,18 +99,18 @@ function TerminalPane({
       term.loadAddon(new WebLinksAddon());
       term.open(containerRef.current);
 
-      // Fit and focus after DOM is ready
+      termRef.current = term;
+      fitRef.current = fitAddon;
+
+      // Fit after DOM settles
       requestAnimationFrame(() => {
         try { fitAddon.fit(); } catch { /* */ }
         term.focus();
       });
 
-      // Also focus on click anywhere in the container
+      // Focus on click
       const clickHandler = () => term.focus();
       containerRef.current.addEventListener("click", clickHandler);
-
-      termRef.current = term;
-      fitRef.current = fitAddon;
 
       // ── Send keystrokes to backend ──
       let inputBuffer = "";
@@ -129,7 +128,6 @@ function TerminalPane({
 
       term.onData((data: string) => {
         inputBuffer += data;
-        // Flush immediately for Enter, Ctrl+C, etc. or batch with tiny delay
         if (data === "\r" || data === "\x03" || data === "\x04" || data.length > 1) {
           if (inputTimerRef.current) clearTimeout(inputTimerRef.current);
           inputTimerRef.current = null;
@@ -142,21 +140,18 @@ function TerminalPane({
 
       // ── Connect SSE for output ──
       const abortController = new AbortController();
-      sseRef.current = abortController;
 
       try {
         const res = await fetch(
           `/api/terminal?action=stream&session=${sessionId}`,
-          { signal: abortController.signal }
+          { signal: abortController.signal },
         );
         if (!res.ok || !res.body) {
           term.writeln("\r\n\x1b[31m[Failed to connect terminal stream]\x1b[0m");
           onDied();
           return;
         }
-        const reader = res.body?.getReader();
-        if (!reader) return;
-
+        const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let partial = "";
 
@@ -170,14 +165,12 @@ function TerminalPane({
             partial = lines.pop() || "";
 
             for (const line of lines) {
+              if (line.startsWith(":")) continue; // SSE comment (heartbeat)
               if (!line.startsWith("data: ")) continue;
               try {
                 const msg = JSON.parse(line.slice(6));
                 if (msg.type === "output") {
                   term.write(msg.text);
-                  if (typeof msg.text === "string" && msg.text.includes("[Session ended]")) {
-                    onDied();
-                  }
                 } else if (msg.type === "status" && !msg.alive) {
                   onDied();
                 }
@@ -188,30 +181,32 @@ function TerminalPane({
           }
         };
 
-        pump().catch(() => {
-          // Connection closed
-        });
+        pump().catch(() => { /* connection closed */ });
       } catch {
         // Aborted or failed
       }
 
-      // ── Resize observer ──
+      // ── Resize observer with debounce ──
+      const sendResize = () => {
+        fetch("/api/terminal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "resize",
+            session: sessionId,
+            cols: term.cols,
+            rows: term.rows,
+          }),
+        }).catch(() => {});
+      };
+
       const observer = new ResizeObserver(() => {
         try {
           fitAddon.fit();
-          fetch("/api/terminal", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              action: "resize",
-              session: sessionId,
-              cols: term.cols,
-              rows: term.rows,
-            }),
-          }).catch(() => {});
-        } catch {
-          // ignore
-        }
+        } catch { return; }
+        // Debounce resize API calls
+        if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = setTimeout(sendResize, 100);
       });
       observer.observe(containerRef.current);
 
@@ -223,6 +218,10 @@ function TerminalPane({
           clearTimeout(inputTimerRef.current);
           inputTimerRef.current = null;
         }
+        if (resizeTimerRef.current) {
+          clearTimeout(resizeTimerRef.current);
+          resizeTimerRef.current = null;
+        }
         containerRef.current?.removeEventListener("click", clickHandler);
         term.dispose();
       };
@@ -231,10 +230,13 @@ function TerminalPane({
     return () => {
       cleanupRef.current?.();
       cleanupRef.current = null;
-      sseRef.current?.abort();
       if (inputTimerRef.current) {
         clearTimeout(inputTimerRef.current);
         inputTimerRef.current = null;
+      }
+      if (resizeTimerRef.current) {
+        clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = null;
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -260,8 +262,8 @@ function TerminalPane({
     <div
       ref={containerRef}
       className={cn(
-        "absolute inset-0 bg-zinc-950 p-1",
-        visible ? "block" : "hidden"
+        "absolute inset-0 bg-[#0c0c0c] p-1",
+        visible ? "block" : "hidden",
       )}
     />
   );
@@ -283,7 +285,7 @@ export function TerminalView() {
       const res = await fetch("/api/terminal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "create" }),
+        body: JSON.stringify({ action: "create", cols: 80, rows: 24 }),
       });
       const data = await res.json();
       if (data.ok && data.session) {
@@ -301,19 +303,16 @@ export function TerminalView() {
     setCreating(false);
   }, []);
 
-  // Create first session on mount (guarded for React strict mode)
+  // Create first session on mount
   useEffect(() => {
     if (createdInitialRef.current) return;
     createdInitialRef.current = true;
-    const timer = setTimeout(() => {
-      void createTab();
-    }, 0);
+    const timer = setTimeout(() => { void createTab(); }, 0);
     return () => clearTimeout(timer);
   }, [createTab]);
 
   const closeTab = useCallback(
     async (id: string) => {
-      // Kill session
       fetch("/api/terminal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -330,33 +329,26 @@ export function TerminalView() {
         return next;
       });
     },
-    [activeTab]
+    [activeTab],
   );
 
   const clearTerminal = useCallback(() => {
-    // Send clear command
     if (!activeTab) return;
     fetch("/api/terminal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "input",
-          session: activeTab,
-          data: "clear\r",
-        }),
-      }).catch(() => {});
+      body: JSON.stringify({ action: "input", session: activeTab, data: "clear\r" }),
+    }).catch(() => {});
   }, [activeTab]);
 
   return (
     <SectionLayout
-      className={cn(
-        fullscreen && "fixed inset-0 z-50 bg-background"
-      )}
+      className={cn(fullscreen && "fixed inset-0 z-50 bg-background")}
     >
       {/* ── Header ── */}
       <div className="flex items-center justify-between border-b border-border bg-card/50 px-4 py-2">
         <div className="flex items-center gap-2">
-          <TerminalIcon className="h-5 w-5 text-violet-500" />
+          <TerminalIcon className="h-5 w-5 text-[var(--accent-brand-text)]" />
           <h2 className="text-xs font-semibold">Terminal</h2>
           <span className="text-xs text-muted-foreground rounded-full bg-muted px-2 py-0.5">
             {tabs.length} session{tabs.length !== 1 ? "s" : ""}
@@ -387,7 +379,7 @@ export function TerminalView() {
       </div>
 
       {/* ── Tab bar ── */}
-      <div className="flex items-center gap-0 border-b border-border bg-zinc-950 overflow-x-auto">
+      <div className="flex items-center gap-0 border-b border-border bg-[#0c0c0c] overflow-x-auto">
         {tabs.map((tab) => (
           <div
             key={tab.id}
@@ -395,7 +387,7 @@ export function TerminalView() {
               "group flex items-center gap-1.5 border-r border-zinc-800 px-3 py-1.5 text-xs font-medium cursor-pointer transition-colors",
               activeTab === tab.id
                 ? "bg-zinc-900 text-zinc-200"
-                : "bg-zinc-950 text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900"
+                : "bg-[#0c0c0c] text-zinc-500 hover:text-zinc-300 hover:bg-zinc-900",
             )}
             onClick={() => setActiveTab(tab.id)}
           >
@@ -428,17 +420,17 @@ export function TerminalView() {
       </div>
 
       {/* ── Terminal panes ── */}
-      <div className="flex-1 min-h-0 relative bg-zinc-950">
+      <div className="flex-1 min-h-0 relative bg-[#0c0c0c]">
         {tabs.length === 0 && (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
-              <TerminalIcon className="mx-auto h-10 w-10 text-zinc-700 mb-3" />
-              <p className="text-sm text-zinc-500 mb-3">No active terminals</p>
+              <TerminalIcon className="mx-auto h-10 w-10 text-muted-foreground/30 mb-3" />
+              <p className="text-sm text-muted-foreground/60 mb-3">No active terminals</p>
               <button
                 type="button"
                 onClick={createTab}
                 disabled={creating}
-                className="rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium transition-colors hover:bg-primary/90 disabled:opacity-50"
+                className="rounded-xl bg-primary px-5 py-2.5 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
               >
                 {creating ? "Creating..." : "Open Terminal"}
               </button>
@@ -454,8 +446,8 @@ export function TerminalView() {
             onDied={() =>
               setTabs((prev) =>
                 prev.map((t) =>
-                  t.id === tab.id ? { ...t, alive: false } : t
-                )
+                  t.id === tab.id ? { ...t, alive: false } : t,
+                ),
               )
             }
           />

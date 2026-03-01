@@ -32,11 +32,22 @@ export function useSetupGate() {
   return useContext(SetupGateContext);
 }
 
+/* In-tab notification channel for skip state changes.
+ * StorageEvent only fires in *other* tabs, so we need a custom
+ * pub/sub to notify useSyncExternalStore in the *current* tab. */
+const skipListeners = new Set<() => void>();
+
 function useSkippedOnboarding() {
   const subscribe = useCallback((cb: () => void) => {
+    // Cross-tab via StorageEvent
     const handler = (e: StorageEvent) => { if (e.key === SKIP_KEY) cb(); };
     window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
+    // Same-tab via custom channel
+    skipListeners.add(cb);
+    return () => {
+      window.removeEventListener("storage", handler);
+      skipListeners.delete(cb);
+    };
   }, []);
   return useSyncExternalStore(
     subscribe,
@@ -47,10 +58,17 @@ function useSkippedOnboarding() {
 
 export function skipOnboarding() {
   localStorage.setItem(SKIP_KEY, "true");
+  // Notify same-tab subscribers immediately
+  for (const fn of skipListeners) {
+    try { fn(); } catch { /* */ }
+  }
 }
 
 export function resetOnboardingSkip() {
   localStorage.removeItem(SKIP_KEY);
+  for (const fn of skipListeners) {
+    try { fn(); } catch { /* */ }
+  }
 }
 
 export function SetupGate({ children }: { children: React.ReactNode }) {

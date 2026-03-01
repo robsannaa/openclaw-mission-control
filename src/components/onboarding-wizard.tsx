@@ -1304,51 +1304,52 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                   )}
                 </div>
               )}
-            </div>
-          </div>
 
-          {/* Skip onboarding link */}
-          {step !== "finishing" && (
-            <div className="mt-4 text-center">
-              {!showSkipConfirm ? (
-                <button
-                  type="button"
-                  onClick={() => setShowSkipConfirm(true)}
-                  className="text-xs text-muted-foreground/40 transition-colors hover:text-muted-foreground"
-                >
-                  Skip setup and configure manually
-                </button>
-              ) : (
-                <div className="mx-auto max-w-sm rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-                  <p className="text-xs font-medium text-foreground">Are you sure?</p>
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    Skipping means you&apos;ll need to configure everything manually using the
-                    terminal. You&apos;ll need to set API keys, models, and start the gateway
-                    yourself via the command line.
-                  </p>
-                  <div className="mt-3 flex items-center justify-center gap-3">
+              {/* Skip onboarding — inside the card's scroll area */}
+              {step !== "finishing" && (
+                <div className="mt-6 border-t border-border/50 pt-5 text-center">
+                  {!showSkipConfirm ? (
                     <button
                       type="button"
-                      onClick={() => setShowSkipConfirm(false)}
-                      className="rounded-full border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                      onClick={() => setShowSkipConfirm(true)}
+                      className="text-xs text-muted-foreground/40 transition-colors hover:text-muted-foreground"
                     >
-                      Go back
+                      Skip setup and configure manually
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        skipOnboarding();
-                        onComplete?.();
-                      }}
-                      className="rounded-full bg-amber-600 px-4 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
-                    >
-                      Skip anyway
-                    </button>
-                  </div>
+                  ) : (
+                    <div className="mx-auto max-w-sm rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                      <p className="text-xs font-medium text-foreground">Are you sure?</p>
+                      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                        Skipping means you&apos;ll need to configure everything manually using the
+                        terminal. You&apos;ll need to set API keys, models, and start the gateway
+                        yourself via the command line.
+                      </p>
+                      <div className="mt-3 flex items-center justify-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setShowSkipConfirm(false)}
+                          className="rounded-full border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          Go back
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            skipOnboarding();
+                            onComplete?.();
+                          }}
+                          className="rounded-full bg-amber-600 px-4 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                        >
+                          Skip anyway
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          </div>
+
         </div>
       </div>
 

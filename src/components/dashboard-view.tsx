@@ -1365,6 +1365,13 @@ export function DashboardView() {
           </div>
           <ArrowRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
         </Link>
+        {/* ── Build info ── */}
+        <div className="pt-2 text-center text-[10px] text-muted-foreground/30">
+          Mission Control {process.env.NEXT_PUBLIC_APP_VERSION}
+          {process.env.NEXT_PUBLIC_COMMIT_HASH && (
+            <span className="ml-1 font-mono">({process.env.NEXT_PUBLIC_COMMIT_HASH})</span>
+          )}
+        </div>
       </SectionBody>
     </SectionLayout>
   );

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { spawn, type ChildProcessWithoutNullStreams } from "child_process";
+import { spawn, execSync, type ChildProcessWithoutNullStreams } from "child_process";
 import { getOpenClawHome } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
@@ -8,8 +8,9 @@ export const dynamic = "force-dynamic";
 
 type ShellSession = {
   proc: ChildProcessWithoutNullStreams;
-  buffer: TerminalEvent[];
+  buffer: string[];
   created: number;
+  lastActivity: number;
   cwd: string;
   alive: boolean;
   listeners: Set<(event: TerminalEvent) => void>;
@@ -21,87 +22,189 @@ type TerminalEvent =
 
 const sessions = new Map<string, ShellSession>();
 
-const PY_PTY_BRIDGE = String.raw`import os, pty, select, signal, sys
-shell = sys.argv[1] if len(sys.argv) > 1 else "/bin/zsh"
+/* ── Python PTY bridge ──
+ *
+ * Protocol:
+ *   stdin  → raw keystrokes forwarded to the child PTY
+ *            EXCEPT lines matching __RESIZE__:cols:rows\n which trigger ioctl
+ *   stdout → raw PTY output forwarded to the browser
+ *
+ * The bridge uses pty.fork() to get a real TTY, handles SIGWINCH via
+ * TIOCSWINSZ ioctl, and properly terminates on SIGTERM.
+ */
+const PY_PTY_BRIDGE = `
+import os, pty, select, signal, sys, fcntl, termios, struct, errno
+
+RESIZE_PREFIX = b"__RESIZE__:"
+
+shell = os.environ.get("SHELL", "/bin/zsh")
+if not os.path.exists(shell):
+    for candidate in ["/bin/zsh", "/bin/bash", "/bin/sh"]:
+        if os.path.exists(candidate):
+            shell = candidate
+            break
+
+# Parse initial size from argv
+init_cols = int(sys.argv[1]) if len(sys.argv) > 1 else 80
+init_rows = int(sys.argv[2]) if len(sys.argv) > 2 else 24
+
 pid, fd = pty.fork()
 if pid == 0:
-  os.execvp(shell, [shell, "-i"])
+    os.execvp(shell, [shell, "-l"])
+    sys.exit(1)
 
-stdin_open = True
-child_alive = True
+# Set initial terminal size
+try:
+    winsize = struct.pack("HHHH", init_rows, init_cols, 0, 0)
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
+    os.kill(pid, signal.SIGWINCH)
+except Exception:
+    pass
+
+def set_size(cols, rows):
+    try:
+        winsize = struct.pack("HHHH", rows, cols, 0, 0)
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, winsize)
+        os.kill(pid, signal.SIGWINCH)
+    except Exception:
+        pass
 
 def _terminate(_signum, _frame):
-  global child_alive
-  if child_alive:
     try:
-      os.kill(pid, signal.SIGTERM)
+        os.kill(pid, signal.SIGTERM)
     except Exception:
-      pass
-    child_alive = False
+        pass
+    sys.exit(0)
 
 signal.signal(signal.SIGTERM, _terminate)
-signal.signal(signal.SIGINT, _terminate)
+
+stdin_fd = sys.stdin.fileno()
+stdout_fd = sys.stdout.fileno()
+stdin_buf = b""
 
 while True:
-  fds = [fd]
-  if stdin_open:
-    fds.append(sys.stdin.fileno())
-
-  try:
-    r, _, _ = select.select(fds, [], [])
-  except Exception:
-    break
-
-  if fd in r:
     try:
-      data = os.read(fd, 4096)
-    except OSError:
-      break
-    if not data:
-      break
-    os.write(sys.stdout.fileno(), data)
+        r, _, _ = select.select([fd, stdin_fd], [], [], 30.0)
+    except (OSError, ValueError):
+        break
+    except InterruptedError:
+        continue
 
-  if stdin_open and sys.stdin.fileno() in r:
-    data = os.read(sys.stdin.fileno(), 4096)
-    if not data:
-      stdin_open = False
-    else:
-      os.write(fd, data)
-`;
+    if not r:
+        # Timeout on select — keep looping (allows signal handling)
+        continue
 
-// Cleanup stale sessions every 5 minutes
+    if fd in r:
+        try:
+            data = os.read(fd, 16384)
+        except OSError as e:
+            if e.errno == errno.EIO:
+                break  # Child exited
+            raise
+        if not data:
+            break
+        os.write(stdout_fd, data)
+
+    if stdin_fd in r:
+        try:
+            data = os.read(stdin_fd, 16384)
+        except OSError:
+            break
+        if not data:
+            break
+        stdin_buf += data
+        # Process resize commands that may be embedded in the stream
+        while RESIZE_PREFIX in stdin_buf:
+            idx = stdin_buf.index(RESIZE_PREFIX)
+            # Write any data before the resize command to the PTY
+            if idx > 0:
+                os.write(fd, stdin_buf[:idx])
+            # Find the newline that ends the resize command
+            nl = stdin_buf.find(b"\\n", idx)
+            if nl == -1:
+                # Incomplete resize command, wait for more data
+                stdin_buf = stdin_buf[idx:]
+                break
+            cmd = stdin_buf[idx + len(RESIZE_PREFIX):nl]
+            stdin_buf = stdin_buf[nl + 1:]
+            try:
+                parts = cmd.split(b":")
+                c, rr = int(parts[0]), int(parts[1])
+                if 2 <= c <= 500 and 2 <= rr <= 200:
+                    set_size(c, rr)
+            except Exception:
+                pass
+        else:
+            # No more resize commands — write remaining to PTY
+            if stdin_buf:
+                os.write(fd, stdin_buf)
+                stdin_buf = b""
+
+# Wait for child
+try:
+    os.waitpid(pid, 0)
+except Exception:
+    pass
+`.trim();
+
+/* ── Helpers ── */
+
+function findPython3(): string {
+  // Try common locations
+  const candidates = ["python3", "/usr/bin/python3", "/opt/homebrew/bin/python3", "/usr/local/bin/python3"];
+  for (const p of candidates) {
+    try {
+      execSync(`${p} --version`, { stdio: "pipe", timeout: 3000 });
+      return p;
+    } catch { /* continue */ }
+  }
+  return "python3"; // fallback, will fail at spawn
+}
+
+let cachedPython: string | null = null;
+function getPython(): string {
+  if (!cachedPython) cachedPython = findPython3();
+  return cachedPython;
+}
+
+/* ── Cleanup stale sessions every 2 minutes ── */
+
+const SESSION_IDLE_TIMEOUT = 60 * 60 * 1000; // 1 hour idle
+const SESSION_MAX_AGE = 4 * 60 * 60 * 1000; // 4 hours absolute max
+
 if (typeof globalThis !== "undefined") {
   const cleanup = () => {
     const now = Date.now();
     for (const [id, s] of sessions) {
-      // Kill sessions older than 30 minutes or dead ones
-      if (!s.alive || now - s.created > 30 * 60 * 1000) {
-        try { s.proc.kill(); } catch { /* */ }
+      if (
+        !s.alive ||
+        now - s.lastActivity > SESSION_IDLE_TIMEOUT ||
+        now - s.created > SESSION_MAX_AGE
+      ) {
+        try { s.proc.kill("SIGTERM"); } catch { /* */ }
         sessions.delete(id);
       }
     }
   };
-  // Use a global flag to avoid re-registering
   const g = globalThis as unknown as Record<string, unknown>;
   if (!g.__terminalCleanup) {
-    g.__terminalCleanup = setInterval(cleanup, 5 * 60 * 1000);
+    g.__terminalCleanup = setInterval(cleanup, 2 * 60 * 1000);
   }
 }
 
-function createSession(): string {
+function createSession(cols = 80, rows = 24): string {
   const id = crypto.randomUUID().slice(0, 8);
   const home = getOpenClawHome();
-  const shell = process.env.SHELL || "/bin/zsh";
+  const python = getPython();
 
-  // Spawn a PTY bridge process so the shell has a real TTY.
-  const proc = spawn("python3", ["-u", "-c", PY_PTY_BRIDGE, shell], {
+  const proc = spawn(python, ["-u", "-c", PY_PTY_BRIDGE, String(cols), String(rows)], {
     cwd: home,
     env: {
       ...process.env,
       TERM: "xterm-256color",
       COLORTERM: "truecolor",
       FORCE_COLOR: "3",
-      LANG: "en_US.UTF-8",
+      LANG: process.env.LANG || "en_US.UTF-8",
       HOME: process.env.HOME || "/tmp",
       CLICOLOR: "1",
       CLICOLOR_FORCE: "1",
@@ -109,30 +212,38 @@ function createSession(): string {
     stdio: ["pipe", "pipe", "pipe"],
   });
 
+  const now = Date.now();
   const session: ShellSession = {
     proc,
     buffer: [],
-    created: Date.now(),
+    created: now,
+    lastActivity: now,
     cwd: home,
     alive: true,
     listeners: new Set(),
   };
 
   const pushEvent = (event: TerminalEvent) => {
-    // Keep last 5000 events in buffer for reconnection
-    session.buffer.push(event);
-    if (session.buffer.length > 5000) session.buffer.shift();
-    // Notify all SSE listeners
+    session.lastActivity = Date.now();
+    if (event.type === "output") {
+      // Coalesce buffer: keep last ~200KB of raw output text for reconnection
+      session.buffer.push(event.text);
+      let totalLen = 0;
+      for (const chunk of session.buffer) totalLen += chunk.length;
+      while (totalLen > 200_000 && session.buffer.length > 1) {
+        totalLen -= session.buffer.shift()!.length;
+      }
+    }
     for (const fn of session.listeners) {
       try { fn(event); } catch { /* */ }
     }
   };
 
   proc.stdout.on("data", (data: Buffer) =>
-    pushEvent({ type: "output", text: data.toString() })
+    pushEvent({ type: "output", text: data.toString() }),
   );
   proc.stderr.on("data", (data: Buffer) =>
-    pushEvent({ type: "output", text: data.toString() })
+    pushEvent({ type: "output", text: data.toString() }),
   );
 
   proc.on("close", () => {
@@ -158,7 +269,6 @@ export async function GET(request: NextRequest) {
   const action = searchParams.get("action") || "stream";
   const sessionId = searchParams.get("session") || "";
 
-  // List active sessions
   if (action === "list") {
     const list = [...sessions.entries()].map(([id, s]) => ({
       id,
@@ -179,19 +289,18 @@ export async function GET(request: NextRequest) {
 
   const stream = new ReadableStream({
     start(controller) {
-      // Send buffered output first (for reconnection)
+      // Replay buffered output for reconnection
       if (session.buffer.length > 0) {
-        for (const event of session.buffer) {
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-        }
+        const replay = session.buffer.join("");
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify({ type: "output", text: replay })}\n\n`),
+        );
       }
 
-      // Send alive status
       controller.enqueue(
-        encoder.encode(`data: ${JSON.stringify({ type: "status", alive: session.alive })}\n\n`)
+        encoder.encode(`data: ${JSON.stringify({ type: "status", alive: session.alive })}\n\n`),
       );
 
-      // Listen for new output
       const listener = (event: TerminalEvent) => {
         try {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
@@ -202,18 +311,15 @@ export async function GET(request: NextRequest) {
 
       session.listeners.add(listener);
 
-      // Heartbeat every 15s to keep connection alive
+      // Heartbeat to keep connection alive through proxies
       const heartbeat = setInterval(() => {
         try {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify({ type: "ping" })}\n\n`)
-          );
+          controller.enqueue(encoder.encode(`: heartbeat\n\n`));
         } catch {
           clearInterval(heartbeat);
         }
       }, 15000);
 
-      // Cleanup on abort
       request.signal.addEventListener("abort", () => {
         session.listeners.delete(listener);
         clearInterval(heartbeat);
@@ -240,7 +346,9 @@ export async function POST(request: NextRequest) {
 
   switch (action) {
     case "create": {
-      const id = createSession();
+      const cols = Number(body.cols) || 80;
+      const rows = Number(body.rows) || 24;
+      const id = createSession(cols, rows);
       return Response.json({ ok: true, session: id });
     }
 
@@ -251,6 +359,7 @@ export async function POST(request: NextRequest) {
       if (!session || !session.alive) {
         return Response.json({ error: "Session not found or dead" }, { status: 404 });
       }
+      session.lastActivity = Date.now();
       session.proc.stdin.write(data);
       return Response.json({ ok: true });
     }
@@ -266,7 +375,8 @@ export async function POST(request: NextRequest) {
       if (!Number.isFinite(cols) || !Number.isFinite(rows) || cols < 2 || rows < 2) {
         return Response.json({ error: "Invalid cols/rows" }, { status: 400 });
       }
-      // PTY bridge currently ignores explicit resize.
+      // Send resize command to the Python PTY bridge via stdin
+      session.proc.stdin.write(`__RESIZE__:${cols}:${rows}\n`);
       return Response.json({ ok: true });
     }
 
@@ -274,7 +384,7 @@ export async function POST(request: NextRequest) {
       const sessionId = body.session as string;
       const session = sessions.get(sessionId);
       if (session) {
-        try { session.proc.kill(); } catch { /* */ }
+        try { session.proc.kill("SIGTERM"); } catch { /* */ }
         sessions.delete(sessionId);
       }
       return Response.json({ ok: true });
