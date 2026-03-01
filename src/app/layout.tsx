@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Baskervville, Geist_Mono, Inter } from "next/font/google";
+import { Baskervville, Figtree, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 import { Header, AgentChatPanel } from "@/components/header";
@@ -10,8 +10,8 @@ import { RestartAnnouncementBar } from "@/components/restart-announcement-bar";
 import { SetupGate } from "@/components/setup-gate";
 import { UsageAlertMonitor } from "@/components/usage-alert-monitor";
 
-const inter = Inter({
-  variable: "--font-inter",
+const figtree = Figtree({
+  variable: "--font-figtree",
   subsets: ["latin"],
 });
 
@@ -102,7 +102,7 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
       </head>
       <body
-        className={`${inter.variable} ${baskervville.variable} ${geistMono.variable} antialiased`}
+        className={`${figtree.variable} ${baskervville.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider>
           <SetupGate>

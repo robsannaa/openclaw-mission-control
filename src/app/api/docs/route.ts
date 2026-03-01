@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readdir, readFile, stat, writeFile, unlink, rename, copyFile } from "fs/promises";
+import { readdir, readFile, stat, writeFile, unlink, rename, copyFile, mkdir } from "fs/promises";
 import { join, resolve, extname, dirname, basename } from "path";
 import { getOpenClawHome } from "@/lib/paths";
 
@@ -146,6 +146,64 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ docs: allDocs, tags, extensions });
   } catch (err) {
     console.error("Docs API error:", err);
+    return NextResponse.json({ error: String(err) }, { status: 500 });
+  }
+}
+
+/** POST - create a new document */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { workspace, filename, content = "" } = body as {
+      workspace: string;
+      filename: string;
+      content?: string;
+    };
+    if (!workspace || !filename) {
+      return NextResponse.json({ error: "workspace and filename required" }, { status: 400 });
+    }
+    // Sanitize filename
+    const sanitized = filename.replace(/[/\\:*?"<>|]/g, "").trim();
+    if (!sanitized) {
+      return NextResponse.json({ error: "invalid filename" }, { status: 400 });
+    }
+    if (!/\.(md|json|txt)$/i.test(sanitized)) {
+      return NextResponse.json({ error: "unsupported file type — use .md, .json, or .txt" }, { status: 400 });
+    }
+    // Build path: workspace/filename
+    const logicalPath = `${workspace}/${sanitized}`;
+    const fullPath = safePath(logicalPath);
+    if (!fullPath) {
+      return NextResponse.json({ error: "invalid path" }, { status: 400 });
+    }
+    // Prevent overwriting
+    try {
+      await stat(fullPath);
+      return NextResponse.json({ error: "file already exists" }, { status: 409 });
+    } catch {
+      // Good — file doesn't exist
+    }
+    // Ensure directory exists
+    await mkdir(dirname(fullPath), { recursive: true });
+    await writeFile(fullPath, content, "utf-8");
+    const words = content.split(/\s+/).filter(Boolean).length;
+    const size = Buffer.byteLength(content, "utf-8");
+    const s = await stat(fullPath);
+    return NextResponse.json({
+      ok: true,
+      doc: {
+        path: logicalPath,
+        name: sanitized,
+        mtime: s.mtime.toISOString(),
+        size,
+        tag: detectTag(sanitized, sanitized),
+        workspace,
+        ext: extname(sanitized).toLowerCase(),
+      },
+      words,
+    });
+  } catch (err) {
+    console.error("Docs POST error:", err);
     return NextResponse.json({ error: String(err) }, { status: 500 });
   }
 }

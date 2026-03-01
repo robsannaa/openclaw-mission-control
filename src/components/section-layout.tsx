@@ -64,9 +64,9 @@ export function SectionHeader({
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className={cn("text-xs font-semibold text-foreground", titleClassName)}>{title}</h1>
+          <h1 className={cn("text-base font-semibold tracking-tight text-foreground", titleClassName)}>{title}</h1>
           {description ? (
-            <p className={cn("mt-0.5 text-muted-foreground", descriptionClassName ?? "text-sm")}>{description}</p>
+            <p className={cn("mt-0.5 text-[13px] text-muted-foreground/70", descriptionClassName)}>{description}</p>
           ) : null}
           {meta ? <p className={cn("mt-1 text-xs text-muted-foreground/80", metaClassName)}>{meta}</p> : null}
         </div>

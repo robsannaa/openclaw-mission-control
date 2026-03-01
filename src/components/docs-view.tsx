@@ -17,6 +17,8 @@ import {
   Code,
   Eye,
   CheckCircle,
+  Plus,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InlineMarkdownEditor } from "./inline-markdown-editor";
@@ -79,9 +81,12 @@ function formatAgo(d: string | Date) {
   });
 }
 
-/** Friendly workspace label: workspace -> Clawbert, workspace-gilfoyle -> Gilfoyle */
-function workspaceLabel(name: string): string {
-  if (name === "workspace") return "Clawbert (main)";
+/** Friendly workspace label using agent name from API, with fallback to folder suffix. */
+function workspaceLabel(name: string, agentNameMap?: Record<string, string>): string {
+  if (agentNameMap?.[name]) {
+    return agentNameMap[name];
+  }
+  // Fallback: capitalize folder suffix
   const suffix = name.replace(/^workspace-?/, "");
   return suffix ? suffix.charAt(0).toUpperCase() + suffix.slice(1) : name;
 }
@@ -294,7 +299,7 @@ function JsonViewer({
             className={cn(
               "flex items-center gap-1.5 rounded-l-lg px-3 py-1.5 text-xs font-medium transition",
               mode === "view"
-                ? "bg-violet-500/15 text-violet-400"
+                ? "bg-[var(--accent-brand-subtle)] text-[var(--accent-brand-text)]"
                 : "text-muted-foreground hover:text-foreground/70"
             )}
           >
@@ -307,7 +312,7 @@ function JsonViewer({
             className={cn(
               "flex items-center gap-1.5 rounded-r-lg px-3 py-1.5 text-xs font-medium transition",
               mode === "edit"
-                ? "bg-violet-500/15 text-violet-400"
+                ? "bg-[var(--accent-brand-subtle)] text-[var(--accent-brand-text)]"
                 : "text-muted-foreground hover:text-foreground/70"
             )}
           >
@@ -347,7 +352,7 @@ function JsonViewer({
           onChange={handleEditChange}
           onKeyDown={handleEditKeyDown}
           spellCheck={false}
-          className="flex-1 resize-none rounded-lg border border-foreground/10 bg-foreground/5 p-4 font-mono text-sm leading-6 text-foreground/80 outline-none focus:border-violet-500/30"
+          className="flex-1 resize-none rounded-lg border border-foreground/10 bg-foreground/5 p-4 font-mono text-sm leading-6 text-foreground/80 outline-none focus:border-[var(--accent-brand-border)]"
         />
       ) : (
         <div className="flex flex-1 overflow-auto rounded-lg border border-foreground/10 bg-foreground/5">
@@ -396,7 +401,7 @@ export function DocsView() {
   const [extFilter, setExtFilter] = useState<string | null>(null);
   const [collapsedWorkspace, setCollapsedWorkspace] = useState<Record<string, boolean>>({});
   const [collapsedType, setCollapsedType] = useState<Record<string, boolean>>({});
-  const [agents, setAgents] = useState<Array<{ id: string; name: string; emoji: string; workspace: string }>>([]);
+  const [agents, setAgents] = useState<Array<{ id: string; name: string; emoji: string; workspace: string; isDefault?: boolean }>>([]);
 
   // Save state
   const [saveStatus, setSaveStatus] = useState<
@@ -412,6 +417,13 @@ export function DocsView() {
   const [actionMsg, setActionMsg] = useState<{ ok: boolean; msg: string } | null>(null);
   const ctxRef = useRef<HTMLDivElement>(null);
   const deepLinkedDocRef = useRef<string | null>(null);
+
+  // Create document state
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createFilename, setCreateFilename] = useState("");
+  const [createWorkspace, setCreateWorkspace] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const fetchDocs = useCallback(() => {
     setLoading(true);
@@ -451,19 +463,29 @@ export function DocsView() {
     queueMicrotask(() => fetchDocs());
   }, [fetchDocs]);
 
-  // Load agents for workspace → emoji (identity emoji from OpenClaw config)
-  useEffect(() => {
-    let mounted = true;
+  // Load agents for workspace → emoji / name (identity from OpenClaw config)
+  const fetchAgents = useCallback(() => {
     fetch("/api/agents", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
-        if (!mounted) return;
-        const list = (data.agents || []) as Array<{ id: string; name: string; emoji: string; workspace: string }>;
+        const list = (data.agents || []) as Array<{ id: string; name: string; emoji: string; workspace: string; isDefault?: boolean }>;
         setAgents(list);
       })
       .catch(() => {});
-    return () => { mounted = false; };
   }, []);
+
+  useEffect(() => {
+    fetchAgents();
+  }, [fetchAgents]);
+
+  // Re-fetch agents when page becomes visible (picks up renames from /agents)
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") fetchAgents();
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [fetchAgents]);
 
   // Map workspace folder name → agent emoji (from identity)
   const workspaceEmojiByFolder = useMemo(() => {
@@ -471,6 +493,19 @@ export function DocsView() {
     for (const a of agents) {
       const folder = workspaceNameFromPath(a.workspace);
       if (folder && a.emoji) map[folder] = a.emoji;
+    }
+    return map;
+  }, [agents]);
+
+  // Map workspace folder name → agent display name (for labels)
+  const workspaceNameByFolder = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const a of agents) {
+      const folder = workspaceNameFromPath(a.workspace);
+      if (folder && a.name) {
+        const label = a.isDefault ? `${a.name} (main)` : a.name;
+        map[folder] = label;
+      }
     }
     return map;
   }, [agents]);
@@ -662,6 +697,43 @@ export function DocsView() {
     [fetchDocs]
   );
 
+  const createDoc = useCallback(async () => {
+    const name = createFilename.trim();
+    if (!name || !createWorkspace) return;
+    // Auto-add .md extension if none provided
+    const filename = /\.\w+$/.test(name) ? name : `${name}.md`;
+    setCreateBusy(true);
+    setCreateError(null);
+    try {
+      const res = await fetch("/api/docs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspace: createWorkspace, filename }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setCreateError(data.error || "Failed to create document");
+        setCreateBusy(false);
+        return;
+      }
+      // Add to doc list and select it
+      const newDoc = data.doc as Doc;
+      setDocs((prev) => [newDoc, ...prev]);
+      setSelected(newDoc);
+      setContent("");
+      setWords(0);
+      setSaveStatus(null);
+      setShowCreateModal(false);
+      setCreateFilename("");
+      setCreateError(null);
+      setActionMsg({ ok: true, msg: `Created ${newDoc.name}` });
+      setTimeout(() => setActionMsg(null), 3000);
+    } catch {
+      setCreateError("Failed to create document");
+    }
+    setCreateBusy(false);
+  }, [createFilename, createWorkspace]);
+
   const copyPath = useCallback((doc: Doc) => {
     navigator.clipboard.writeText(doc.path).then(() => {
       setActionMsg({ ok: true, msg: "Path copied to clipboard" });
@@ -713,7 +785,7 @@ export function DocsView() {
 
         return {
           name,
-          label: workspaceLabel(name),
+          label: workspaceLabel(name, workspaceNameByFolder),
           typeGroups,
         };
       })
@@ -722,7 +794,7 @@ export function DocsView() {
         if (b.name === "workspace") return 1;
         return a.label.localeCompare(b.label);
       });
-  }, [filtered]);
+  }, [filtered, workspaceNameByFolder]);
 
   const toggleWorkspaceCollapse = (ws: string) =>
     setCollapsedWorkspace((prev) => ({ ...prev, [ws]: !prev[ws] }));
@@ -738,17 +810,32 @@ export function DocsView() {
     <SectionLayout>
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden md:flex-row">
       {/* Left panel */}
-      <div className="flex max-h-96 w-full shrink-0 flex-col overflow-hidden border-b border-foreground/10 bg-card/60 md:max-h-none md:w-80 md:border-b-0 md:border-r">
+      <div className="flex max-h-96 w-full shrink-0 flex-col overflow-hidden border-b border-foreground/10 bg-[var(--surface-1)] md:max-h-none md:w-80 md:border-b-0 md:border-r">
         <div className="shrink-0 space-y-3 p-3">
-          {/* Search */}
-          <div className="flex items-center gap-2 rounded-lg border border-foreground/10 bg-card px-3 py-2 text-sm text-muted-foreground">
-            <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <input
-              placeholder="Search documents..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
-            />
+          {/* Search + New */}
+          <div className="flex items-center gap-2">
+            <div className="flex flex-1 items-center gap-2 rounded-lg border border-foreground/10 bg-card px-3 py-2 text-sm text-muted-foreground transition-colors focus-within:border-[var(--accent-brand-border)] focus-within:ring-1 focus-within:ring-[var(--accent-brand-ring)]">
+              <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <input
+                placeholder="Search documents..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/60"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setCreateWorkspace(workspaceGroups[0]?.name || "workspace");
+                setCreateFilename("");
+                setCreateError(null);
+                setShowCreateModal(true);
+              }}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[var(--accent-brand)] px-2.5 py-2 text-xs font-medium text-[var(--accent-brand-on)] transition-colors hover:opacity-90"
+              title="Create new document"
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </button>
           </div>
 
           {/* Tag filter pills */}
@@ -781,7 +868,7 @@ export function DocsView() {
                 className={cn(
 "rounded border px-2 py-0.5 text-xs font-mono transition-colors",
                   extFilter === ext
-                    ? "border-violet-500/30 bg-violet-500/15 text-violet-300"
+                    ? "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] text-[var(--accent-brand-text)]"
                     : "border-foreground/10 bg-muted/60 text-muted-foreground hover:text-muted-foreground"
               )}
             >
@@ -902,9 +989,9 @@ export function DocsView() {
                                       return (
                                         <div
                                           key={doc.path}
-                                          className="flex items-center gap-2 rounded-lg border border-violet-500/30 bg-card px-3 py-2"
+                                          className="flex items-center gap-2 rounded-lg border border-[var(--accent-brand-border)] bg-card px-3 py-2"
                                         >
-                                          <Pencil className="h-3 w-3 shrink-0 text-violet-400" />
+                                          <Pencil className="h-3 w-3 shrink-0 text-[var(--accent-brand-text)]" />
                                           <input
                                             value={renameValue}
                                             onChange={(e) =>
@@ -937,7 +1024,7 @@ export function DocsView() {
                                         className={cn(
                                           "flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors",
                                           isSelected
-                                            ? "bg-muted ring-1 ring-white/10"
+                                            ? "bg-muted ring-1 ring-[var(--accent-brand-border)]"
                                             : "hover:bg-muted/60"
                                         )}
                                       >
@@ -1018,7 +1105,7 @@ export function DocsView() {
               </div>
               <p className="mt-1 flex items-center gap-2 text-xs text-muted-foreground/60">
                 <span className="rounded bg-muted/70 px-1.5 py-0.5 text-xs text-muted-foreground">
-                  {workspaceLabel(selected.workspace)}
+                  {workspaceLabel(selected.workspace, workspaceNameByFolder)}
                 </span>
                 {formatBytes(selected.size)} &bull; {words} words &bull;
                 Modified {formatAgo(selected.mtime)} &bull;
@@ -1071,7 +1158,7 @@ export function DocsView() {
       {ctxMenu && (
         <div
           ref={ctxRef}
-          className="fixed z-50 min-w-44 overflow-hidden rounded-lg border border-foreground/10 bg-card/95 py-1 shadow-xl backdrop-blur-sm"
+          className="fixed z-50 min-w-44 overflow-hidden rounded-lg border border-foreground/10 bg-card py-1 shadow-xl animate-menu-pop"
           style={{
             left: Math.min(ctxMenu.x, window.innerWidth - 200),
             top: Math.min(ctxMenu.y, window.innerHeight - 260),
@@ -1087,6 +1174,20 @@ export function DocsView() {
           >
             <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
             Open
+          </button>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-[var(--accent-brand-text)] transition-colors hover:bg-[var(--accent-brand-subtle)]"
+            onClick={() => {
+              setCreateWorkspace(ctxMenu.doc.workspace);
+              setCreateFilename("");
+              setCreateError(null);
+              setShowCreateModal(true);
+              setCtxMenu(null);
+            }}
+          >
+            <Plus className="h-3.5 w-3.5" />
+            New Document
           </button>
           <div className="mx-2 my-1 h-px bg-foreground/10" />
           <button
@@ -1135,6 +1236,71 @@ export function DocsView() {
             <Trash2 className="h-3.5 w-3.5" />
             Delete
           </button>
+        </div>
+      )}
+
+      {/* ── Create Document Modal ──────────────────── */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-backdrop-in" onClick={() => !createBusy && setShowCreateModal(false)} />
+          <div className="relative z-10 w-full max-w-sm rounded-2xl glass-strong animate-modal-in">
+            <div className="flex items-center justify-between border-b border-foreground/10 px-5 py-4">
+              <h2 className="text-sm font-bold text-foreground">New Document</h2>
+              <button type="button" onClick={() => !createBusy && setShowCreateModal(false)} className="rounded p-1 text-muted-foreground/60 hover:text-foreground/70">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="space-y-4 px-5 py-4">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-foreground/70">Workspace</label>
+                <select
+                  value={createWorkspace}
+                  onChange={(e) => setCreateWorkspace(e.target.value)}
+                  disabled={createBusy}
+                  className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground outline-none focus:border-[var(--accent-brand-border)]"
+                >
+                  {workspaceGroups.map((ws) => (
+                    <option key={ws.name} value={ws.name}>{ws.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-foreground/70">Filename</label>
+                <input
+                  type="text"
+                  value={createFilename}
+                  onChange={(e) => { setCreateFilename(e.target.value); setCreateError(null); }}
+                  onKeyDown={(e) => { if (e.key === "Enter" && createFilename.trim()) createDoc(); }}
+                  disabled={createBusy}
+                  placeholder="my-notes.md"
+                  autoFocus
+                  className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)]"
+                />
+                <p className="mt-1 text-xs text-muted-foreground/60">.md extension added automatically if omitted</p>
+              </div>
+              {createError && (
+                <p className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">{createError}</p>
+              )}
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  disabled={createBusy}
+                  className="rounded-lg border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground transition hover:bg-foreground/5"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={createDoc}
+                  disabled={createBusy || !createFilename.trim()}
+                  className="rounded-lg bg-[var(--accent-brand)] px-3 py-1.5 text-xs font-medium text-[var(--accent-brand-on)] transition hover:opacity-90 disabled:opacity-40"
+                >
+                  {createBusy ? "Creating..." : "Create"}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

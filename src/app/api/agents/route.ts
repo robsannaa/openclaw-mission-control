@@ -769,7 +769,19 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const output = await runCli(args, 30000);
+        let output: string;
+        try {
+          output = await runCli(args, 30000);
+        } catch (cliErr) {
+          const msg = String(cliErr);
+          if (msg.includes("No identity data found")) {
+            return NextResponse.json(
+              { error: "No IDENTITY.md found in this agent's workspace. Create one first, or set identity fields manually above." },
+              { status: 400 }
+            );
+          }
+          throw cliErr;
+        }
         let result: Record<string, unknown> = {};
         try {
           result = parseJsonFromCliOutput<Record<string, unknown>>(

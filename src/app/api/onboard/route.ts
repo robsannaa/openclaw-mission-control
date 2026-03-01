@@ -138,6 +138,73 @@ async function ensureConfigValue(
   await writeJsonAtomic(configPath, existing);
 }
 
+/* ── Custom OpenAI-compatible endpoint helpers ─────── */
+
+/**
+ * Normalize a base URL: trim, strip trailing slashes, auto-append /v1 if missing.
+ */
+function normalizeBaseUrl(raw: string): string {
+  let url = raw.trim().replace(/\/+$/, "");
+  // If URL doesn't end with /v1 (or /v1/), append it
+  if (!/\/v1\/?$/i.test(url)) {
+    url = `${url}/v1`;
+  }
+  return url;
+}
+
+/**
+ * Probe a custom OpenAI-compatible endpoint by hitting GET /v1/models.
+ * Returns { ok, models?, error? }.
+ */
+async function probeCustomEndpoint(
+  baseUrl: string,
+  token?: string,
+): Promise<{ ok: boolean; models?: { id: string; name: string }[]; error?: string }> {
+  const url = `${normalizeBaseUrl(baseUrl)}/models`;
+  const headers: Record<string, string> = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, error: "Authentication required — provide an API key." };
+    }
+
+    if (!res.ok) {
+      const errBody = await res.text().catch(() => "");
+      return {
+        ok: false,
+        error: `Endpoint returned ${res.status}${errBody ? `: ${errBody.slice(0, 200)}` : ""}`,
+      };
+    }
+
+    const data = await res.json();
+    const rawModels = Array.isArray(data?.data) ? data.data : Array.isArray(data) ? data : [];
+    const models = rawModels
+      .filter((m: unknown) => m && typeof m === "object" && "id" in (m as Record<string, unknown>))
+      .map((m: { id: string; name?: string; owned_by?: string }) => ({
+        id: m.id,
+        name: m.name || m.id,
+      }));
+
+    return { ok: true, models };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("fetch failed") || msg.includes("ECONNREFUSED")) {
+      return { ok: false, error: "Could not connect — check the URL and make sure the server is running." };
+    }
+    if (msg.includes("aborted") || msg.includes("timeout")) {
+      return { ok: false, error: "Connection timed out — the server did not respond within 15 seconds." };
+    }
+    return { ok: false, error: `Connection failed: ${msg}` };
+  }
+}
+
 /* ── Provider probe endpoints ─────────────────────── */
 
 const PROVIDER_PROBES: Record<
@@ -360,6 +427,25 @@ export async function POST(request: NextRequest) {
       case "test-key": {
         const provider = String(body.provider || "").trim();
         const token = String(body.token || "").trim();
+
+        // Custom OpenAI-compatible endpoint (token is optional)
+        if (provider === "custom") {
+          const baseUrl = String(body.baseUrl || "").trim();
+          if (!baseUrl) {
+            return NextResponse.json(
+              { ok: false, error: "Base URL is required for custom endpoints" },
+              { status: 400 },
+            );
+          }
+          const result = await probeCustomEndpoint(baseUrl, token || undefined);
+          return NextResponse.json({
+            ok: result.ok,
+            error: result.error,
+            models: result.models,
+          });
+        }
+
+        // Standard providers require both provider and token
         if (!provider || !token) {
           return NextResponse.json(
             { ok: false, error: "Provider and token are required" },
@@ -420,8 +506,9 @@ export async function POST(request: NextRequest) {
         const provider = String(body.provider || "").trim();
         const apiKey = String(body.apiKey || "").trim();
         const model = String(body.model || "").trim();
+        const baseUrl = String(body.baseUrl || "").trim();
 
-        if (!provider || !apiKey) {
+        if (!provider || (!apiKey && provider !== "custom")) {
           return NextResponse.json(
             { ok: false, error: "Provider and API key are required" },
             { status: 400 },
@@ -431,7 +518,26 @@ export async function POST(request: NextRequest) {
         const home = getOpenClawHome();
 
         try {
-          await ensureAuthProfile(home, provider, apiKey);
+          // For custom providers, save baseUrl config and auth profile
+          if (provider === "custom" && baseUrl) {
+            const normalizedUrl = normalizeBaseUrl(baseUrl);
+            // Write custom provider config: models.providers.custom = { baseUrl, api: "openai-completions" }
+            await ensureConfigValue(home, "models.providers.custom", {
+              baseUrl: normalizedUrl,
+              api: "openai-completions",
+              models: [],
+            });
+            // Save API key if provided
+            if (apiKey) {
+              await ensureAuthProfile(home, "custom", apiKey);
+            } else {
+              // For auth-free local endpoints, write a minimal auth profile so hasApiKey check passes
+              await ensureAuthProfile(home, "custom", "local-no-auth");
+            }
+          } else {
+            await ensureAuthProfile(home, provider, apiKey);
+          }
+
           if (model) {
             await ensureConfigValue(home, "agents.defaults.model.primary", model);
           }
@@ -448,7 +554,39 @@ export async function POST(request: NextRequest) {
       case "list-models": {
         const provider = String(body.provider || "").trim();
         const token = String(body.token || "").trim();
-        if (!provider || !token) {
+        if (!provider) {
+          return NextResponse.json(
+            { ok: false, error: "Provider is required" },
+            { status: 400 },
+          );
+        }
+
+        // Custom provider: use probeCustomEndpoint which already returns models
+        if (provider === "custom") {
+          const baseUrl = String(body.baseUrl || "").trim();
+          if (!baseUrl) {
+            return NextResponse.json(
+              { ok: false, error: "Base URL is required for custom endpoints" },
+              { status: 400 },
+            );
+          }
+          const result = await probeCustomEndpoint(baseUrl, token || undefined);
+          if (result.ok && result.models) {
+            // Prefix model IDs with "custom/" for the model key format
+            const models = result.models.map((m) => ({
+              id: m.id.includes("/") ? m.id : `custom/${m.id}`,
+              name: m.name,
+            }));
+            return NextResponse.json({ ok: true, provider: "custom", models });
+          }
+          return NextResponse.json({
+            ok: false,
+            error: result.error || "Failed to fetch models",
+            models: [],
+          });
+        }
+
+        if (!token) {
           return NextResponse.json(
             { ok: false, error: "Provider and token are required" },
             { status: 400 },
@@ -472,8 +610,9 @@ export async function POST(request: NextRequest) {
         const provider = String(body.provider || "").trim();
         const apiKey = String(body.apiKey || "").trim();
         const model = String(body.model || "").trim();
+        const baseUrl = String(body.baseUrl || "").trim();
 
-        if (!provider || !apiKey) {
+        if (!provider || (!apiKey && provider !== "custom")) {
           return NextResponse.json(
             { ok: false, error: "Provider and API key are required" },
             { status: 400 },
@@ -483,9 +622,24 @@ export async function POST(request: NextRequest) {
         const home = getOpenClawHome();
         const steps: string[] = [];
 
-        // 1. Write auth profile
+        // 1. Write auth profile (and custom provider config if needed)
         try {
-          await ensureAuthProfile(home, provider, apiKey);
+          if (provider === "custom" && baseUrl) {
+            const normalizedUrl = normalizeBaseUrl(baseUrl);
+            await ensureConfigValue(home, "models.providers.custom", {
+              baseUrl: normalizedUrl,
+              api: "openai-completions",
+              models: [],
+            });
+            if (apiKey) {
+              await ensureAuthProfile(home, "custom", apiKey);
+            } else {
+              await ensureAuthProfile(home, "custom", "local-no-auth");
+            }
+            steps.push(`Custom endpoint configured: ${normalizedUrl}`);
+          } else {
+            await ensureAuthProfile(home, provider, apiKey);
+          }
           steps.push(`Authenticated ${provider}`);
         } catch (err) {
           return NextResponse.json(

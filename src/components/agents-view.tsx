@@ -39,6 +39,8 @@ import {
   Layers,
   ArrowRight,
   Network,
+  LayoutGrid,
+  GitFork,
   Plus,
   X,
   Sparkles,
@@ -158,14 +160,6 @@ const STATUS_COLORS: Record<string, { dot: string; text: string }> = {
   unknown: { dot: "bg-zinc-500", text: "text-muted-foreground" },
 };
 
-const AGENT_GRADIENTS = [
-  "from-violet-600 to-violet-800",
-  "from-emerald-600 to-emerald-800",
-  "from-orange-600 to-orange-800",
-  "from-blue-600 to-blue-800",
-  "from-pink-600 to-pink-800",
-  "from-cyan-600 to-cyan-800",
-];
 
 const AGENT_GRAPH_COLORS = {
   delegation: "var(--chart-2)",
@@ -188,7 +182,7 @@ function GatewayNode({ data }: NodeProps) {
       <Handle type="target" position={Position.Left} className="!bg-transparent !border-0 !w-0 !h-0" />
       <Handle type="source" position={Position.Right} className="!bg-transparent !border-0 !w-0 !h-0" />
       <Handle type="source" position={Position.Bottom} id="sub" className="!bg-transparent !border-0 !w-0 !h-0" />
-      <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-violet-500/40 bg-gradient-to-br from-violet-900/80 to-violet-950/90 shadow-lg shadow-violet-500/20">
+      <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] shadow-lg shadow-[var(--accent-brand-ring)]">
         <span className="text-xl">🦞</span>
       </div>
       <div className="mt-2 text-center">
@@ -218,22 +212,19 @@ function AgentNodeComponent({ data }: NodeProps) {
       className={cn(
         "cursor-pointer rounded-xl border p-3 transition-all min-w-44 max-w-52",
         selected
-          ? "border-violet-500/50 bg-violet-950/60 shadow-lg shadow-violet-500/10"
-          : "border-foreground/10 bg-card hover:border-foreground/15"
+          ? "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] shadow-lg shadow-[var(--accent-brand-ring)]"
+          : "border-foreground/10 bg-card hover:border-[var(--accent-brand-border)]"
       )}
     >
       <Handle type="target" position={Position.Left} className="!bg-primary !border-primary !w-2 !h-2" />
       <Handle type="source" position={Position.Right} className="!bg-blue-500 !border-blue-400 !w-2 !h-2" />
-      <Handle type="source" position={Position.Bottom} id="sub" className="!bg-cyan-500 !border-cyan-400 !w-2 !h-2" />
-      <Handle type="target" position={Position.Top} id="parent" className="!bg-cyan-500 !border-cyan-400 !w-2 !h-2" />
+      <Handle type="source" position={Position.Bottom} id="sub" className="!bg-[var(--accent-brand)] !border-[var(--accent-brand)] !w-2 !h-2" />
+      <Handle type="target" position={Position.Top} id="parent" className="!bg-[var(--accent-brand)] !border-[var(--accent-brand)] !w-2 !h-2" />
 
       {/* Header */}
       <div className="flex items-center gap-2">
         <div
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br text-sm font-bold text-white",
-            AGENT_GRADIENTS[idx % AGENT_GRADIENTS.length]
-          )}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-brand-subtle)] ring-1 ring-[var(--accent-brand-border)] text-sm font-bold"
         >
           {agent.emoji}
         </div>
@@ -253,7 +244,7 @@ function AgentNodeComponent({ data }: NodeProps) {
       {/* Badges */}
       <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
         {agent.isDefault && (
-          <span className="rounded bg-violet-500/20 px-1.5 py-0.5 text-violet-300 font-medium">
+          <span className="rounded bg-[var(--accent-brand-subtle)] px-1.5 py-0.5 text-[var(--accent-brand-text)] font-medium">
             ◇ Default
           </span>
         )}
@@ -291,7 +282,7 @@ function RuntimeSubagentNodeComponent({ data }: NodeProps) {
       className={cn(
         "rounded-lg border px-3 py-2 min-w-40",
         d.status === "running"
-          ? "border-cyan-500/40 bg-cyan-950/35"
+          ? "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)]"
           : "border-zinc-500/30 bg-zinc-900/40"
       )}
     >
@@ -301,12 +292,12 @@ function RuntimeSubagentNodeComponent({ data }: NodeProps) {
         className={cn(
           "!w-2 !h-2",
           d.status === "running"
-            ? "!bg-cyan-500 !border-cyan-400"
+            ? "!bg-[var(--accent-brand)] !border-[var(--accent-brand)]"
             : "!bg-zinc-500 !border-zinc-400"
         )}
       />
       <div className="flex items-center gap-1.5">
-        <Sparkles className={cn("h-3.5 w-3.5", d.status === "running" ? "text-cyan-300" : "text-zinc-300")} />
+        <Sparkles className={cn("h-3.5 w-3.5", d.status === "running" ? "text-[var(--accent-brand)]" : "text-zinc-300")} />
         <p className="text-xs font-semibold text-foreground/90">
           subagent #{d.shortId}
         </p>
@@ -758,10 +749,7 @@ function AgentDetail({
       {/* Header */}
       <div className="flex items-center gap-4">
         <div
-          className={cn(
-            "flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br text-lg font-bold text-white shadow-lg",
-            AGENT_GRADIENTS[idx % AGENT_GRADIENTS.length]
-          )}
+          className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-brand-subtle)] ring-1 ring-[var(--accent-brand-border)] text-lg font-bold shadow-lg"
         >
           {agent.emoji}
         </div>
@@ -773,7 +761,7 @@ function AgentDetail({
               {agent.status === "active" ? "Active" : agent.status === "idle" ? "Idle" : "Unknown"}
             </span>
             {agent.isDefault && (
-              <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-xs font-medium text-violet-400">
+              <span className="rounded-full bg-[var(--accent-brand-subtle)] px-2 py-0.5 text-xs font-medium text-[var(--accent-brand-text)]">
                 <Shield className="mr-0.5 inline h-2.5 w-2.5" /> Default
               </span>
             )}
@@ -788,7 +776,7 @@ function AgentDetail({
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <MiniStat
-          icon={<Cpu className="h-3.5 w-3.5 text-violet-400" />}
+          icon={<Cpu className="h-3.5 w-3.5 text-[var(--accent-brand-text)]" />}
           label="Model"
           value={shortModel(agent.model)}
         />
@@ -814,11 +802,11 @@ function AgentDetail({
         {/* Model Stack */}
         <div className="rounded-lg border border-foreground/10 bg-card/80 p-3 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
-            <Layers className="h-3.5 w-3.5 text-violet-400" /> Model Stack
+            <Layers className="h-3.5 w-3.5 text-[var(--accent-brand-text)]" /> Model Stack
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-1.5">
-              <span className="rounded bg-violet-500/15 px-1.5 py-0.5 text-xs font-bold text-violet-400">PRIMARY</span>
+              <span className="rounded bg-[var(--accent-brand-subtle)] px-1.5 py-0.5 text-xs font-bold text-[var(--accent-brand-text)]">PRIMARY</span>
               <code className="text-xs text-foreground/70">{shortModel(agent.model)}</code>
             </div>
             {agent.fallbackModels.map((fm, i) => (
@@ -867,7 +855,7 @@ function AgentDetail({
         {/* Relationships */}
         <div className="rounded-lg border border-foreground/10 bg-card/80 p-3 space-y-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
-            <Network className="h-3.5 w-3.5 text-cyan-400" /> Relationships
+            <Network className="h-3.5 w-3.5 text-[var(--accent-brand-text)]" /> Relationships
           </div>
           {parentAgents.length === 0 && childAgents.length === 0 ? (
             <p className="text-xs text-muted-foreground/60">No sub-agent relationships</p>
@@ -978,7 +966,7 @@ function SummaryBar({ agents }: { agents: Agent[] }) {
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {[
-        { icon: <Users className="h-4 w-4 text-violet-400" />, label: "Agents", value: String(agents.length) },
+        { icon: <Users className="h-4 w-4 text-[var(--accent-brand-text)]" />, label: "Agents", value: String(agents.length) },
         { icon: <Zap className="h-4 w-4 text-emerald-400" />, label: "Active", value: `${activeCount} / ${agents.length}` },
         { icon: <MessageSquare className="h-4 w-4 text-blue-400" />, label: "Sessions", value: String(totalSessions) },
         { icon: <Hash className="h-4 w-4 text-amber-400" />, label: "Channels", value: String(channelSet.size) },
@@ -1011,7 +999,7 @@ function GridView({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 stagger-cards">
       {agents.map((agent, idx) => {
         const sc = STATUS_COLORS[agent.status] || STATUS_COLORS.unknown;
         const selected = selectedId === agent.id;
@@ -1022,10 +1010,10 @@ function GridView({
             key={agent.id}
             onClick={() => onSelect(agent.id)}
             className={cn(
-              "relative rounded-xl border p-4 text-left transition-all",
+              "relative rounded-xl p-4 text-left transition-all glass-glow",
               selected
-                ? "border-violet-500/40 bg-violet-500/10 shadow-lg shadow-violet-500/5"
-                : "border-foreground/10 bg-card hover:border-foreground/15"
+                ? "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] shadow-lg shadow-[var(--accent-brand-ring)]"
+                : ""
             )}
           >
             <div className="absolute -right-1 -top-1">
@@ -1038,10 +1026,7 @@ function GridView({
             </div>
             <div className="flex items-start gap-3">
               <div
-                className={cn(
-                  "flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br text-xs text-white",
-                  AGENT_GRADIENTS[idx % AGENT_GRADIENTS.length]
-                )}
+                className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--accent-brand-subtle)] ring-1 ring-[var(--accent-brand-border)] text-xs"
               >
                 {agent.emoji}
               </div>
@@ -1049,7 +1034,7 @@ function GridView({
                 <h3 className="truncate text-sm font-semibold text-foreground">{agent.name}</h3>
                 <p className="truncate text-xs text-muted-foreground">{shortModel(agent.model)}</p>
                 {agent.isDefault && (
-                  <span className="mt-1 inline-block rounded-full bg-violet-500/15 px-2 py-0.5 text-xs font-medium text-violet-400">Default</span>
+                  <span className="mt-1 inline-block rounded-full bg-[var(--accent-brand-subtle)] px-2 py-0.5 text-xs font-medium text-[var(--accent-brand-text)]">Default</span>
                 )}
               </div>
             </div>
@@ -1454,7 +1439,7 @@ function ModelPicker({
         className={cn(
           "flex w-full items-center gap-2 rounded-lg border px-3 py-2.5 text-left text-sm transition-colors",
           open
-            ? "border-violet-500/30 bg-foreground/5"
+            ? "border-[var(--accent-brand-border)] bg-foreground/5"
             : "border-foreground/10 bg-foreground/5 hover:border-foreground/15",
           disabled && "opacity-40 cursor-not-allowed"
         )}
@@ -1505,8 +1490,8 @@ function ModelPicker({
                 type="button"
                 onClick={() => { onChange(""); setOpen(false); }}
                 className={cn(
-                  "flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors hover:bg-violet-500/10",
-                  !value && "bg-violet-500/10 text-violet-400"
+                  "flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--accent-brand-subtle)]",
+                  !value && "bg-[var(--accent-brand-subtle)] text-[var(--accent-brand-text)]"
                 )}
               >
                 <Star className="h-3.5 w-3.5 text-amber-400" />
@@ -1544,7 +1529,7 @@ function ModelPicker({
                       }}
                       className={cn(
                         "flex w-full items-center gap-2.5 px-3 py-2 text-left text-xs transition-colors",
-                        value === key ? "bg-violet-500/10 text-violet-400" : "hover:bg-foreground/5",
+                        value === key ? "bg-[var(--accent-brand-subtle)] text-[var(--accent-brand-text)]" : "hover:bg-foreground/5",
                         !isAvailable && "opacity-60"
                       )}
                     >
@@ -1593,7 +1578,7 @@ function ModelPicker({
                       className={cn(
                         "flex w-full items-center gap-2.5 px-3 py-1.5 pl-7 text-left text-xs transition-colors",
                         value === m.key
-                          ? "bg-violet-500/10 text-violet-400"
+                          ? "bg-[var(--accent-brand-subtle)] text-[var(--accent-brand-text)]"
                           : "text-foreground/80 hover:bg-foreground/5"
                       )}
                     >
@@ -1631,7 +1616,7 @@ function ModelPicker({
                         key={p}
                         type="button"
                         onClick={() => setAddingProvider(p)}
-                        className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/5 px-2 py-1.5 text-xs text-muted-foreground/70 transition-colors hover:border-violet-500/20 hover:text-foreground/80"
+                        className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-foreground/5 px-2 py-1.5 text-xs text-muted-foreground/70 transition-colors hover:border-[var(--accent-brand-border)] hover:text-foreground/80"
                       >
                         <span>{meta?.icon || "🤖"}</span>
                         <span className="truncate font-medium">{meta?.label || p}</span>
@@ -1668,7 +1653,7 @@ function ModelPicker({
                     onChange={(e) => setApiKey(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSaveKey(); } }}
                     placeholder={PROVIDER_META[addingProvider]?.keyHint || "Paste API key..."}
-                    className="w-full rounded-lg border border-foreground/10 bg-card px-3 py-2 pr-8 text-xs font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-violet-500/30 focus:outline-none"
+                    className="w-full rounded-lg border border-foreground/10 bg-card px-3 py-2 pr-8 text-xs font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-[var(--accent-brand-border)] focus:outline-none"
                     autoFocus
                   />
                   <button
@@ -1702,7 +1687,7 @@ function ModelPicker({
                     href={PROVIDER_META[addingProvider].keyUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="ml-auto flex items-center gap-0.5 text-violet-400 hover:text-violet-300"
+                    className="ml-auto flex items-center gap-0.5 text-[var(--accent-brand-text)] hover:text-[var(--accent-brand)]"
                   >
                     Get a key <ExternalLink className="h-2.5 w-2.5" />
                   </a>
@@ -1870,7 +1855,7 @@ function ChannelBindingPicker({
             const chInfo = channels.find((c) => c.channel === chKey);
             const status = chInfo ? getStatus(chInfo) : null;
             return (
-              <span key={b} className="inline-flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/10 px-2.5 py-1 text-xs text-violet-400">
+              <span key={b} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] px-2.5 py-1 text-xs text-[var(--accent-brand-text)]">
                 <span>{chInfo?.icon || "📡"}</span>
                 <span className="font-medium">{b}</span>
                 {status && (
@@ -1882,7 +1867,7 @@ function ChannelBindingPicker({
                 <button
                   type="button"
                   onClick={() => onRemove(b)}
-                  className="ml-0.5 rounded text-violet-400/60 hover:text-violet-200"
+                  className="ml-0.5 rounded text-[var(--accent-brand-text)]/60 hover:text-[var(--accent-brand)]"
                   disabled={disabled}
                 >
                   <X className="h-2.5 w-2.5" />
@@ -1926,8 +1911,8 @@ function ChannelBindingPicker({
                       className={cn(
                         "flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs transition-colors",
                         alreadyBound
-                          ? "border-violet-500/20 bg-violet-500/5 text-violet-400 opacity-60 cursor-not-allowed"
-                          : "border-foreground/10 bg-foreground/5 text-foreground/70 hover:border-violet-500/20 hover:bg-violet-500/5 hover:text-violet-400 disabled:opacity-40"
+                          ? "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] text-[var(--accent-brand-text)] opacity-60 cursor-not-allowed"
+                          : "border-foreground/10 bg-foreground/5 text-foreground/70 hover:border-[var(--accent-brand-border)] hover:bg-[var(--accent-brand-subtle)] hover:text-[var(--accent-brand-text)] disabled:opacity-40"
                       )}
                     >
                       <span className="text-xs">{ch.icon}</span>
@@ -1984,7 +1969,7 @@ function ChannelBindingPicker({
         </div>
       ) : (
         /* Selected channel: bind or set up */
-        <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
+        <div className="rounded-lg border border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] p-3">
           <div className="mb-2 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs">{selectedChannel.icon}</span>
@@ -2014,7 +1999,7 @@ function ChannelBindingPicker({
                   onChange={(e) => setAccountId(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleBindChannel(selectedChannel); } }}
                   placeholder="Account ID (optional — leave empty for all)"
-                  className="flex-1 rounded-lg border border-foreground/10 bg-card px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                  className="flex-1 rounded-lg border border-foreground/10 bg-card px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:outline-none"
                   autoFocus
                   disabled={disabled}
                 />
@@ -2054,7 +2039,7 @@ function ChannelBindingPicker({
                       onChange={(e) => setTokenInput(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter" && tokenInput.trim()) { e.preventDefault(); handleSetupToken(); } }}
                       placeholder={selectedChannel.tokenPlaceholder || "Paste token here..."}
-                      className="w-full rounded-lg border border-foreground/10 bg-card px-3 py-2 text-xs font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-violet-500/30 focus:outline-none"
+                      className="w-full rounded-lg border border-foreground/10 bg-card px-3 py-2 text-xs font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-[var(--accent-brand-border)] focus:outline-none"
                       autoFocus
                       disabled={saving}
                     />
@@ -2069,7 +2054,7 @@ function ChannelBindingPicker({
                         value={appTokenInput}
                         onChange={(e) => setAppTokenInput(e.target.value)}
                         placeholder="xapp-..."
-                        className="w-full rounded-lg border border-foreground/10 bg-card px-3 py-2 text-xs font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-violet-500/30 focus:outline-none"
+                        className="w-full rounded-lg border border-foreground/10 bg-card px-3 py-2 text-xs font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-[var(--accent-brand-border)] focus:outline-none"
                         disabled={saving}
                       />
                     </div>
@@ -2091,7 +2076,7 @@ function ChannelBindingPicker({
                       href={selectedChannel.docsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-0.5"
+                      className="text-xs text-[var(--accent-brand-text)] hover:text-[var(--accent-brand)] flex items-center gap-0.5"
                     >
                       Setup guide <ExternalLink className="h-2.5 w-2.5" />
                     </a>
@@ -2125,7 +2110,7 @@ function ChannelBindingPicker({
                       href={selectedChannel.docsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-0.5"
+                      className="text-xs text-[var(--accent-brand-text)] hover:text-[var(--accent-brand)] flex items-center gap-0.5"
                     >
                       Setup guide <ExternalLink className="h-2.5 w-2.5" />
                     </a>
@@ -2155,7 +2140,7 @@ function ChannelBindingPicker({
                       href={selectedChannel.docsUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-violet-400 hover:text-violet-300 flex items-center gap-0.5"
+                      className="text-xs text-[var(--accent-brand-text)] hover:text-[var(--accent-brand)] flex items-center gap-0.5"
                     >
                       Docs <ExternalLink className="h-2.5 w-2.5" />
                     </a>
@@ -2237,7 +2222,7 @@ function FallbackModelsField({
             e.target.value = "";
           }}
           disabled={disabled}
-          className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/80 focus:border-violet-500/30 focus:outline-none disabled:opacity-40"
+          className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/80 focus:border-[var(--accent-brand-border)] focus:outline-none disabled:opacity-40"
         >
           <option value="">Add fallback model...</option>
           {addable.map((m) => (
@@ -2346,14 +2331,14 @@ function AddAgentModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => { if (!busy) onClose(); }} />
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-backdrop-in" onClick={() => { if (!busy) onClose(); }} />
 
-      <div className="relative z-10 flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-card/95 shadow-2xl">
+      <div className="relative z-10 flex max-h-[calc(100vh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl glass-strong animate-modal-in">
         {/* Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-foreground/10 px-5 py-4">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-violet-500/15">
-              <Sparkles className="h-4 w-4 text-violet-400" />
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--accent-brand-subtle)]">
+              <Sparkles className="h-4 w-4 text-[var(--accent-brand-text)]" />
             </div>
             <div>
               <h2 className="text-xs font-semibold text-foreground">Create New Agent</h2>
@@ -2382,7 +2367,7 @@ function AddAgentModal({
                 value={name}
                 onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
                 placeholder="e.g. work, research, creative"
-                className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-sm text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-sm text-foreground/90 placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:outline-none"
                 disabled={busy}
               />
               <p className="mt-1 text-xs text-muted-foreground/50">
@@ -2399,7 +2384,7 @@ function AddAgentModal({
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder={name ? `e.g. ${name.charAt(0).toUpperCase() + name.slice(1)}` : "Friendly name in UI"}
-                className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-sm text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-sm text-foreground/90 placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:outline-none"
                 disabled={busy}
               />
             </div>
@@ -2471,7 +2456,7 @@ function AddAgentModal({
                     value={workspace}
                     onChange={(e) => setWorkspace(e.target.value)}
                     placeholder={`~/.openclaw/workspace-${name || "<name>"}`}
-                    className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs font-mono text-foreground/80 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                    className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs font-mono text-foreground/80 placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:outline-none"
                     disabled={busy}
                   />
                   <p className="mt-1 text-xs text-muted-foreground/40">
@@ -2487,7 +2472,7 @@ function AddAgentModal({
                     value={agentDir}
                     onChange={(e) => setAgentDir(e.target.value)}
                     placeholder={`~/.openclaw/agents/${name || "<name>"}/agent`}
-                    className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs font-mono text-foreground/80 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                    className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs font-mono text-foreground/80 placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:outline-none"
                     disabled={busy}
                   />
                   <p className="mt-1 text-xs text-muted-foreground/40">
@@ -2500,7 +2485,7 @@ function AddAgentModal({
                     checked={setAsDefault}
                     onChange={(e) => setSetAsDefault(e.target.checked)}
                     disabled={busy}
-                    className="h-3.5 w-3.5 rounded border-foreground/20 text-violet-600 focus:ring-violet-500/30"
+                    className="h-3.5 w-3.5 rounded border-foreground/20 text-[var(--accent-brand)] focus:ring-[var(--accent-brand-ring)]"
                   />
                   <span className="text-xs text-foreground/80">Set as default agent</span>
                 </label>
@@ -2519,7 +2504,7 @@ function AddAgentModal({
                           className={cn(
                             "flex cursor-pointer items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors",
                             subagents.includes(a.id)
-                              ? "border-violet-500/30 bg-violet-500/10 text-violet-300"
+                              ? "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] text-[var(--accent-brand)]"
                               : "border-foreground/10 bg-foreground/5 text-muted-foreground hover:bg-foreground/10"
                           )}
                         >
@@ -2574,7 +2559,7 @@ function AddAgentModal({
             type="button"
             onClick={handleCreate}
             disabled={busy || !name.trim() || success}
-            className="flex items-center gap-1.5 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-xs font-medium transition-colors hover:bg-primary/90 disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded-lg bg-[var(--accent-brand)] text-[var(--accent-brand-on)] px-4 py-2 text-xs font-medium transition-colors hover:opacity-90 disabled:opacity-40"
           >
             {busy ? (
               <>
@@ -2908,21 +2893,18 @@ function EditAgentModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+        className="absolute inset-0 bg-black/60 backdrop-blur-sm animate-backdrop-in"
         onClick={() => {
           if (!mutating) onClose();
         }}
       />
 
-      <div className="relative z-10 flex h-full max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-foreground/10 bg-card/95 shadow-2xl">
+      <div className="relative z-10 flex h-full max-h-[calc(100vh-2rem)] w-full max-w-xl flex-col overflow-hidden rounded-2xl glass-strong animate-modal-in">
         {/* ── Header ── */}
         <div className="flex shrink-0 items-center justify-between border-b border-foreground/10 px-5 py-4">
           <div className="flex items-center gap-3">
             <div
-              className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br text-sm font-bold text-white shadow",
-                AGENT_GRADIENTS[idx % AGENT_GRADIENTS.length]
-              )}
+              className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-brand-subtle)] ring-1 ring-[var(--accent-brand-border)] text-sm font-bold shadow"
             >
               {agent.emoji}
             </div>
@@ -2940,7 +2922,7 @@ function EditAgentModal({
                       : "Unknown"}
                 </span>
                 {agent.isDefault && (
-                  <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-xs font-medium text-violet-400">
+                  <span className="rounded-full bg-[var(--accent-brand-subtle)] px-2 py-0.5 text-xs font-medium text-[var(--accent-brand-text)]">
                     Default
                   </span>
                 )}
@@ -2973,7 +2955,7 @@ function EditAgentModal({
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 placeholder={agent.id}
-                className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-sm text-foreground/90 placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:outline-none"
                 disabled={mutating}
               />
             </label>
@@ -2986,7 +2968,7 @@ function EditAgentModal({
                   value={identityName}
                   onChange={(e) => setIdentityName(e.target.value)}
                   placeholder={agent.name}
-                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:outline-none"
                   disabled={mutating}
                 />
               </label>
@@ -2997,7 +2979,7 @@ function EditAgentModal({
                   value={identityEmoji}
                   onChange={(e) => setIdentityEmoji(e.target.value)}
                   placeholder={agent.emoji}
-                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:outline-none"
                   disabled={mutating}
                 />
               </label>
@@ -3008,7 +2990,7 @@ function EditAgentModal({
                   value={identityTheme}
                   onChange={(e) => setIdentityTheme(e.target.value)}
                   placeholder={agent.identityTheme || "default"}
-                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:outline-none"
                   disabled={mutating}
                 />
               </label>
@@ -3019,7 +3001,7 @@ function EditAgentModal({
                   value={identityAvatar}
                   onChange={(e) => setIdentityAvatar(e.target.value)}
                   placeholder={agent.identityAvatar || "avatars/agent.png"}
-                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-violet-500/30 focus:outline-none"
+                  className="mt-1.5 w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-xs text-foreground/90 placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:outline-none"
                   disabled={mutating}
                 />
               </label>
@@ -3032,7 +3014,7 @@ function EditAgentModal({
                   checked={setAsDefault}
                   onChange={(e) => setSetAsDefault(e.target.checked)}
                   disabled={mutating}
-                  className="h-3.5 w-3.5 rounded border-foreground/20 text-violet-600 focus:ring-violet-500/30"
+                  className="h-3.5 w-3.5 rounded border-foreground/20 text-[var(--accent-brand)] focus:ring-[var(--accent-brand-ring)]"
                 />
                 Set as default agent
               </label>
@@ -3050,7 +3032,7 @@ function EditAgentModal({
           {/* 1. Primary Model */}
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
-              <Cpu className="h-3 w-3 text-violet-400" /> Primary Model
+              <Cpu className="h-3 w-3 text-[var(--accent-brand-text)]" /> Primary Model
             </label>
             {modelsLoading ? (
               <div className="flex items-center gap-2 rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-xs text-muted-foreground/50">
@@ -3066,7 +3048,7 @@ function EditAgentModal({
                 value={model}
                 onChange={(e) => setModel(e.target.value)}
                 disabled={busy}
-                className="w-full appearance-none rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-sm text-foreground/90 focus:border-violet-500/30 focus:outline-none disabled:opacity-40"
+                className="w-full appearance-none rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2.5 text-sm text-foreground/90 focus:border-[var(--accent-brand-border)] focus:outline-none disabled:opacity-40"
               >
                 <option value="">
                   Use default ({shortModel(defaultModel)})
@@ -3085,7 +3067,7 @@ function EditAgentModal({
                 {models.length} authenticated models.{" "}
                 <Link
                   href="/models"
-                  className="text-violet-400 hover:text-violet-300"
+                  className="text-[var(--accent-brand-text)] hover:text-[var(--accent-brand)]"
                 >
                   Manage providers →
                 </Link>
@@ -3096,7 +3078,7 @@ function EditAgentModal({
           {/* 2. Fallback Models (multi-select checkboxes) */}
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
-              <Layers className="h-3 w-3 text-violet-400" /> Fallback Models
+              <Layers className="h-3 w-3 text-[var(--accent-brand-text)]" /> Fallback Models
               <span className="text-xs font-normal text-muted-foreground/40">
                 — priority order
               </span>
@@ -3128,7 +3110,7 @@ function EditAgentModal({
                         className={cn(
                           "flex cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs transition-colors",
                           checked
-                            ? "bg-violet-500/10 text-violet-300"
+                            ? "bg-[var(--accent-brand-subtle)] text-[var(--accent-brand)]"
                             : "text-muted-foreground hover:bg-foreground/5"
                         )}
                       >
@@ -3143,7 +3125,7 @@ function EditAgentModal({
                           className={cn(
                             "flex h-4 w-4 shrink-0 items-center justify-center rounded border text-xs font-bold",
                             checked
-                              ? "border-violet-500/50 bg-violet-500/20 text-violet-300"
+                              ? "border-[var(--accent-brand)] bg-[var(--accent-brand-subtle)] text-[var(--accent-brand)]"
                               : "border-foreground/10 bg-foreground/5"
                           )}
                         >
@@ -3172,7 +3154,7 @@ function EditAgentModal({
           {otherAgents.length > 0 && (
             <div>
               <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
-                <Network className="h-3 w-3 text-cyan-400" /> Delegation Targets
+                <Network className="h-3 w-3 text-[var(--accent-brand-text)]" /> Delegation Targets
                 <span className="text-xs font-normal text-muted-foreground/40">
                   — select agents this one can hand work to
                 </span>
@@ -3189,7 +3171,7 @@ function EditAgentModal({
                       className={cn(
                         "flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs transition-colors",
                         checked
-                          ? "bg-cyan-500/10 text-cyan-300"
+                          ? "bg-[var(--accent-brand-subtle)] text-[var(--accent-brand)]"
                           : "text-muted-foreground hover:bg-foreground/5"
                       )}
                     >
@@ -3204,12 +3186,12 @@ function EditAgentModal({
                         className={cn(
                           "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
                           checked
-                            ? "border-cyan-500/50 bg-cyan-500/20"
+                            ? "border-[var(--accent-brand)] bg-[var(--accent-brand-subtle)]"
                             : "border-foreground/10 bg-foreground/5"
                         )}
                       >
                         {checked && (
-                          <CheckCircle className="h-2.5 w-2.5 text-cyan-400" />
+                          <CheckCircle className="h-2.5 w-2.5 text-[var(--accent-brand-text)]" />
                         )}
                       </div>
                       <span className="text-sm">{a.emoji}</span>
@@ -3709,7 +3691,7 @@ function WorkspaceFilesModal({
                           onOpenDocument(workspacePath, file.relativePath);
                           onClose();
                         }}
-                        className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-left transition-colors hover:border-violet-500/20 hover:bg-violet-500/5"
+                        className="w-full rounded-lg border border-foreground/10 bg-foreground/5 px-3 py-2 text-left transition-colors hover:border-[var(--accent-brand-border)] hover:bg-[var(--accent-brand-subtle)]"
                         title="Open in Documents"
                       >
                         <p className="truncate text-xs font-medium text-foreground/80">
@@ -3760,15 +3742,20 @@ function WorkspaceFilesModal({
 export function AgentsView() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tab: "agents" | "subagents" =
-    (searchParams.get("tab") || "").toLowerCase() === "subagents" ? "subagents" : "agents";
+  // Unified view mode: flow (org chart), grid (cards), subagents
+  type ViewMode = "flow" | "grid" | "subagents";
+  const initialView: ViewMode =
+    (searchParams.get("tab") || "").toLowerCase() === "subagents" ? "subagents" : "flow";
+  const [viewMode, setViewMode] = useState<ViewMode>(initialView);
+  // Derived helpers for backward compat
+  const tab: "agents" | "subagents" = viewMode === "subagents" ? "subagents" : "agents";
+  const view: "flow" | "grid" = viewMode === "grid" ? "grid" : "flow";
   const [data, setData] = useState<AgentsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string | null>(null);
-  const [view, setView] = useState<"flow" | "grid">("flow");
   const [showAddModal, setShowAddModal] = useState(false);
 
   const handleAgentClick = useCallback((id: string) => {
@@ -3865,7 +3852,9 @@ export function AgentsView() {
     [data, editingAgentId]
   );
 
-  const switchTab = useCallback((next: "agents" | "subagents") => {
+  const switchView = useCallback((next: ViewMode) => {
+    setViewMode(next);
+    // Keep URL in sync for subagents tab (bookmarkable)
     const params = new URLSearchParams(searchParams.toString());
     params.delete("section");
     if (next === "subagents") params.set("tab", "subagents");
@@ -3875,18 +3864,14 @@ export function AgentsView() {
   }, [router, searchParams]);
 
   useEffect(() => {
-    if (tab === "subagents") {
+    if (viewMode === "subagents") {
       setShowAddModal(false);
       setEditingAgentId(null);
       setSelectedWorkspacePath(null);
-    }
-  }, [tab]);
-
-  useEffect(() => {
-    if (view !== "flow") {
+    } else if (viewMode !== "flow") {
       setSelectedWorkspacePath(null);
     }
-  }, [view]);
+  }, [viewMode]);
 
   const agentCount = data?.agents.length ?? 0;
   const sectionDescription =
@@ -3916,8 +3901,8 @@ export function AgentsView() {
       <SectionHeader
         title={
           <span className="flex items-center gap-3">
-            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-500/10">
-              <Users className="h-5 w-5 text-violet-400" />
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--accent-brand-subtle)]">
+              <Users className="h-5 w-5 text-[var(--accent-brand-text)]" />
             </span>
             Agents
           </span>
@@ -3925,70 +3910,39 @@ export function AgentsView() {
         description={sectionDescription}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <div className="flex rounded-lg border border-foreground/10 bg-card">
-              <button
-                type="button"
-                onClick={() => switchTab("agents")}
-                className={cn(
-                  "rounded-l-lg px-3 py-1.5 text-xs font-medium transition",
-                  tab === "agents"
-                    ? "bg-violet-500/15 text-violet-400"
-                    : "text-muted-foreground hover:text-foreground/70"
-                )}
-              >
-                Agents
-              </button>
-              <button
-                type="button"
-                onClick={() => switchTab("subagents")}
-                className={cn(
-                  "border-l border-foreground/10 rounded-r-lg px-3 py-1.5 text-xs font-medium transition",
-                  tab === "subagents"
-                    ? "bg-violet-500/15 text-violet-400"
-                    : "text-muted-foreground hover:text-foreground/70"
-                )}
-              >
-                Subagents
-              </button>
+            {/* Unified view switcher — pill segmented control */}
+            <div className="flex rounded-xl bg-muted/50 p-1">
+              {([
+                { key: "flow" as ViewMode, icon: GitFork, label: "Hierarchy" },
+                { key: "grid" as ViewMode, icon: LayoutGrid, label: "Cards" },
+                { key: "subagents" as ViewMode, icon: Network, label: "Subagents" },
+              ] as const).map(({ key, icon: Icon, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => switchView(key)}
+                  className={cn(
+                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
+                    viewMode === key
+                      ? "bg-card shadow-sm text-foreground animate-segment-slide"
+                      : "text-muted-foreground hover:text-foreground/70"
+                  )}
+                >
+                  <Icon className="h-3 w-3" />
+                  <span className="hidden sm:inline">{label}</span>
+                </button>
+              ))}
             </div>
 
             {tab === "agents" && (
-              <>
-                <div className="flex rounded-lg border border-foreground/10 bg-card">
-                  <button
-                    type="button"
-                    onClick={() => setView("flow")}
-                    className={cn(
-                      "rounded-l-lg px-3 py-1.5 text-xs font-medium transition",
-                      view === "flow"
-                        ? "bg-violet-500/15 text-violet-400"
-                        : "text-muted-foreground hover:text-foreground/70"
-                    )}
-                  >
-                    Org Chart
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setView("grid")}
-                    className={cn(
-                      "border-l border-foreground/10 rounded-r-lg px-3 py-1.5 text-xs font-medium transition",
-                      view === "grid"
-                        ? "bg-violet-500/15 text-violet-400"
-                        : "text-muted-foreground hover:text-foreground/70"
-                    )}
-                  >
-                    Grid
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowAddModal(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-400 transition-colors hover:bg-violet-500/20"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span className="hidden sm:inline">Add Agent</span>
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-1.5 rounded-lg bg-[var(--accent-brand)] px-3 py-1.5 text-xs font-medium text-[var(--accent-brand-on)] transition-colors hover:opacity-90"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Add Agent</span>
+              </button>
             )}
 
             <button type="button" onClick={fetchAgents} className="rounded-lg border border-foreground/10 bg-card p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground/70">

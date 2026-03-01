@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { QrLoginModal } from "@/components/qr-login-modal";
 import { TypingDots } from "@/components/typing-dots";
+import { skipOnboarding } from "@/components/setup-gate";
 import { cn } from "@/lib/utils";
 
 type SetupStatus = {
@@ -39,7 +40,8 @@ type ProviderId =
   | "openrouter"
   | "groq"
   | "xai"
-  | "mistral";
+  | "mistral"
+  | "custom";
 
 type ChannelId = "telegram" | "discord" | "whatsapp" | "signal" | "slack";
 
@@ -56,6 +58,11 @@ type ProviderDef = {
   placeholder: string;
   helpUrl: string;
   helpSteps: string[];
+  /** Custom provider: API key is optional */
+  keyOptional?: boolean;
+  /** Custom provider: needs a base URL input */
+  needsBaseUrl?: boolean;
+  baseUrlPlaceholder?: string;
 };
 
 type ChannelDef = {
@@ -168,6 +175,22 @@ const PROVIDERS: ProviderDef[] = [
       "Create a key and paste it here.",
     ],
   },
+  {
+    id: "custom",
+    label: "Custom / OpenAI-compatible",
+    icon: "🔗",
+    defaultModel: "",
+    placeholder: "Bearer token (optional for local endpoints)",
+    helpUrl: "",
+    helpSteps: [
+      "Enter your endpoint's base URL (e.g. http://localhost:1234/v1).",
+      "Add an API key if your endpoint requires authentication.",
+      "Models will be auto-detected from your server.",
+    ],
+    keyOptional: true,
+    needsBaseUrl: true,
+    baseUrlPlaceholder: "http://localhost:1234/v1",
+  },
 ];
 
 const CHANNELS: ChannelDef[] = [
@@ -257,6 +280,7 @@ const WELL_KNOWN_MODELS: Record<ProviderId, ModelItem[]> = {
     { id: "mistral/mistral-small-latest", name: "Mistral Small" },
     { id: "mistral/codestral-latest", name: "Codestral" },
   ],
+  custom: [],
 };
 
 const RECOMMENDED_MODEL_MATCHERS = [
@@ -432,6 +456,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [model, setModel] = useState(PROVIDERS[0].defaultModel);
+  const [customBaseUrl, setCustomBaseUrl] = useState("");
   const [testingKey, setTestingKey] = useState(false);
   const [keyValid, setKeyValid] = useState<boolean | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -451,6 +476,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
   const [approvedCodes, setApprovedCodes] = useState<Set<string>>(new Set());
 
   const [launchError, setLaunchError] = useState<string | null>(null);
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
   const validateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const validationSeqRef = useRef(0);
@@ -517,6 +543,33 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     }
   }, []);
 
+  const fetchCustomModels = useCallback(async (baseUrl: string, token: string) => {
+    const seq = ++modelFetchSeqRef.current;
+    setLoadingModels(true);
+    try {
+      const res = await fetch("/api/onboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "list-models", provider: "custom", baseUrl, token }),
+      });
+      const data = await res.json();
+      if (seq !== modelFetchSeqRef.current) return;
+      if (data.ok && Array.isArray(data.models)) {
+        setLiveModels(data.models as ModelItem[]);
+        // Auto-select first model if none selected
+        if (data.models.length > 0 && !model) {
+          setModel((data.models[0] as ModelItem).id);
+        }
+      } else {
+        setLiveModels([]);
+      }
+    } catch {
+      if (seq === modelFetchSeqRef.current) setLiveModels([]);
+    } finally {
+      if (seq === modelFetchSeqRef.current) setLoadingModels(false);
+    }
+  }, [model]);
+
   useEffect(() => {
     if (validateTimerRef.current) clearTimeout(validateTimerRef.current);
     const seq = ++validationSeqRef.current;
@@ -528,6 +581,62 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     setLiveModels([]);
     setLoadingModels(false);
 
+    // Custom provider: validate by probing the base URL
+    if (provider === "custom") {
+      if (!customBaseUrl.trim() || customBaseUrl.trim().length < 8) return;
+
+      validateTimerRef.current = setTimeout(async () => {
+        setTestingKey(true);
+        try {
+          const res = await fetch("/api/onboard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "test-key",
+              provider: "custom",
+              baseUrl: customBaseUrl.trim(),
+              token: apiKey.trim() || "",
+            }),
+          });
+          const data = await res.json();
+          if (seq !== validationSeqRef.current) return;
+
+          if (data.ok) {
+            setKeyValid(true);
+            setKeyError(null);
+            // Models may already be in the response
+            if (Array.isArray(data.models) && data.models.length > 0) {
+              const models = data.models.map((m: { id: string; name?: string }) => ({
+                id: m.id.includes("/") ? m.id : `custom/${m.id}`,
+                name: m.name || m.id,
+              }));
+              setLiveModels(models);
+              if (models.length > 0 && !model) {
+                setModel(models[0].id);
+              }
+              setLoadingModels(false);
+            } else {
+              await fetchCustomModels(customBaseUrl.trim(), apiKey.trim());
+            }
+          } else {
+            setKeyValid(false);
+            setKeyError(data.error || "Could not connect to endpoint.");
+          }
+        } catch (error) {
+          if (seq !== validationSeqRef.current) return;
+          setKeyValid(false);
+          setKeyError(error instanceof Error ? error.message : "Connection failed.");
+        } finally {
+          if (seq === validationSeqRef.current) setTestingKey(false);
+        }
+      }, 800);
+
+      return () => {
+        if (validateTimerRef.current) clearTimeout(validateTimerRef.current);
+      };
+    }
+
+    // Standard providers: validate API key
     if (apiKey.trim().length < 8) return;
 
     validateTimerRef.current = setTimeout(async () => {
@@ -563,7 +672,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     return () => {
       if (validateTimerRef.current) clearTimeout(validateTimerRef.current);
     };
-  }, [apiKey, fetchLiveModels, provider]);
+  }, [apiKey, customBaseUrl, fetchCustomModels, fetchLiveModels, model, provider]);
 
   useEffect(() => {
     if (!connectedChannel) {
@@ -607,24 +716,29 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     setKeyError(null);
     setLiveModels([]);
     setLoadingModels(false);
+    setCustomBaseUrl("");
   }, []);
 
   const saveCredentials = useCallback(async () => {
+    const payload: Record<string, string> = {
+      action: "save-credentials",
+      provider,
+      apiKey: apiKey.trim(),
+      model,
+    };
+    if (provider === "custom" && customBaseUrl.trim()) {
+      payload.baseUrl = customBaseUrl.trim();
+    }
     const res = await fetch("/api/onboard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "save-credentials",
-        provider,
-        apiKey: apiKey.trim(),
-        model,
-      }),
+      body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok === false) {
       throw new Error(data.error || "Could not save your API credentials.");
     }
-  }, [apiKey, model, provider]);
+  }, [apiKey, customBaseUrl, model, provider]);
 
   const continueToChannelStep = useCallback(async () => {
     try {
@@ -702,15 +816,19 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     setLaunchError(null);
 
     try {
+      const payload: Record<string, string> = {
+        action: "quick-setup",
+        provider,
+        apiKey: apiKey.trim(),
+        model,
+      };
+      if (provider === "custom" && customBaseUrl.trim()) {
+        payload.baseUrl = customBaseUrl.trim();
+      }
       const res = await fetch("/api/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "quick-setup",
-          provider,
-          apiKey: apiKey.trim(),
-          model,
-        }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) {
@@ -721,7 +839,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     } catch (error) {
       setLaunchError(error instanceof Error ? error.message : "Setup failed.");
     }
-  }, [apiKey, model, onComplete, provider, router]);
+  }, [apiKey, customBaseUrl, model, onComplete, provider, router]);
 
   const finishSetup = useCallback(() => {
     setStep("finishing");
@@ -738,7 +856,9 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
   }, []);
 
   const visibleStepIndex = step === "model" ? 0 : step === "channel" ? 1 : 1;
-  const continueDisabled = !apiKey.trim() || testingKey || keyValid !== true || status?.installed === false;
+  const continueDisabled = provider === "custom"
+    ? (!customBaseUrl.trim() || testingKey || keyValid !== true || status?.installed === false)
+    : (!apiKey.trim() || testingKey || keyValid !== true || status?.installed === false);
   const onboardingBlocked = status?.installed === false;
   const approvalComplete = approvedCodes.size > 0;
 
@@ -829,20 +949,41 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                         <p key={`${currentProvider.id}-help-${index}`}>{stepText}</p>
                       ))}
                     </div>
-                    <a
-                      href={currentProvider.helpUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 transition-colors hover:underline dark:text-blue-400"
-                    >
-                      Open {currentProvider.label} Dashboard
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
+                    {currentProvider.helpUrl ? (
+                      <a
+                        href={currentProvider.helpUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 transition-colors hover:underline dark:text-blue-400"
+                      >
+                        Open {currentProvider.label} Dashboard
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    ) : null}
                   </div>
+
+                  {currentProvider.needsBaseUrl && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">Endpoint URL</label>
+                      <input
+                        type="url"
+                        value={customBaseUrl}
+                        onChange={(event) => setCustomBaseUrl(event.target.value)}
+                        placeholder={currentProvider.baseUrlPlaceholder || "http://localhost:1234/v1"}
+                        autoComplete="off"
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/50"
+                      />
+                      <p className="text-xs text-muted-foreground/50">
+                        Works with NVIDIA NIM, vLLM, Ollama, LM Studio, or any OpenAI-compatible server.
+                      </p>
+                    </div>
+                  )}
 
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
-                      <label className="text-xs font-medium text-muted-foreground">API Key</label>
+                      <label className="text-xs font-medium text-muted-foreground">
+                        API Key{currentProvider.keyOptional ? " (optional)" : ""}
+                      </label>
                       <div className="group relative inline-flex items-center">
                         <ShieldCheck className="h-3 w-3 text-emerald-500/60" />
                         <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-lg bg-foreground px-3 py-1.5 text-xs text-background opacity-0 transition-opacity group-hover:opacity-100">
@@ -1165,6 +1306,49 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
               )}
             </div>
           </div>
+
+          {/* Skip onboarding link */}
+          {step !== "finishing" && (
+            <div className="mt-4 text-center">
+              {!showSkipConfirm ? (
+                <button
+                  type="button"
+                  onClick={() => setShowSkipConfirm(true)}
+                  className="text-xs text-muted-foreground/40 transition-colors hover:text-muted-foreground"
+                >
+                  Skip setup and configure manually
+                </button>
+              ) : (
+                <div className="mx-auto max-w-sm rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
+                  <p className="text-xs font-medium text-foreground">Are you sure?</p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Skipping means you&apos;ll need to configure everything manually using the
+                    terminal. You&apos;ll need to set API keys, models, and start the gateway
+                    yourself via the command line.
+                  </p>
+                  <div className="mt-3 flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setShowSkipConfirm(false)}
+                      className="rounded-full border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Go back
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        skipOnboarding();
+                        onComplete?.();
+                      }}
+                      className="rounded-full bg-amber-600 px-4 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+                    >
+                      Skip anyway
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

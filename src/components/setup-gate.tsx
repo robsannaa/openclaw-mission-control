@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, createContext, useContext } from "react";
+import { useState, useEffect, useCallback, createContext, useContext, useSyncExternalStore } from "react";
 import { OnboardingWizard } from "@/components/onboarding-wizard";
 import { TypingDots } from "@/components/typing-dots";
+
+const SKIP_KEY = "mc-onboarding-skipped";
 
 type SetupStatus = {
   installed: boolean;
@@ -30,10 +32,32 @@ export function useSetupGate() {
   return useContext(SetupGateContext);
 }
 
+function useSkippedOnboarding() {
+  const subscribe = useCallback((cb: () => void) => {
+    const handler = (e: StorageEvent) => { if (e.key === SKIP_KEY) cb(); };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
+  return useSyncExternalStore(
+    subscribe,
+    () => typeof window !== "undefined" && localStorage.getItem(SKIP_KEY) === "true",
+    () => false,
+  );
+}
+
+export function skipOnboarding() {
+  localStorage.setItem(SKIP_KEY, "true");
+}
+
+export function resetOnboardingSkip() {
+  localStorage.removeItem(SKIP_KEY);
+}
+
 export function SetupGate({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const skipped = useSkippedOnboarding();
 
   const fetchStatus = useCallback(async () => {
     if (cachedStatus && Date.now() - cachedStatus.ts < CACHE_TTL) {
@@ -83,7 +107,7 @@ export function SetupGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (status && !status.configured) {
+  if (status && !status.configured && !skipped) {
     return <OnboardingWizard onComplete={handleComplete} />;
   }
 

@@ -7,7 +7,7 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
+  --font-sans: var(--font-figtree);
   --font-serif: var(--font-baskervville);
   --font-mono: var(--font-geist-mono);
   --color-sidebar-ring: var(--sidebar-ring);
@@ -46,6 +46,11 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+  --color-brand: var(--accent-brand);
+  --color-brand-subtle: var(--accent-brand-subtle);
+  --color-brand-border: var(--accent-brand-border);
+  --color-brand-ring: var(--accent-brand-ring);
+  --color-brand-text: var(--accent-brand-text);
 }
 
 /* ── Light mode (default) ───────────────────────── */
@@ -152,6 +157,17 @@
   --legacy-accent-shadow-10: color-mix(in srgb, var(--foreground) 10%, transparent);
   --legacy-accent-shadow-20: color-mix(in srgb, var(--foreground) 18%, transparent);
 
+  /* Copper accent tokens */
+  --accent-brand: #c2733a;
+  --accent-brand-subtle: rgba(194, 115, 58, 0.08);
+  --accent-brand-border: rgba(194, 115, 58, 0.25);
+  --accent-brand-ring: rgba(194, 115, 58, 0.30);
+  --accent-brand-text: #a45f2e;
+  --accent-brand-on: #ffffff;
+
+  /* Background wash */
+  --bg-wash: radial-gradient(ellipse at 50% 0%, rgba(194, 115, 58, 0.03) 0%, transparent 60%);
+
   /* Surface system (replaces glass tokens) */
   --glass-bg: #ffffff;
   --glass-bg-subtle: #faf7f2;
@@ -222,6 +238,17 @@
   --text-quaternary: #746c64;
   --text-placeholder: #746c64;
 
+  /* Copper accent tokens — dark */
+  --accent-brand: #d4915e;
+  --accent-brand-subtle: rgba(212, 145, 94, 0.10);
+  --accent-brand-border: rgba(212, 145, 94, 0.30);
+  --accent-brand-ring: rgba(212, 145, 94, 0.35);
+  --accent-brand-text: #d4915e;
+  --accent-brand-on: #12100e;
+
+  /* Background wash — dark */
+  --bg-wash: radial-gradient(ellipse at 50% 0%, rgba(212, 145, 94, 0.04) 0%, transparent 60%);
+
   /* Surface system — dark */
   --glass-bg: #181512;
   --glass-bg-subtle: #14110f;
@@ -247,6 +274,9 @@
 body {
   min-height: 100vh;
   background-color: var(--background);
+  background-image: var(--bg-wash);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
 }
 
 /* ── Scrollbar ──────────────────────────────────── */
@@ -286,7 +316,10 @@ body {
   .glass-strong {
     background: var(--glass-bg-strong);
     border: 1px solid var(--glass-border);
-    box-shadow: 0 1px 3px var(--glass-shadow-strong);
+    box-shadow:
+      0 1px 3px var(--glass-shadow-strong),
+      0 4px 16px var(--glass-shadow-strong),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
 
   /* Interactive surface — hover border strengthen + lift */
@@ -297,8 +330,10 @@ body {
   }
 
   .glass-glow:hover {
-    border-color: var(--border-strong);
-    box-shadow: 0 2px 8px var(--glass-shadow-strong);
+    border-color: var(--accent-brand-border);
+    box-shadow:
+      0 2px 8px var(--glass-shadow-strong),
+      0 0 0 1px var(--accent-brand-border);
     transform: translateY(-1px);
   }
 
@@ -361,6 +396,71 @@ body {
 
 .animate-bounce-dot {
   animation: bounce-dot 1.2s ease-in-out infinite;
+}
+
+/* ── New animation keyframes ──────────────────── */
+
+@keyframes segmentSlide {
+  from { opacity: 0.6; transform: scaleX(0.95); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes menuPop {
+  from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@layer utilities {
+  .animate-modal-in {
+    animation: modalIn 0.2s ease-out;
+  }
+
+  .animate-backdrop-in {
+    animation: backdropIn 0.2s ease-out;
+  }
+
+  .animate-menu-pop {
+    animation: menuPop 0.15s ease-out;
+  }
+
+  .animate-segment-slide {
+    animation: segmentSlide 0.2s ease-out;
+  }
+
+  .stagger-cards > * {
+    animation: cardEnter 0.3s ease-out both;
+  }
+  .stagger-cards > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-cards > *:nth-child(2) { animation-delay: 40ms; }
+  .stagger-cards > *:nth-child(3) { animation-delay: 80ms; }
+  .stagger-cards > *:nth-child(4) { animation-delay: 120ms; }
+  .stagger-cards > *:nth-child(5) { animation-delay: 160ms; }
+  .stagger-cards > *:nth-child(6) { animation-delay: 200ms; }
+  .stagger-cards > *:nth-child(n+7) { animation-delay: 240ms; }
+}
+
+/* ── Reduced motion ───────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* ── Accent color adjustments ───────────────────── */

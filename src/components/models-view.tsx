@@ -262,6 +262,24 @@ const PROVIDER_CONFIG_TEMPLATES: Record<string, Record<string, unknown>> = {
   },
 };
 
+const CONNECT_PROVIDER_META: Record<
+  string,
+  { label: string; icon: string; keyUrl?: string; keyHint: string; keyOptional?: boolean; needsBaseUrl?: boolean; baseUrlPlaceholder?: string }
+> = {
+  anthropic: { label: "Anthropic", icon: "🟣", keyUrl: "https://console.anthropic.com/settings/keys", keyHint: "sk-ant-..." },
+  openai: { label: "OpenAI", icon: "🟢", keyUrl: "https://platform.openai.com/api-keys", keyHint: "sk-..." },
+  google: { label: "Google", icon: "🔵", keyUrl: "https://aistudio.google.com/apikey", keyHint: "AIza..." },
+  openrouter: { label: "OpenRouter", icon: "🟠", keyUrl: "https://openrouter.ai/keys", keyHint: "sk-or-..." },
+  minimax: { label: "MiniMax", icon: "🟡", keyUrl: "https://platform.minimaxi.com/", keyHint: "eyJ..." },
+  groq: { label: "Groq", icon: "⚡", keyUrl: "https://console.groq.com/keys", keyHint: "gsk_..." },
+  xai: { label: "xAI", icon: "𝕏", keyUrl: "https://console.x.ai/", keyHint: "xai-..." },
+  mistral: { label: "Mistral", icon: "🌊", keyUrl: "https://console.mistral.ai/api-keys/", keyHint: "" },
+  zai: { label: "Z.AI", icon: "💎", keyHint: "" },
+  cerebras: { label: "Cerebras", icon: "🧠", keyHint: "" },
+  huggingface: { label: "Hugging Face", icon: "🤗", keyUrl: "https://huggingface.co/settings/tokens", keyHint: "hf_..." },
+  custom: { label: "Custom Endpoint", icon: "🔗", keyHint: "Bearer token (optional)", keyOptional: true, needsBaseUrl: true, baseUrlPlaceholder: "http://localhost:1234/v1" },
+};
+
 // ── Small Inline Components ──
 
 function StatusPill({
@@ -277,7 +295,7 @@ function StatusPill({
       : tone === "warn"
         ? "border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-300"
         : tone === "info"
-          ? "border-cyan-500/25 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
+          ? "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] text-[var(--accent-brand-text)]"
           : "border-border bg-muted/40 text-muted-foreground";
   return (
     <span
@@ -364,6 +382,14 @@ export function ModelsView() {
   const [orderLoading, setOrderLoading] = useState(false);
   const [orderBusy, setOrderBusy] = useState(false);
   const [orderError, setOrderError] = useState<string | null>(null);
+
+  // Connect-provider inline flow state
+  const [connectProvider, setConnectProvider] = useState<string | null>(null);
+  const [connectKey, setConnectKey] = useState("");
+  const [connectBaseUrl, setConnectBaseUrl] = useState("");
+  const [connectShowKey, setConnectShowKey] = useState(false);
+  const [connectSaving, setConnectSaving] = useState(false);
+  const [connectSuccess, setConnectSuccess] = useState<string | null>(null);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -526,6 +552,68 @@ export function ModelsView() {
   useEffect(() => {
     fetchAllModels();
   }, [fetchAllModels]);
+
+  const handleConnectProvider = useCallback(async () => {
+    if (!connectProvider) return;
+    const isCustom = connectProvider === "custom";
+    // Standard providers require a key; custom requires a base URL
+    if (!isCustom && !connectKey.trim()) return;
+    if (isCustom && !connectBaseUrl.trim()) return;
+    setConnectSaving(true);
+    try {
+      if (isCustom) {
+        // Use onboard API to save-credentials for custom provider
+        const res = await fetch("/api/onboard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "save-credentials",
+            provider: "custom",
+            apiKey: connectKey.trim() || "",
+            baseUrl: connectBaseUrl.trim(),
+          }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setConnectSuccess("custom");
+          setConnectKey("");
+          setConnectBaseUrl("");
+          setConnectProvider(null);
+          setConnectShowKey(false);
+          flash("Custom endpoint connected!", "success");
+          setLoading(true);
+          fetchModels();
+          fetchAllModels();
+          setTimeout(() => setConnectSuccess(null), 3000);
+        } else {
+          flash(data.error || "Failed to connect custom endpoint", "error");
+        }
+      } else {
+        const res = await fetch("/api/models", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "auth-provider", provider: connectProvider, token: connectKey.trim() }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+          setConnectSuccess(connectProvider);
+          setConnectKey("");
+          setConnectProvider(null);
+          setConnectShowKey(false);
+          flash(`${CONNECT_PROVIDER_META[connectProvider]?.label || connectProvider} connected!`, "success");
+          setLoading(true);
+          fetchModels();
+          fetchAllModels();
+          setTimeout(() => setConnectSuccess(null), 3000);
+        } else {
+          flash(data.error || "Failed to connect provider", "error");
+        }
+      }
+    } catch {
+      flash("Failed to connect provider", "error");
+    }
+    setConnectSaving(false);
+  }, [connectProvider, connectKey, connectBaseUrl, flash, fetchModels, fetchAllModels]);
 
   const runAction = useCallback(
     async (
@@ -1458,6 +1546,22 @@ export function ModelsView() {
     (p) => p.provider !== "ollama" && p.provider !== "vllm" && p.provider !== "lmstudio",
   );
 
+  // Providers that are known but not connected (candidates for inline connect flow)
+  const LOCAL_PROVIDERS = new Set(["ollama", "vllm", "lmstudio"]);
+  const disconnectedProviders = providerAuthSummary
+    .filter((p) => !p.connected && !LOCAL_PROVIDERS.has(p.provider))
+    .map((p) => p.provider);
+  // Also include well-known providers that aren't even in the auth summary yet
+  const knownInSummary = new Set(providerAuthSummary.map((p) => p.provider));
+  const connectableProviders = [
+    ...disconnectedProviders,
+    ...Object.keys(CONNECT_PROVIDER_META).filter(
+      (p) => p !== "custom" && !knownInSummary.has(p) && !LOCAL_PROVIDERS.has(p),
+    ),
+    // Always show custom endpoint as last option
+    "custom",
+  ];
+
   return (
     <SectionLayout>
       <SectionHeader
@@ -1506,14 +1610,14 @@ export function ModelsView() {
         {/* ━━━ SECTION 1: Active Model ━━━ */}
         <section className="rounded-2xl border border-border p-5 bg-card">
           <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="h-4 w-4 text-violet-400" />
+            <Sparkles className="h-4 w-4 text-[var(--accent-brand-text)]" />
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Active Model
             </h2>
           </div>
 
           {/* Hero card */}
-          <div className="rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/5 to-transparent p-5">
+          <div className="rounded-xl border border-[var(--accent-brand-border)] bg-gradient-to-br from-[var(--accent-brand-subtle)] to-transparent p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-lg font-semibold text-foreground">
@@ -1620,7 +1724,7 @@ export function ModelsView() {
         <section className="rounded-2xl border border-border p-5 bg-card">
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-cyan-400" />
+              <Shield className="h-4 w-4 text-[var(--accent-brand-text)]" />
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Connected Providers
               </h2>
@@ -1631,20 +1735,13 @@ export function ModelsView() {
             </div>
           </div>
 
-          {providerAuthSummary.length === 0 ? (
+          {/* Provider chips */}
+          {providerAuthSummary.length === 0 && connectableProviders.length === 0 ? (
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-center">
               <p className="text-sm text-foreground font-medium">No providers detected</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 Connect an AI provider to start using models.
               </p>
-              <a
-                href="/accounts"
-                className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-2 text-xs font-medium text-cyan-400 transition-colors hover:bg-cyan-500/20"
-              >
-                <KeyRound className="h-3.5 w-3.5" />
-                Set Up Keys
-                <ExternalLink className="h-3 w-3" />
-              </a>
             </div>
           ) : (
             <>
@@ -1700,23 +1797,167 @@ export function ModelsView() {
                   </p>
                 </div>
               )}
-              <div className="mt-3">
-                {hasCredentialProviders ? (
-                  <a
-                    href="/accounts"
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
-                  >
-                    <KeyRound className="h-3.5 w-3.5" />
-                    Manage Keys
-                    <ExternalLink className="h-3 w-3" />
-                  </a>
-                ) : (
-                  <p className="text-xs text-muted-foreground/70">
-                    Local providers do not require API keys.
+            </>
+          )}
+
+          {/* ── Connect a new provider ── */}
+          {connectableProviders.length > 0 && (
+            <div className="mt-4">
+              <div className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground/40">
+                Connect a new provider
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+                {connectableProviders.slice(0, 12).map((p) => {
+                  const meta = CONNECT_PROVIDER_META[p];
+                  const isActive = connectProvider === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => {
+                        if (isActive) {
+                          setConnectProvider(null);
+                          setConnectKey("");
+                          setConnectBaseUrl("");
+                          setConnectShowKey(false);
+                        } else {
+                          setConnectProvider(p);
+                          setConnectKey("");
+                          setConnectBaseUrl("");
+                          setConnectShowKey(false);
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 rounded-lg border px-2.5 py-2 text-xs transition-colors",
+                        isActive
+                          ? "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] text-foreground"
+                          : connectSuccess === p
+                            ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                            : "border-foreground/10 bg-foreground/5 text-muted-foreground/70 hover:border-[var(--accent-brand-border)] hover:text-foreground/80",
+                      )}
+                    >
+                      <span>{meta?.icon || "🤖"}</span>
+                      <span className="truncate font-medium">{meta?.label || getProviderDisplayName(p)}</span>
+                      {connectSuccess === p ? (
+                        <Check className="ml-auto h-3 w-3 text-emerald-400" />
+                      ) : (
+                        <Plus className="ml-auto h-2.5 w-2.5 text-muted-foreground/30" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Inline key input ── */}
+          {connectProvider && (() => {
+            const meta = CONNECT_PROVIDER_META[connectProvider];
+            const isCustom = connectProvider === "custom";
+            const canSubmit = isCustom
+              ? connectBaseUrl.trim().length > 0
+              : connectKey.trim().length > 0;
+            return (
+            <div className="mt-3 rounded-xl border border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-sm">{meta?.icon || "🤖"}</span>
+                <span className="text-xs font-semibold text-foreground">
+                  Connect {meta?.label || connectProvider}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => { setConnectProvider(null); setConnectKey(""); setConnectBaseUrl(""); setConnectShowKey(false); }}
+                  className="ml-auto rounded p-0.5 text-muted-foreground/40 hover:text-foreground/60"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+              {/* Base URL input for custom providers */}
+              {meta?.needsBaseUrl && (
+                <div className="mb-2">
+                  <label className="mb-1 block text-[11px] font-medium text-muted-foreground/60">
+                    Endpoint URL
+                  </label>
+                  <input
+                    type="text"
+                    value={connectBaseUrl}
+                    onChange={(e) => setConnectBaseUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) { e.preventDefault(); handleConnectProvider(); } }}
+                    placeholder={meta.baseUrlPlaceholder || "https://api.example.com/v1"}
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2.5 text-xs font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-[var(--accent-brand-border)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-brand-ring)]"
+                    autoFocus
+                  />
+                  <p className="mt-1 text-[10px] text-muted-foreground/40">
+                    Any OpenAI-compatible endpoint (vLLM, Ollama, LM Studio, NVIDIA NIM, etc.)
                   </p>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  {meta?.needsBaseUrl && (
+                    <label className="mb-1 block text-[11px] font-medium text-muted-foreground/60">
+                      API Key {meta?.keyOptional ? "(optional)" : ""}
+                    </label>
+                  )}
+                  <input
+                    type={connectShowKey ? "text" : "password"}
+                    value={connectKey}
+                    onChange={(e) => setConnectKey(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter" && canSubmit) { e.preventDefault(); handleConnectProvider(); } }}
+                    placeholder={meta?.keyHint || "Paste API key..."}
+                    className="w-full rounded-lg border border-border bg-card px-3 py-2.5 pr-9 text-xs font-mono text-foreground/90 placeholder:text-muted-foreground/30 focus:border-[var(--accent-brand-border)] focus:outline-none focus:ring-1 focus:ring-[var(--accent-brand-ring)]"
+                    autoFocus={!meta?.needsBaseUrl}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setConnectShowKey(!connectShowKey)}
+                    className="absolute right-2.5 bottom-2.5 text-muted-foreground/40 hover:text-foreground/60"
+                  >
+                    {connectShowKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleConnectProvider}
+                  disabled={!canSubmit || connectSaving}
+                  className={cn(
+                    "shrink-0 rounded-lg bg-[var(--accent-brand)] text-[var(--accent-brand-on)] px-4 py-2.5 text-xs font-medium transition-colors hover:opacity-90 disabled:opacity-40",
+                    meta?.needsBaseUrl && "self-end",
+                  )}
+                >
+                  {connectSaving ? <BusyDots /> : "Connect"}
+                </button>
+              </div>
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground/50">
+                <KeyRound className="h-2.5 w-2.5" />
+                <span>Stored securely in OpenClaw. Never leaves your machine.</span>
+                {meta?.keyUrl && (
+                  <a
+                    href={meta.keyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="ml-auto flex items-center gap-0.5 text-[var(--accent-brand-text)] hover:text-[var(--accent-brand)]"
+                  >
+                    Get a key <ExternalLink className="h-2.5 w-2.5" />
+                  </a>
                 )}
               </div>
-            </>
+            </div>
+            );
+          })()}
+
+          {/* Manage keys link */}
+          {hasCredentialProviders && (
+            <div className="mt-3">
+              <a
+                href="/accounts"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+              >
+                <KeyRound className="h-3.5 w-3.5" />
+                Advanced Key Management
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            </div>
           )}
         </section>
 
@@ -1758,7 +1999,7 @@ export function ModelsView() {
                     className={cn(
                       "flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium transition-colors border-b-2",
                       advancedTab === tab.key
-                        ? "border-cyan-500 text-cyan-400"
+                        ? "border-[var(--accent-brand)] text-[var(--accent-brand-text)]"
                         : "border-transparent text-muted-foreground hover:text-foreground hover:bg-foreground/5",
                     )}
                   >
@@ -1820,7 +2061,7 @@ export function ModelsView() {
                                   </button>
                                 )}
                                 {rowBusy && (
-                                  <span className="text-xs text-cyan-400">
+                                  <span className="text-xs text-[var(--accent-brand-text)]">
                                     <BusyDots />
                                   </span>
                                 )}
@@ -1978,7 +2219,7 @@ export function ModelsView() {
                           value={customModelToAdd}
                           onChange={(e) => setCustomModelToAdd(e.target.value)}
                           placeholder="provider/model-name"
-                          className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40 w-56"
+                          className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-[var(--accent-brand-border)] w-56"
                         />
                         <button
                           type="button"
@@ -2097,7 +2338,7 @@ export function ModelsView() {
                           value={heartbeatEveryDraft}
                           onChange={(e) => setHeartbeatEveryDraft(e.target.value)}
                           placeholder="1h"
-                          className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+                          className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-[var(--accent-brand-border)]"
                         />
                         <button
                           type="button"
@@ -2241,7 +2482,7 @@ export function ModelsView() {
                               loadProviderDraft(next);
                             }
                           }}
-                          className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+                          className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-[var(--accent-brand-border)]"
                         >
                           <option value="">Select provider...</option>
                           {providerDraftOptions.map((provider) => (
@@ -2263,7 +2504,7 @@ export function ModelsView() {
                               if (next) loadProviderDraft(next);
                             }}
                             placeholder="provider id (for example my-proxy)"
-                            className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+                            className="rounded-md border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none transition-colors focus:border-[var(--accent-brand-border)]"
                           />
                         ) : (
                           <div className="rounded-md border border-border/50 bg-muted/20 px-2.5 py-1.5 text-xs text-muted-foreground">
@@ -2275,7 +2516,7 @@ export function ModelsView() {
                       <textarea
                         value={providerDraftJson}
                         onChange={(e) => setProviderDraftJson(e.target.value)}
-                        className="mt-2 h-40 w-full rounded-md border border-border bg-card px-3 py-2 font-mono text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+                        className="mt-2 h-40 w-full rounded-md border border-border bg-card px-3 py-2 font-mono text-xs text-foreground outline-none transition-colors focus:border-[var(--accent-brand-border)]"
                       />
                       {providerDraftError && (
                         <p className="mt-2 text-xs text-red-500">{providerDraftError}</p>
@@ -2358,12 +2599,12 @@ export function ModelsView() {
                           value={aliasName}
                           onChange={(e) => setAliasName(e.target.value)}
                           placeholder="Alias name (e.g. fast)"
-                          className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+                          className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-[var(--accent-brand-border)]"
                         />
                         <select
                           value={aliasTarget}
                           onChange={(e) => setAliasTarget(e.target.value)}
-                          className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+                          className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-xs text-foreground outline-none transition-colors focus:border-[var(--accent-brand-border)]"
                         >
                           <option value="">Target model...</option>
                           {allModelOptions
@@ -2429,7 +2670,7 @@ export function ModelsView() {
                           <select
                             value={orderAgentId}
                             onChange={(e) => setOrderAgentId(e.target.value)}
-                            className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+                            className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-[var(--accent-brand-border)]"
                           >
                             {sortedAgents.map((agent) => (
                               <option key={`order:agent:${agent.id}`} value={agent.id}>
@@ -2440,7 +2681,7 @@ export function ModelsView() {
                           <select
                             value={orderProvider}
                             onChange={(e) => setOrderProvider(e.target.value)}
-                            className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+                            className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-[var(--accent-brand-border)]"
                           >
                             {availableProviders.map((provider) => (
                               <option key={`order:provider:${provider}`} value={provider}>
@@ -2454,7 +2695,7 @@ export function ModelsView() {
                           <select
                             value={orderSelectedProfileId}
                             onChange={(e) => setOrderSelectedProfileId(e.target.value)}
-                            className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-cyan-500/40"
+                            className="rounded-lg border border-border bg-muted/50 px-2.5 py-2 text-xs text-foreground outline-none transition-colors focus:border-[var(--accent-brand-border)]"
                           >
                             <option value="">Select profile id...</option>
                             {selectedOrderAgentProfiles.map((profileId) => (
