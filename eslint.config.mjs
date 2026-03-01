@@ -13,6 +13,24 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // Prevent direct imports of internal modules — use @/lib/openclaw instead.
+  {
+    files: ["src/app/**/*.ts", "src/app/**/*.tsx", "src/components/**/*.ts", "src/components/**/*.tsx"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        paths: [
+          {
+            name: "@/lib/openclaw-cli",
+            message: "Import from '@/lib/openclaw' instead. openclaw-cli is an internal module used only by transports.",
+          },
+          {
+            name: "@/lib/openclaw-client",
+            message: "Import from '@/lib/openclaw' instead. openclaw-client is an internal module.",
+          },
+        ],
+      }],
+    },
+  },
 ]);
 
 export default eslintConfig;

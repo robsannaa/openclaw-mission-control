@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { runCli, runCliJson } from "@/lib/openclaw-cli";
+import { runCli, runCliJson } from "@/lib/openclaw";
 
 export const dynamic = "force-dynamic";
 

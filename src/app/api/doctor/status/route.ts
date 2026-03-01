@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { getOpenClawBin } from "@/lib/paths";
-import { runCliJson } from "@/lib/openclaw-cli";
+import { runCliJson } from "@/lib/openclaw";
 import { classifyDoctorOutput, type DoctorIssue } from "@/lib/doctor-checks";
 import { getLastRunTimestamp } from "@/lib/doctor-history";
 
@@ -43,7 +43,7 @@ export async function GET() {
   // Run doctor + gateway status in parallel
   const [doctorResult, gatewayResult, lastRunAt] = await Promise.all([
     runDoctor(),
-    runCliJson<GatewayStatusPayload>(["gateway", "status"], 15000).catch(() => null),
+    runCliJson<GatewayStatusPayload>(["gateway", "status"], 30000).catch(() => null),
     getLastRunTimestamp(),
   ]);
 

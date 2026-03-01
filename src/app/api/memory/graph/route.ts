@@ -4,7 +4,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { basename, join } from "path";
 import { getDefaultWorkspaceSync, getOpenClawHome } from "@/lib/paths";
-import { gatewayCall, runCli, runCliJson } from "@/lib/openclaw-cli";
+import { gatewayCall, runCli, runCliJson } from "@/lib/openclaw";
 
 export const dynamic = "force-dynamic";
 

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gatewayCall } from "@/lib/openclaw-cli";
+import { gatewayCall } from "@/lib/openclaw";
 
 type GatewayMessage = {
   role?: string;

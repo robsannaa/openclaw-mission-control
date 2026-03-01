@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gatewayCall } from "@/lib/openclaw-compat";
+import { gatewayCall } from "@/lib/openclaw";
 
 export const dynamic = "force-dynamic";
 

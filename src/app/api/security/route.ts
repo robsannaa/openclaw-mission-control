@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
-import { runCliJson, runCliCaptureBoth } from "@/lib/openclaw-cli";
+import { runCliJson, runCliCaptureBoth } from "@/lib/openclaw";
 
 export const dynamic = "force-dynamic";
 

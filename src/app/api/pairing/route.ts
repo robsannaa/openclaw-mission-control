@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runCliJson, runCli } from "@/lib/openclaw-cli";
+import { runCliJson, runCli } from "@/lib/openclaw";
 import { getOpenClawHome } from "@/lib/paths";
 import { readdir, readFile } from "fs/promises";
 import { join } from "path";

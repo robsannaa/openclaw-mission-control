@@ -12,7 +12,7 @@ import { join, extname, basename } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { getDefaultWorkspaceSync } from "@/lib/paths";
-import { runCli, runCliJson } from "@/lib/openclaw-cli";
+import { runCli, runCliJson } from "@/lib/openclaw";
 
 const WORKSPACE = getDefaultWorkspaceSync();
 const exec = promisify(execFile);

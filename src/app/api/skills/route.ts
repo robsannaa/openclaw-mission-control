@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runCliJson, gatewayCall } from "@/lib/openclaw-cli";
+import { runCliJson, gatewayCall } from "@/lib/openclaw";
 import { readFile } from "fs/promises";
 
 export const dynamic = "force-dynamic";

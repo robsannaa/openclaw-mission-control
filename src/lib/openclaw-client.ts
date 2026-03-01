@@ -54,10 +54,10 @@ let _client: OpenClawClient | null = null;
 
 export function getTransportMode(): TransportMode {
   const mode = (
-    process.env.OPENCLAW_TRANSPORT || "cli"
+    process.env.OPENCLAW_TRANSPORT || "auto"
   ).toLowerCase() as string;
-  if (mode === "http" || mode === "auto") return mode as TransportMode;
-  return "cli";
+  if (mode === "http" || mode === "cli") return mode as TransportMode;
+  return "auto";
 }
 
 /**

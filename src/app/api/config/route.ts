@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gatewayCall } from "@/lib/openclaw-cli";
-import { runCliCaptureBoth } from "@/lib/openclaw-cli";
+import { gatewayCall, runCliCaptureBoth } from "@/lib/openclaw";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome } from "@/lib/paths";

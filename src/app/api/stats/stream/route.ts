@@ -4,7 +4,7 @@ import { statfs, readdir, stat, readFile } from "fs/promises";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { join } from "path";
-import { gatewayCall } from "@/lib/openclaw-cli";
+import { gatewayCall } from "@/lib/openclaw";
 
 export const dynamic = "force-dynamic";
 const exec = promisify(execFile);

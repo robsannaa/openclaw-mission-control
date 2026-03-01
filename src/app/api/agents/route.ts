@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { readFile, writeFile, readdir } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome, getDefaultWorkspaceSync } from "@/lib/paths";
-import { runCliJson, runCli, parseJsonFromCliOutput } from "@/lib/openclaw-cli";
+import { runCliJson, runCli, parseJsonFromCliOutput } from "@/lib/openclaw";
 import { fetchGatewaySessions, summarizeSessionsByAgent } from "@/lib/gateway-sessions";
 
 const OPENCLAW_HOME = getOpenClawHome();

@@ -1,4 +1,4 @@
-import { gatewayCall } from "@/lib/openclaw-cli";
+import { gatewayCall } from "@/lib/openclaw";
 
 export type GatewaySession = {
   key?: string | null;

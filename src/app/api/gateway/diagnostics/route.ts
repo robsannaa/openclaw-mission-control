@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { runCliJson } from "@/lib/openclaw-cli";
+import { runCliJson } from "@/lib/openclaw";
 import { getOpenClawBin } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
@@ -286,7 +286,7 @@ export async function GET() {
   let statusErr: string | null = null;
 
   try {
-    status = await runCliJson<GatewayStatusPayload>(["gateway", "status"], 15000);
+    status = await runCliJson<GatewayStatusPayload>(["gateway", "status"], 30000);
   } catch (err) {
     statusErr = formatErr(err);
   }

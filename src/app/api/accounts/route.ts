@@ -3,7 +3,7 @@ import { access, readFile, readdir } from "fs/promises";
 import { constants as FS_CONSTANTS } from "fs";
 import { join } from "path";
 import { getDefaultWorkspaceSync, getOpenClawHome, getSystemSkillsDir } from "@/lib/paths";
-import { gatewayCall, runCliJson } from "@/lib/openclaw-cli";
+import { gatewayCall, runCliJson } from "@/lib/openclaw";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { access, readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
-import { runCli } from "@/lib/openclaw-cli";
+import { runCli } from "@/lib/openclaw";
 import { getOpenClawBin, getOpenClawHome, getGatewayUrl } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";

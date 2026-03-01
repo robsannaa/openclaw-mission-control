@@ -378,16 +378,25 @@ const nodeTypes = {
    Layout computation
    ================================================================ */
 
+type BuildGraphOptions = {
+  layoutDirection?: "ltr" | "rtl";
+  getSavedPosition?: (id: string) => { x: number; y: number } | undefined;
+};
+
 function buildGraph(
   data: AgentsResponse,
   selectedId: string | null,
   onSelectAgent: (id: string) => void,
   selectedWorkspacePath: string | null,
-  onSelectWorkspace: (workspacePath: string) => void
+  onSelectWorkspace: (workspacePath: string) => void,
+  options?: BuildGraphOptions
 ): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
   const agents = data.agents;
+  const rtl = options?.layoutDirection === "rtl";
+  const getSaved = options?.getSavedPosition;
+  const pos = (id: string, x: number, y: number) => getSaved?.(id) ?? { x, y };
 
   // Gather unique channels/workspaces and explicit binding routes.
   const channelMap = new Map<string, Set<string>>(); // channel → account ids
@@ -430,20 +439,73 @@ function buildGraph(
     agents[0] ||
     null;
 
+  // ── Level-order (BFS) layout for sub-agents to avoid overlap ──
+  const subAgentLevels: Agent[][] = [];
+  const inLevel = new Set<string>();
+  let currentLevel = agents.filter((a) => {
+    const parent = agents.find((p) => p.subagents.includes(a.id));
+    return parent && topLevelAgents.includes(parent);
+  });
+  while (currentLevel.length > 0) {
+    subAgentLevels.push(currentLevel);
+    currentLevel.forEach((a) => inLevel.add(a.id));
+    const nextLevel: Agent[] = [];
+    currentLevel.forEach((parent) => {
+      parent.subagents.forEach((sid) => {
+        const child = agents.find((a) => a.id === sid);
+        if (child && !inLevel.has(child.id)) {
+          nextLevel.push(child);
+          inLevel.add(child.id);
+        }
+      });
+    });
+    currentLevel = nextLevel;
+  }
+  const NODE_SPACING = 180;
+  const LAYOUT_FIRST_SUB_Y = 180;
+  const LEVEL_DY = 130;
+  const agentPositionByLevel = new Map<string, { x: number; y: number }>();
+  if (rtl) {
+    const RTL_LEVEL_0_X = 400;
+    const RTL_LEVEL_DX = -220;
+    subAgentLevels.forEach((level, levelIndex) => {
+      const len = level.length;
+      const centerX = RTL_LEVEL_0_X + levelIndex * RTL_LEVEL_DX;
+      const y = LAYOUT_FIRST_SUB_Y + levelIndex * LEVEL_DY;
+      level.forEach((agent, i) => {
+        agentPositionByLevel.set(agent.id, {
+          x: centerX + ((len - 1) / 2 - i) * NODE_SPACING,
+          y,
+        });
+      });
+    });
+  } else {
+    const SUB_AGENT_LAYOUT_CENTER_X = 640;
+    subAgentLevels.forEach((level, levelIndex) => {
+      const len = level.length;
+      const centerX = SUB_AGENT_LAYOUT_CENTER_X + levelIndex * 120;
+      const y = LAYOUT_FIRST_SUB_Y + levelIndex * LEVEL_DY;
+      level.forEach((agent, i) => {
+        agentPositionByLevel.set(agent.id, {
+          x: centerX + (i - (len - 1) / 2) * NODE_SPACING,
+          y,
+        });
+      });
+    });
+  }
+
   // ── Dynamic layout ──
-  // Center everything around (0, 0) so fitView works well.
-  // Layers left→right: Channels → Gateway → Agents → Workspaces
   const AGENT_SPACING_Y = 160;
   const SUB_AGENT_OFFSET_X = 50;
   const SUB_AGENT_OFFSET_Y = 170;
   const RUNTIME_SUBAGENT_OFFSET_X = 290;
   const RUNTIME_SUBAGENT_SPACING_Y = 94;
 
-  const GATEWAY_X = 0;
+  const GATEWAY_X = rtl ? 700 : 0;
   const GATEWAY_Y = 0;
-  const AGENT_X = 320;
-  const CHANNEL_X = -350;
-  const WORKSPACE_X = 650;
+  const AGENT_X = rtl ? 550 : 320;
+  const CHANNEL_X = rtl ? 850 : -350;
+  const WORKSPACE_X = rtl ? -500 : 1400;
   const gatewayEdgeStyle = { stroke: "var(--border)", strokeWidth: 1.5 };
   const gatewayEdgeMarker = {
     type: MarkerType.ArrowClosed,
@@ -456,7 +518,7 @@ function buildGraph(
   nodes.push({
     id: "gateway",
     type: "gateway",
-    position: { x: GATEWAY_X, y: GATEWAY_Y },
+    position: pos("gateway", GATEWAY_X, GATEWAY_Y),
     data: { agentCount: agents.length, owner: data.owner || "" },
     draggable: true,
   });
@@ -473,7 +535,7 @@ function buildGraph(
     nodes.push({
       id: `agent-${agent.id}`,
       type: "agent",
-      position: { x: AGENT_X, y: ay },
+      position: pos(`agent-${agent.id}`, AGENT_X, ay),
       data: {
         agent,
         idx,
@@ -494,23 +556,23 @@ function buildGraph(
     });
   }
 
-  // ── 3. Sub-agents: position below their parent ──
+  // ── 3. Sub-agents: position by level-order layout (no overlap) ──
   for (const sub of subAgents) {
     const parent = agents.find((a) => a.subagents.includes(sub.id));
     const parentNode = nodes.find((n) => n.id === `agent-${parent?.id}`);
     const px = parentNode?.position.x ?? AGENT_X;
     const py = parentNode?.position.y ?? GATEWAY_Y;
     const idx = agents.indexOf(sub);
-    // Offset right and down from parent
-    const subIdx = parent?.subagents.indexOf(sub.id) ?? 0;
+    const layoutPos = agentPositionByLevel.get(sub.id);
+    const computedPos = layoutPos ?? {
+      x: px + SUB_AGENT_OFFSET_X + (parent?.subagents.indexOf(sub.id) ?? 0) * 30,
+      y: py + SUB_AGENT_OFFSET_Y,
+    };
 
     nodes.push({
       id: `agent-${sub.id}`,
       type: "agent",
-      position: {
-        x: px + SUB_AGENT_OFFSET_X + subIdx * 30,
-        y: py + SUB_AGENT_OFFSET_Y,
-      },
+      position: pos(`agent-${sub.id}`, computedPos.x, computedPos.y),
       data: {
         agent: sub,
         idx,
@@ -632,7 +694,7 @@ function buildGraph(
     nodes.push({
       id: nodeId,
       type: "channel",
-      position: { x: CHANNEL_X, y: chStartY + i * chSpacing },
+      position: pos(nodeId, CHANNEL_X, chStartY + i * chSpacing),
       data: { channel: ch, accountIds },
       draggable: true,
     });
@@ -682,7 +744,7 @@ function buildGraph(
     nodes.push({
       id: nodeId,
       type: "workspace",
-      position: { x: WORKSPACE_X, y: wsStartY + i * wsSpacing },
+      position: pos(nodeId, WORKSPACE_X, wsStartY + i * wsSpacing),
       data: {
         path: ws,
         agentNames,
@@ -1078,14 +1140,26 @@ function FlowViewInner({
   onSelect,
   selectedWorkspacePath,
   onSelectWorkspace,
+  autoLayout,
+  savedPositionsRef,
 }: {
   data: AgentsResponse;
   selectedId: string | null;
   onSelect: (id: string) => void;
   selectedWorkspacePath: string | null;
   onSelectWorkspace: (workspacePath: string) => void;
+  autoLayout: boolean;
+  savedPositionsRef: React.MutableRefObject<Record<string, { x: number; y: number }>>;
 }) {
   const { fitView } = useReactFlow();
+
+  const buildGraphOptions = useMemo(
+    () => ({
+      layoutDirection: "rtl" as const,
+      getSavedPosition: autoLayout ? undefined : (id: string) => savedPositionsRef.current[id],
+    }),
+    [autoLayout, savedPositionsRef]
+  );
 
   const { nodes: initialNodes, edges: initialEdges } = useMemo(
     () =>
@@ -1094,22 +1168,23 @@ function FlowViewInner({
         selectedId,
         onSelect,
         selectedWorkspacePath,
-        onSelectWorkspace
+        onSelectWorkspace,
+        buildGraphOptions
       ),
-    [data, selectedId, onSelect, selectedWorkspacePath, onSelectWorkspace]
+    [data, selectedId, onSelect, selectedWorkspacePath, onSelectWorkspace, buildGraphOptions]
   );
 
   const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
 
-  // Update when data or selection changes
   useEffect(() => {
     const { nodes: newNodes, edges: newEdges } = buildGraph(
       data,
       selectedId,
       onSelect,
       selectedWorkspacePath,
-      onSelectWorkspace
+      onSelectWorkspace,
+      buildGraphOptions
     );
     setNodes(newNodes);
     setEdges(newEdges);
@@ -1119,16 +1194,31 @@ function FlowViewInner({
     onSelect,
     selectedWorkspacePath,
     onSelectWorkspace,
+    buildGraphOptions,
     setNodes,
     setEdges,
   ]);
 
-  // Re-fit whenever nodes change (after React Flow has measured them)
   const onNodesChangeWrapped = useCallback(
     (changes: Parameters<typeof onNodesChange>[0]) => {
       onNodesChange(changes);
+      if (!autoLayout) {
+        changes.forEach((c) => {
+          if (c.type === "position" && "position" in c && c.position && "id" in c) {
+            savedPositionsRef.current[c.id] = c.position;
+          }
+        });
+        try {
+          localStorage.setItem(
+            AGENT_POSITIONS_STORAGE_KEY,
+            JSON.stringify(savedPositionsRef.current)
+          );
+        } catch {
+          /* ignore */
+        }
+      }
     },
-    [onNodesChange]
+    [onNodesChange, autoLayout, savedPositionsRef]
   );
 
   return (
@@ -1160,18 +1250,24 @@ function FlowViewInner({
   );
 }
 
+const AGENT_POSITIONS_STORAGE_KEY = "openclaw-mission-control-agent-positions";
+
 function FlowView({
   data,
   selectedId,
   onSelect,
   selectedWorkspacePath,
   onSelectWorkspace,
+  autoLayout,
+  savedPositionsRef,
 }: {
   data: AgentsResponse;
   selectedId: string | null;
   onSelect: (id: string) => void;
   selectedWorkspacePath: string | null;
   onSelectWorkspace: (workspacePath: string) => void;
+  autoLayout: boolean;
+  savedPositionsRef: React.MutableRefObject<Record<string, { x: number; y: number }>>;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState<{ w: number; h: number } | null>(null);
@@ -1206,6 +1302,8 @@ function FlowView({
               onSelect={onSelect}
               selectedWorkspacePath={selectedWorkspacePath}
               onSelectWorkspace={onSelectWorkspace}
+              autoLayout={autoLayout}
+              savedPositionsRef={savedPositionsRef}
             />
           </ReactFlowProvider>
         </div>
@@ -3757,6 +3855,17 @@ export function AgentsView() {
   const [editingAgentId, setEditingAgentId] = useState<string | null>(null);
   const [selectedWorkspacePath, setSelectedWorkspacePath] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [autoLayout, setAutoLayout] = useState(true);
+  const savedPositionsRef = useRef<Record<string, { x: number; y: number }>>({});
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(AGENT_POSITIONS_STORAGE_KEY);
+      if (raw) Object.assign(savedPositionsRef.current, JSON.parse(raw));
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   const handleAgentClick = useCallback((id: string) => {
     setSelectedId(id);
@@ -3934,6 +4043,23 @@ export function AgentsView() {
               ))}
             </div>
 
+            {tab === "agents" && view === "flow" && (
+              <button
+                type="button"
+                onClick={() => setAutoLayout((v) => !v)}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors",
+                  autoLayout
+                    ? "border-foreground/20 bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    : "border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                )}
+                title={autoLayout ? "Turn off auto-layout to drag and position nodes manually" : "Turn on auto-layout (right to left)"}
+              >
+                <Layers className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{autoLayout ? "Auto-layout on" : "Auto-layout off"}</span>
+              </button>
+            )}
+
             {tab === "agents" && (
               <button
                 type="button"
@@ -3970,6 +4096,8 @@ export function AgentsView() {
           onSelect={handleAgentClick}
           selectedWorkspacePath={selectedWorkspacePath}
           onSelectWorkspace={handleWorkspaceClick}
+          autoLayout={autoLayout}
+          savedPositionsRef={savedPositionsRef}
         />
       )}
 

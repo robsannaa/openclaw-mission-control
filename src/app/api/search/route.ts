@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { getOpenClawBin } from "@/lib/paths";
-import { parseJsonFromCliOutput } from "@/lib/openclaw-cli";
+import { parseJsonFromCliOutput } from "@/lib/openclaw";
 
 const exec = promisify(execFile);
 

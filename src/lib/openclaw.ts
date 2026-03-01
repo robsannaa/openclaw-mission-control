@@ -1,24 +1,18 @@
 /**
- * Drop-in compatibility layer for gradual migration.
+ * Primary OpenClaw client — all server-side code should import from here.
  *
- * Re-exports the same function signatures as openclaw-cli.ts but routes
- * through the unified OpenClawClient. To migrate an API route, change:
+ * Routes every call through the unified OpenClawClient which selects the
+ * best transport automatically (HTTP to Gateway when available, CLI
+ * subprocess as fallback). Works on Mac, Linux, and Docker.
  *
- *   import { runCliJson, gatewayCall } from "@/lib/openclaw-cli";
- *     →
- *   import { runCliJson, gatewayCall } from "@/lib/openclaw-compat";
- *
- * No other code changes needed. In CLI mode (default) these behave
- * identically. In HTTP mode they talk to the Gateway over HTTP instead.
+ * Internal modules (transports, openclaw-cli.ts) should NOT be imported
+ * directly from API routes or lib helpers.
  */
 
 import { getClient } from "./openclaw-client";
 import type { RunCliResult } from "./openclaw-cli";
 
-// Re-export the type so consumers don't need a second import.
 export type { RunCliResult } from "./openclaw-cli";
-
-// Re-export parseJsonFromCliOutput since some routes use it directly.
 export { parseJsonFromCliOutput } from "./openclaw-cli";
 
 export async function runCli(

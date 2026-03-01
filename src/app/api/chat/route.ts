@@ -1,4 +1,4 @@
-import { runCli } from "@/lib/openclaw-cli";
+import { runCli } from "@/lib/openclaw";
 
 /**
  * Chat endpoint that sends a message to an OpenClaw agent and returns the response.

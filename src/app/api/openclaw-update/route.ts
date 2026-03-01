@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runCli } from "@/lib/openclaw-cli";
+import { runCli } from "@/lib/openclaw";
 
 const GITHUB_RELEASES_URL =
   "https://api.github.com/repos/openclaw/openclaw/releases/latest";

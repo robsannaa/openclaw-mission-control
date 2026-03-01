@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readFile, readdir, stat } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
-import { runCliJson } from "@/lib/openclaw-cli";
+import { runCliJson } from "@/lib/openclaw";
 import { fetchGatewaySessions } from "@/lib/gateway-sessions";
 import type { NormalizedGatewaySession } from "@/lib/gateway-sessions";
 import { estimateCostUsd } from "@/lib/model-metadata";

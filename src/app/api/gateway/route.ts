@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { runCliJson } from "@/lib/openclaw-cli";
+import { runCliJson } from "@/lib/openclaw";
 import { getOpenClawBin } from "@/lib/paths";
 import { execFile } from "child_process";
 import { promisify } from "util";
@@ -19,33 +19,34 @@ async function runGatewayServiceCommand(
 
 /**
  * GET /api/gateway - Returns comprehensive gateway health status.
- * Uses `openclaw health --json` for rich data including channel status,
- * agent info, sessions, and heartbeat configuration.
+ *
+ * Uses `runCliJson(["health"])` which is routed through the unified
+ * OpenClawClient (AutoTransport by default). AutoTransport probes the
+ * Gateway over HTTP first and falls back to CLI — so this works in
+ * Docker (where the CLI binary is slow) and on Mac (where CLI is fast).
+ *
+ * Timeout bumped to 30s for environments with cold CLI starts.
  */
 export async function GET() {
   try {
     const health = await runCliJson<Record<string, unknown>>(
       ["health"],
-      12000
+      30000
     );
     return NextResponse.json({
       status: health.ok ? "online" : "degraded",
       health,
     });
   } catch (err) {
-    // If health check fails entirely, gateway is likely offline
     const message = err instanceof Error ? err.message : String(err);
-    const isTimeout = message.includes("timed out") || message.includes("TIMEOUT");
-    const isConnectionRefused = message.includes("ECONNREFUSED") || message.includes("connect");
+    const isTimeout = message.includes("timed out") || message.includes("TIMEOUT") || message.includes("aborted");
     return NextResponse.json({
       status: "offline",
       health: {
         ok: false,
         error: isTimeout
           ? "Gateway health check timed out"
-          : isConnectionRefused
-            ? "Gateway is not running"
-            : message,
+          : "Gateway is not running",
       },
     });
   }
