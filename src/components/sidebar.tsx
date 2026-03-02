@@ -74,6 +74,7 @@ const navItems: NavItem[] = [
   { section: "agents", label: "Subagents", icon: Users2, href: "/agents?tab=subagents", tab: "subagents", isSubItem: true },
   // ── Work ──
   { group: "Work", section: "calendar", label: "Calendar", icon: CalendarDays, href: "/calendar" },
+  { section: "calendar", label: "Providers", icon: Settings2, href: "/calendar?tab=providers", tab: "providers", isSubItem: true },
   { section: "tasks", label: "Tasks", icon: ListChecks, href: "/tasks" },
   { section: "sessions", label: "Sessions", icon: MessageSquare, href: "/sessions" },
   { section: "cron", label: "Cron Jobs", icon: Clock, href: "/cron" },
@@ -172,12 +173,15 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
   const [skillsExpanded, setSkillsExpanded] = useState(false);
   const [agentsExpanded, setAgentsExpanded] = useState(false);
   const [cronExpanded, setCronExpanded] = useState(false);
+  const [calendarExpanded, setCalendarExpanded] = useState(false);
   const isClawHubActive = section === "skills" && tab === "clawhub";
   const showSkillsChildren = isClawHubActive ? true : skillsExpanded;
   const isSubagentsActive = section === "agents" && tab === "subagents";
   const showAgentsChildren = isSubagentsActive ? true : agentsExpanded;
   const isHeartbeatActive = section === "cron" && tab === "heartbeat";
   const showCronChildren = isHeartbeatActive ? true : cronExpanded;
+  const isCalendarProvidersActive = section === "calendar" && tab === "providers";
+  const showCalendarChildren = isCalendarProvidersActive ? true : calendarExpanded;
 
   // Subscribe to chat unread count reactively
   const chatUnread = useSyncExternalStore(
@@ -192,10 +196,12 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
         const isSkillsParent = item.section === "skills" && item.label === "Skills";
         const isAgentsParent = item.section === "agents" && item.label === "Agents";
         const isCronParent = item.section === "cron" && item.label === "Cron Jobs";
+        const isCalendarParent = item.section === "calendar" && item.label === "Calendar";
         if (collapsed && item.isSubItem) return null;
         if (item.isSubItem && item.section === "skills" && !showSkillsChildren) return null;
         if (item.isSubItem && item.section === "agents" && !showAgentsChildren) return null;
         if (item.isSubItem && item.section === "cron" && !showCronChildren) return null;
+        if (item.isSubItem && item.section === "calendar" && !showCalendarChildren) return null;
 
         // Group header
         const previousGroup = index > 0 ? navItems[index - 1]?.group : undefined;
@@ -241,7 +247,7 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                 )}
               </span>
             ) : (
-              (isSkillsParent || isAgentsParent || isCronParent) && !collapsed ? (
+              (isSkillsParent || isAgentsParent || isCronParent || isCalendarParent) && !collapsed ? (
                 <div className={linkClass}>
                   <Link
                     href={item.href || `/${item.section}`}
@@ -256,13 +262,15 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (isSkillsParent) {
-                        setSkillsExpanded((prev) => !prev);
-                      } else if (isAgentsParent) {
-                        setAgentsExpanded((prev) => !prev);
-                      } else {
-                        setCronExpanded((prev) => !prev);
-                      }
+                        if (isSkillsParent) {
+                          setSkillsExpanded((prev) => !prev);
+                        } else if (isAgentsParent) {
+                          setAgentsExpanded((prev) => !prev);
+                        } else if (isCalendarParent) {
+                          setCalendarExpanded((prev) => !prev);
+                        } else {
+                          setCronExpanded((prev) => !prev);
+                        }
                     }}
                     className="rounded-md p-0.5 text-foreground/60 transition-colors hover:text-foreground"
                     aria-label={
@@ -270,13 +278,15 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                         ? (showSkillsChildren ? "Collapse skills submenu" : "Expand skills submenu")
                         : isAgentsParent
                           ? (showAgentsChildren ? "Collapse agents submenu" : "Expand agents submenu")
-                          : (showCronChildren ? "Collapse cron submenu" : "Expand cron submenu")
+                          : isCalendarParent
+                            ? (showCalendarChildren ? "Collapse calendar submenu" : "Expand calendar submenu")
+                            : (showCronChildren ? "Collapse cron submenu" : "Expand cron submenu")
                     }
                   >
                     <ChevronRight
                       className={cn(
                         "h-3 w-3 shrink-0 transition-transform duration-200",
-                        (isSkillsParent ? showSkillsChildren : isAgentsParent ? showAgentsChildren : showCronChildren) && "rotate-90"
+                        (isSkillsParent ? showSkillsChildren : isAgentsParent ? showAgentsChildren : isCalendarParent ? showCalendarChildren : showCronChildren) && "rotate-90"
                       )}
                     />
                   </button>

@@ -14,9 +14,14 @@ export type CalendarEntry = {
   status: CalendarEntryStatus;
   createdAt: string;
   updatedAt: string;
-  source: "manual" | "channel" | "agent";
+  source: "manual" | "channel" | "agent" | "provider";
   channel?: string;
   agentId?: string;
+  provider?: "caldav";
+  providerAccountId?: string;
+  externalId?: string;
+  readOnly?: boolean;
+  lastSyncedAt?: string;
   deliveredAt?: string;
   lastError?: string;
   previousStatus?: CalendarEntryStatus;
@@ -110,6 +115,11 @@ export async function upsertCalendarEntry(
     source: payload.source,
     channel: payload.channel,
     agentId: payload.agentId,
+    provider: payload.provider,
+    providerAccountId: payload.providerAccountId,
+    externalId: payload.externalId,
+    readOnly: payload.readOnly,
+    lastSyncedAt: payload.lastSyncedAt,
     deliveredAt: payload.deliveredAt,
     lastError: payload.lastError,
     createdAt: now,

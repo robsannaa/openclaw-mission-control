@@ -14,6 +14,17 @@ import {
   type CalendarEntry,
   type CalendarEntryStatus,
 } from "@/lib/calendar-store";
+import {
+  deleteCalendarProvider,
+  markCalendarProviderStatus,
+  purgeProviderEvents,
+  readCalendarProviderSecret,
+  readCalendarProviders,
+  syncCalDavProvider,
+  testCalDavConnection,
+  testOrDiscoverCalDavConnection,
+  upsertCalendarProvider,
+} from "@/lib/calendar-providers";
 
 export const dynamic = "force-dynamic";
 
@@ -153,6 +164,7 @@ export async function GET() {
 
     const entries = await readCalendarEntries(workspace);
     const taskDue = await readTaskDueDates(workspace);
+    const providers = await readCalendarProviders(workspace);
 
     const combined = [
       ...entries.map((e) => ({ ...formatEntryForCalendar(e), type: e.kind })),
@@ -173,6 +185,11 @@ export async function GET() {
       entries: entries.map(formatEntryForCalendar),
       taskDue: taskDue.map(formatTaskForCalendar),
       upcoming,
+      providers: providers.map((p) => ({
+        ...p,
+        secretRef: p.secretRef ? `${p.secretRef.slice(0, 10)}***` : "",
+        hasSecret: Boolean(p.secretRef),
+      })),
       workspace,
     });
   } catch (err) {
@@ -199,6 +216,127 @@ export async function POST(request: NextRequest) {
         await writeCalendarEntries(workspace, updated);
       }
       return NextResponse.json({ ok: true, dispatched: dispatched.length, entries: updated });
+    }
+
+    if (action === "providers-list") {
+      const providers = await readCalendarProviders(workspace);
+      return NextResponse.json({
+        ok: true,
+        providers: providers.map((p) => ({
+          ...p,
+          secretRef: p.secretRef ? `${p.secretRef.slice(0, 10)}***` : "",
+          hasSecret: Boolean(p.secretRef),
+        })),
+      });
+    }
+
+    if (action === "provider-test") {
+      const type = body?.type === "caldav" ? "caldav" : "caldav";
+      if (type !== "caldav") {
+        return NextResponse.json({ ok: false, error: "Only CalDAV is currently supported" }, { status: 400 });
+      }
+      const serverUrl = String(body?.serverUrl || body?.calendarUrl || "https://caldav.icloud.com").trim();
+      const calendarUrl = String(body?.calendarUrl || "").trim();
+      const username = String(body?.username || "").trim();
+      const cutoffDate = String(body?.cutoffDate || "").trim();
+      const password = String(body?.password || "").trim();
+      if (!username || !password) {
+        return NextResponse.json({ ok: false, error: "username and password are required" }, { status: 400 });
+      }
+      const result = await testOrDiscoverCalDavConnection({ serverUrl, calendarUrl, username }, password);
+      return NextResponse.json({ ok: true, calendarUrl: result.calendarUrl });
+    }
+
+    if (action === "provider-add") {
+      const type = body?.type === "caldav" ? "caldav" : "caldav";
+      const id = typeof body?.id === "string" ? body.id : undefined;
+      const label = String(body?.label || "").trim();
+      const serverUrl = String(body?.serverUrl || body?.calendarUrl || "https://caldav.icloud.com").trim();
+      let calendarUrl = String(body?.calendarUrl || "").trim();
+      const username = String(body?.username || "").trim();
+      const cutoffDate = String(body?.cutoffDate || "").trim();
+      const password = String(body?.password || "").trim();
+      if (!label || !username || (!id && !password)) {
+        return NextResponse.json({ ok: false, error: "label and username are required (password required for new provider)" }, { status: 400 });
+      }
+      const existing = id ? (await readCalendarProviders(workspace)).find((p) => p.id === id) : undefined;
+      if (id && !existing) {
+        return NextResponse.json({ ok: false, error: "Provider account not found" }, { status: 404 });
+      }
+      const secretForDiscovery = password || (existing ? (await readCalendarProviderSecret(existing.secretRef)) || "" : "");
+      if (!calendarUrl || /^https?:\/\/[^/]+\/?$/i.test(calendarUrl)) {
+        if (!secretForDiscovery) {
+          return NextResponse.json({ ok: false, error: "Password is required to discover calendar URL" }, { status: 400 });
+        }
+        const discovered = await testOrDiscoverCalDavConnection({ serverUrl, calendarUrl, username }, secretForDiscovery);
+        calendarUrl = discovered.calendarUrl;
+      }
+      const account = await upsertCalendarProvider(workspace, {
+        id,
+        type,
+        label,
+        serverUrl,
+        calendarUrl,
+        username,
+        cutoffDate: cutoffDate || undefined,
+        enabled: body?.enabled !== false,
+        secret: password,
+        secretRef: existing?.secretRef,
+      });
+      return NextResponse.json({
+        ok: true,
+        provider: {
+          ...account,
+          secretRef: account.secretRef ? `${account.secretRef.slice(0, 10)}***` : "",
+          hasSecret: true,
+        },
+      });
+    }
+
+    if (action === "provider-sync") {
+      const accountId = String(body?.accountId || "").trim();
+      if (!accountId) {
+        return NextResponse.json({ ok: false, error: "accountId required" }, { status: 400 });
+      }
+      const providers = await readCalendarProviders(workspace);
+      const account = providers.find((p) => p.id === accountId);
+      if (!account) {
+        return NextResponse.json({ ok: false, error: "Provider account not found" }, { status: 404 });
+      }
+      if (account.type !== "caldav") {
+        return NextResponse.json({ ok: false, error: "Only CalDAV sync currently supported" }, { status: 400 });
+      }
+      try {
+        const imported = await syncCalDavProvider(workspace, account);
+        await markCalendarProviderStatus(workspace, account.id, {
+          lastSyncAt: new Date().toISOString(),
+          lastError: null,
+        });
+        return NextResponse.json({ ok: true, imported });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        await markCalendarProviderStatus(workspace, account.id, { lastError: message });
+        return NextResponse.json({ ok: false, error: message }, { status: 500 });
+      }
+    }
+
+    if (action === "provider-delete") {
+      const accountId = String(body?.accountId || "").trim();
+      if (!accountId) {
+        return NextResponse.json({ ok: false, error: "accountId required" }, { status: 400 });
+      }
+      const ok = await deleteCalendarProvider(workspace, accountId);
+      if (!ok) return NextResponse.json({ ok: false, error: "Provider account not found" }, { status: 404 });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (action === "provider-purge") {
+      const accountId = String(body?.accountId || "").trim();
+      if (!accountId) {
+        return NextResponse.json({ ok: false, error: "accountId required" }, { status: 400 });
+      }
+      const removed = await purgeProviderEvents(workspace, accountId);
+      return NextResponse.json({ ok: true, removed });
     }
 
     if (action === "channel-message") {
