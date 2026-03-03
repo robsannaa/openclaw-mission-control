@@ -573,7 +573,7 @@ export function WebSearchView() {
                     <p className="text-xs font-semibold text-amber-300">No search provider configured</p>
                     <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                       To enable web search, set at least one API key. Go to{" "}
-                      <Link href="/accounts" className="text-cyan-400 hover:underline">Accounts & Keys</Link>{" "}
+                      <Link href="/accounts" className="text-cyan-400 hover:underline">Keys & Access</Link>{" "}
                       to add <code className="text-xs">PERPLEXITY_API_KEY</code>, <code className="text-xs">OPENROUTER_API_KEY</code>,
                       or <code className="text-xs">BRAVE_API_KEY</code>.
                     </p>

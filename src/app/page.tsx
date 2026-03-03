@@ -33,6 +33,7 @@ const SECTION_TO_PATH: Record<string, string> = {
   browser: "/browser",
   calendar: "/calendar",
   search: "/search",
+  help: "/help",
 };
 
 function firstParam(value: string | string[] | undefined): string | null {

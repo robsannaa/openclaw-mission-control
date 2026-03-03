@@ -362,6 +362,36 @@ export const PROVIDER_INFO: Record<string, { displayName: string; emoji: string 
   lmstudio: { displayName: "LM Studio", emoji: "" },
 };
 
+const PROVIDER_DISPLAY_OVERRIDES: Record<string, string> = {
+  "ai21": "AI21",
+  "amazon-bedrock": "Amazon Bedrock",
+  "azure-openai-responses": "Azure OpenAI",
+  "github-copilot": "GitHub Copilot",
+  "huggingface": "Hugging Face",
+  "lmstudio": "LM Studio",
+  "moonshotai": "Moonshot AI",
+  "mistralai": "Mistral",
+  "openai-codex": "OpenAI Codex",
+  "openrouter": "OpenRouter",
+  "prime-intellect": "Prime Intellect",
+  "qwen": "Qwen",
+  "tngtech": "TNG Tech",
+  "vercel-ai-gateway": "Vercel AI Gateway",
+  "vllm": "vLLM",
+  "xai": "xAI",
+  "z-ai": "Z.AI",
+};
+
 export function getProviderDisplayName(provider: string): string {
-  return PROVIDER_INFO[provider]?.displayName || provider;
+  if (PROVIDER_INFO[provider]?.displayName) {
+    return PROVIDER_INFO[provider].displayName;
+  }
+  if (PROVIDER_DISPLAY_OVERRIDES[provider]) {
+    return PROVIDER_DISPLAY_OVERRIDES[provider];
+  }
+  return provider
+    .split(/[-_]/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }

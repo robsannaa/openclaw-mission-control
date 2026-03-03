@@ -935,10 +935,11 @@ export async function GET(request: NextRequest) {
       if (parsedAllowedModels.length === 0 && fileSnapshot?.allowedModels.length) {
         parsedAllowedModels = fileSnapshot.allowedModels;
       }
-      if (
-        modelsCatalogConfig.providers.length === 0 &&
-        fileSnapshot?.modelsCatalogConfig.providers.length
-      ) {
+      // The file is the source of truth for models.providers because
+      // set-provider-config / remove-provider-config write via CLI
+      // (which correctly replaces/deletes values). The gateway's in-memory
+      // config may lag behind until restart, so always prefer the file.
+      if (fileSnapshot?.modelsCatalogConfig) {
         modelsCatalogConfig = fileSnapshot.modelsCatalogConfig;
       }
       if (listModels.length === 0 && fileSnapshot?.configuredModels.length) {
@@ -1115,11 +1116,60 @@ export async function GET(request: NextRequest) {
     }
 
     // scope=configured
+    const fileSnapshot = await readConfigFileSnapshot();
     const args = ["models", "list"];
     if (agentId) args.push("--agent", agentId);
     try {
-      const list = await runCliJson<{ models: ModelInfo[] }>(args, 10000);
-      return jsonNoStore({ models: list.models || [] });
+      const [listResult, statusData, ollamaModels] = await Promise.all([
+        runCliJson<{ models: ModelInfo[] }>(args, 10000).catch((err) => ({
+          error: String(err),
+        })),
+        runCliJson<Record<string, unknown>>(
+          agentId ? ["models", "status", "--agent", agentId] : ["models", "status"],
+          10000,
+        ).catch(() => null),
+        readOllamaLocalModels(),
+      ]);
+
+      const listWarning = "error" in listResult ? listResult.error : null;
+      const listModels =
+        "models" in listResult && Array.isArray(listResult.models)
+          ? mergeModelRows(listResult.models, ollamaModels)
+          : ollamaModels;
+
+      const authProviders = uniqueStrings([
+        ...((((statusData?.auth as { providers?: Array<{ provider?: string }> } | undefined))?.providers || [])
+          .map((entry) => String(entry?.provider || "").trim())
+          .filter(Boolean)),
+        ...(fileSnapshot?.authProviders || []),
+      ]);
+
+      const configuredRefs = uniqueStrings([
+        ...((Array.isArray(statusData?.allowed) ? statusData.allowed : []).map((value) =>
+          String(value || "").trim(),
+        )),
+        ...(fileSnapshot?.configuredModels || []),
+      ]);
+      const fallbackModels: ModelInfo[] = configuredRefs.map((key) => {
+        const provider = providerFromModelKey(key);
+        const hasConfiguredAuth = authProviders.includes(provider);
+        return {
+          key,
+          name: key,
+          input: "",
+          contextWindow: 0,
+          local: localProvider(provider),
+          available: localProvider(provider) || hasConfiguredAuth,
+          tags: ["configured"],
+          missing: false,
+        };
+      });
+
+      const models = mergeModelRows(listModels, fallbackModels);
+      return jsonNoStore({
+        models,
+        warning: listWarning || undefined,
+      });
     } catch (err) {
       return jsonNoStore({
         models: [],
@@ -1625,10 +1675,15 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        await runCli(
-          ["config", "set", "--strict-json", "models.mode", JSON.stringify(mode)],
-          10000
-        );
+        try {
+          await applyConfigPatchWithRetry({ models: { mode } });
+        } catch {
+          // Fallback to CLI if gateway config.patch unavailable
+          await runCli(
+            ["config", "set", "--strict-json", "models.mode", JSON.stringify(mode)],
+            10000
+          );
+        }
         return NextResponse.json({ ok: true, action, mode });
       }
 
@@ -1646,14 +1701,18 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        const path = providerConfigPath(provider);
+        // CLI "config set" REPLACES the value at the path, which is correct
+        // for provider config (user may have removed keys from the JSON).
+        // config.patch deep-merges objects and would keep stale keys.
+        const providerConfig = body.config as Record<string, unknown>;
+        const setPath = providerConfigPath(provider);
         await runCli(
           [
             "config",
             "set",
             "--strict-json",
-            path,
-            JSON.stringify(body.config as Record<string, unknown>),
+            setPath,
+            JSON.stringify(providerConfig),
           ],
           15000
         );
@@ -1668,8 +1727,10 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        const path = providerConfigPath(provider);
-        await runCli(["config", "unset", path], 10000);
+        // CLI "config unset" removes the key from disk directly.
+        // config.patch deep-merges objects and cannot delete keys.
+        const removePath = providerConfigPath(provider);
+        await runCli(["config", "unset", removePath], 10000);
         return NextResponse.json({ ok: true, action, provider });
       }
 

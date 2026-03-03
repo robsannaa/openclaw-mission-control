@@ -835,7 +835,12 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
         throw new Error(data.error || "Setup failed.");
       }
       onComplete?.();
-      router.push("/");
+      if (process.env.NEXT_PUBLIC_AGENTBAY_HOSTED === "true") {
+        try { localStorage.setItem("mc-post-onboarding", "1"); } catch {}
+        router.push("/chat");
+      } else {
+        router.push("/");
+      }
     } catch (error) {
       setLaunchError(error instanceof Error ? error.message : "Setup failed.");
     }

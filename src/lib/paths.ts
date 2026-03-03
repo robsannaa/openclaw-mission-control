@@ -320,10 +320,38 @@ export async function getSystemSkillsDir(): Promise<string> {
 
 // ── Gateway auth token ──────────────────────────
 
+let _gatewayToken: string | null = null;
+
 /**
  * Resolve the Gateway auth token for HTTP transport.
  * Used by HttpTransport for Authorization: Bearer headers.
+ *
+ * Priority: env var → openclaw.json gateway.auth.token → empty string.
  */
 export function getGatewayToken(): string {
-  return process.env.OPENCLAW_GATEWAY_TOKEN || "";
+  if (_gatewayToken !== null) return _gatewayToken;
+
+  // 1. Env var
+  if (process.env.OPENCLAW_GATEWAY_TOKEN) {
+    _gatewayToken = process.env.OPENCLAW_GATEWAY_TOKEN;
+    return _gatewayToken;
+  }
+
+  // 2. Read from config (sync — token is needed synchronously by callers)
+  try {
+    const { readFileSync } = require("fs");
+    const configPath = join(getOpenClawHome(), "openclaw.json");
+    const raw = readFileSync(configPath, "utf-8");
+    const config = JSON.parse(raw);
+    const token = config?.gateway?.auth?.token;
+    if (token && typeof token === "string") {
+      _gatewayToken = token;
+      return _gatewayToken;
+    }
+  } catch {
+    // Config doesn't exist or is invalid — fall through
+  }
+
+  _gatewayToken = "";
+  return _gatewayToken;
 }

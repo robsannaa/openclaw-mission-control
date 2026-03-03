@@ -49,3 +49,4 @@ next-env.d.ts
 .claude/
 *.png
 /e2e/
+.playwright-cli/

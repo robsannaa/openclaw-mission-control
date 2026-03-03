@@ -236,28 +236,62 @@ export const chatStore = {
     emitPing();
 
     const agentId = pingState.agentId;
+    const chatBody = JSON.stringify({
+      agent: agentId,
+      messages: [
+        {
+          role: "user",
+          id: userMsg.id,
+          parts: [{ type: "text", text: userMsg.text }],
+        },
+      ],
+    });
 
     try {
+      // The /api/chat route already tries streaming via OpenResponses first
+      // and falls back to CLI. It returns plain text (streamed or all-at-once).
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agent: agentId,
-          messages: [
-            {
-              role: "user",
-              id: userMsg.id,
-              parts: [{ type: "text", text: userMsg.text }],
-            },
-          ],
-        }),
+        body: chatBody,
       });
 
       if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-      const text = await res.text();
 
+      // Read as a stream to show progressive text in the ping panel
+      let text = "";
+      const assistantMsgId = crypto.randomUUID();
+
+      if (res.body) {
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          text += decoder.decode(value, { stream: true });
+
+          // Update the streaming message in-place for progressive display
+          const streamingMsg: ChatMessage = {
+            id: assistantMsgId,
+            role: "assistant",
+            text: text.trim(),
+            timestamp: Date.now(),
+            agentId,
+          };
+          pingState = {
+            ...pingState,
+            messages: [...pingState.messages.filter((m) => m.id !== assistantMsgId), streamingMsg],
+          };
+          emitPing();
+        }
+      } else {
+        text = await res.text();
+      }
+
+      // Finalize the message
       const assistantMsg: ChatMessage = {
-        id: crypto.randomUUID(),
+        id: assistantMsgId,
         role: "assistant",
         text: text.trim(),
         timestamp: Date.now(),
@@ -267,7 +301,7 @@ export const chatStore = {
       const isStillOpen = pingState.open;
       pingState = {
         ...pingState,
-        messages: [...pingState.messages, assistantMsg],
+        messages: [...pingState.messages.filter((m) => m.id !== assistantMsgId), assistantMsg],
         sending: false,
         unread: isStillOpen ? 0 : pingState.unread + 1,
       };

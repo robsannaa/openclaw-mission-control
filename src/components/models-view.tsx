@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   AlertTriangle,
   Bot,
@@ -24,6 +24,11 @@ import {
   X,
 } from "lucide-react";
 import { requestRestart } from "@/lib/restart-store";
+import {
+  subscribeGatewayStatus,
+  getGatewayStatusSnapshot,
+  getGatewayStatusServerSnapshot,
+} from "@/lib/gateway-status-store";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/ui/loading-state";
 import { ApiWarningBadge } from "@/components/ui/api-warning-badge";
@@ -280,6 +285,17 @@ const CONNECT_PROVIDER_META: Record<
   custom: { label: "Custom Endpoint", icon: "🔗", keyHint: "Bearer token (optional)", keyOptional: true, needsBaseUrl: true, baseUrlPlaceholder: "http://localhost:1234/v1" },
 };
 
+/** Default model to auto-set when a provider is first connected (matches onboarding). */
+const PROVIDER_DEFAULT_MODEL: Record<string, string> = {
+  anthropic: "anthropic/claude-sonnet-4-20250514",
+  openai: "openai/gpt-4o",
+  google: "google/gemini-2.0-flash",
+  openrouter: "openrouter/anthropic/claude-sonnet-4",
+  groq: "groq/llama-4-scout-17b-16e-instruct",
+  xai: "xai/grok-3-mini",
+  mistral: "mistral/mistral-medium-latest",
+};
+
 // ── Small Inline Components ──
 
 function StatusPill({
@@ -392,6 +408,7 @@ export function ModelsView() {
   const [connectSuccess, setConnectSuccess] = useState<string | null>(null);
 
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const providerAccessRef = useRef<HTMLElement>(null);
 
   // ── Core callbacks ──
 
@@ -433,7 +450,10 @@ export function ModelsView() {
 
   const fetchModels = useCallback(async () => {
     try {
-      const res = await fetch("/api/models?scope=status", { cache: "no-store" });
+      const res = await fetch("/api/models?scope=status", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(30000),
+      });
       const data = await res.json();
       setApiWarning(
         typeof data.warning === "string" && data.warning.trim() ? data.warning.trim() : null,
@@ -509,7 +529,10 @@ export function ModelsView() {
       }
 
       try {
-        const accountsRes = await fetch("/api/accounts", { cache: "no-store" });
+        const accountsRes = await fetch("/api/accounts", {
+          cache: "no-store",
+          signal: AbortSignal.timeout(15000),
+        });
         const accountsData = (await accountsRes.json()) as
           | (ModelsCredentialSnapshot & { error?: string })
           | { error?: string };
@@ -553,6 +576,27 @@ export function ModelsView() {
     fetchAllModels();
   }, [fetchAllModels]);
 
+  // Re-fetch models when gateway comes back online after a restart
+  const gwStatus = useSyncExternalStore(
+    subscribeGatewayStatus,
+    getGatewayStatusSnapshot,
+    getGatewayStatusServerSnapshot,
+  );
+  const prevGwStatusRef = useRef(gwStatus.status);
+  useEffect(() => {
+    const prev = prevGwStatusRef.current;
+    prevGwStatusRef.current = gwStatus.status;
+    if (gwStatus.status === "online" && prev !== "online") {
+      // Gateway just came back — refetch after a short delay for it to settle
+      const t = setTimeout(() => {
+        setLoading(true);
+        fetchModels();
+        fetchAllModels();
+      }, 1500);
+      return () => clearTimeout(t);
+    }
+  }, [gwStatus.status, fetchModels, fetchAllModels]);
+
   const handleConnectProvider = useCallback(async () => {
     if (!connectProvider) return;
     const isCustom = connectProvider === "custom";
@@ -561,8 +605,24 @@ export function ModelsView() {
     if (isCustom && !connectBaseUrl.trim()) return;
     setConnectSaving(true);
     try {
+      // Step 1: Validate the key/endpoint before saving
+      const testRes = await fetch("/api/onboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          isCustom
+            ? { action: "test-key", provider: "custom", baseUrl: connectBaseUrl.trim(), token: connectKey.trim() || "" }
+            : { action: "test-key", provider: connectProvider, token: connectKey.trim() },
+        ),
+      });
+      const testData = await testRes.json();
+      if (!testData.ok) {
+        flash(testData.error || "API key validation failed — check the key and try again.", "error");
+        return;
+      }
+
+      // Step 2: Key is valid — save it
       if (isCustom) {
-        // Use onboard API to save-credentials for custom provider
         const res = await fetch("/api/onboard", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -589,31 +649,68 @@ export function ModelsView() {
           flash(data.error || "Failed to connect custom endpoint", "error");
         }
       } else {
-        const res = await fetch("/api/models", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "auth-provider", provider: connectProvider, token: connectKey.trim() }),
-        });
-        const data = await res.json();
-        if (data.ok) {
+        try {
+          await postModelAction({
+            action: "auth-provider",
+            provider: connectProvider,
+            token: connectKey.trim(),
+          });
+
           setConnectSuccess(connectProvider);
           setConnectKey("");
+          const savedProvider = connectProvider;
           setConnectProvider(null);
           setConnectShowKey(false);
-          flash(`${CONNECT_PROVIDER_META[connectProvider]?.label || connectProvider} connected!`, "success");
+          const providerLabel =
+            CONNECT_PROVIDER_META[savedProvider]?.label || savedProvider;
+
+          let successMessage = `${providerLabel} connected.`;
+          const defaultModel = PROVIDER_DEFAULT_MODEL[savedProvider];
+          if (defaultModel) {
+            try {
+              await postModelAction({ action: "set-primary", model: defaultModel });
+              successMessage = `${providerLabel} connected. New chats will start with ${getFriendlyModelName(defaultModel)}.`;
+            } catch (err) {
+              successMessage = `${providerLabel} connected. Mission Control could not switch the default chat model automatically, so please choose it below before chatting.`;
+              console.warn("Connected provider but failed to set default model:", err);
+            }
+          }
+
+          flash(successMessage, "success");
           setLoading(true);
-          fetchModels();
-          fetchAllModels();
+          await fetchModels();
+          await fetchAllModels();
           setTimeout(() => setConnectSuccess(null), 3000);
-        } else {
-          flash(data.error || "Failed to connect provider", "error");
+        } catch (err) {
+          flash(err instanceof Error ? err.message : "Failed to connect provider", "error");
         }
       }
     } catch {
       flash("Failed to connect provider", "error");
     }
     setConnectSaving(false);
-  }, [connectProvider, connectKey, connectBaseUrl, flash, fetchModels, fetchAllModels]);
+  }, [
+    connectBaseUrl,
+    connectKey,
+    connectProvider,
+    fetchAllModels,
+    fetchModels,
+    flash,
+    postModelAction,
+  ]);
+
+  const openProviderSetup = useCallback((provider: string) => {
+    const target = provider.trim().toLowerCase();
+    if (!target) return;
+    setConnectSuccess(null);
+    setConnectProvider(target);
+    setConnectKey("");
+    setConnectBaseUrl("");
+    setConnectShowKey(false);
+    requestAnimationFrame(() => {
+      providerAccessRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
 
   const runAction = useCallback(
     async (
@@ -686,11 +783,18 @@ export function ModelsView() {
     return map;
   }, [agents]);
 
+  // Whether the gateway reported auth data — if not, we can't tell which
+  // providers are truly connected so we shouldn't mark them as disconnected.
+  const hasGatewayAuth = Boolean(
+    status?.auth?.providers?.length || status?.auth?.oauth?.providers?.length,
+  );
+
   const providerAuthMap = useMemo(() => {
     const map = new Map<
       string,
       { connected: boolean; authKind: string | null; oauthStatus: string | null }
     >();
+    // 1. Gateway-reported auth — the source of truth when available
     const authProviders = status?.auth?.providers || [];
     for (const provider of authProviders) {
       const providerKey = String(provider.provider || "").trim();
@@ -701,6 +805,7 @@ export function ModelsView() {
         oauthStatus: null,
       });
     }
+    // 2. OAuth providers
     const oauthProviders = status?.auth?.oauth?.providers || [];
     for (const provider of oauthProviders) {
       const providerKey = String(provider.provider || "").trim();
@@ -714,6 +819,7 @@ export function ModelsView() {
         oauthStatus,
       });
     }
+    // 3. Local providers discovered from model catalog
     const localProviders = new Set<string>();
     for (const model of [...models, ...allModels]) {
       const provider = modelProvider(model.key);
@@ -728,19 +834,25 @@ export function ModelsView() {
         oauthStatus: prev?.oauthStatus || null,
       });
     }
-    for (const provider of configuredProviders) {
-      if (!provider) continue;
-      const prev = map.get(provider);
-      const providerIsLocal =
-        provider === "ollama" || provider === "vllm" || provider === "lmstudio";
-      map.set(provider, {
-        connected: true,
-        authKind: prev?.authKind || (providerIsLocal ? "local" : "configured"),
-        oauthStatus: prev?.oauthStatus || null,
-      });
+    // 4. Providers referenced in config but not yet tracked.
+    //    If the gateway reported auth data, we trust it — an untracked provider
+    //    means it has no credentials. If the gateway didn't report auth (degraded
+    //    response, still starting, etc.) we can't tell, so don't show them at all
+    //    rather than falsely marking them disconnected.
+    if (hasGatewayAuth) {
+      for (const provider of configuredProviders) {
+        if (!provider || map.has(provider)) continue;
+        const providerIsLocal =
+          provider === "ollama" || provider === "vllm" || provider === "lmstudio";
+        map.set(provider, {
+          connected: providerIsLocal,
+          authKind: providerIsLocal ? "local" : null,
+          oauthStatus: null,
+        });
+      }
     }
     return map;
-  }, [allModels, configuredProviders, models, status]);
+  }, [allModels, configuredProviders, hasGatewayAuth, models, status]);
 
   const allowedModels = useMemo(
     () => new Set((status?.allowed || []).map((m) => String(m))),
@@ -1109,7 +1221,7 @@ export function ModelsView() {
         { action: "add-allowed-model", model: key },
         `Added ${getModelDisplayName(key, allModels, aliases)} to allowed models`,
         "allowlist:add",
-        { refreshCatalog: true },
+        { restart: false, refreshCatalog: true },
       );
     },
     [aliases, allModels, configuredAllowed, runAction],
@@ -1123,7 +1235,7 @@ export function ModelsView() {
         { action: "remove-allowed-model", model: key },
         `Removed ${getModelDisplayName(key, allModels, aliases)} from allowed models`,
         "allowlist:remove",
-        { refreshCatalog: true },
+        { restart: false, refreshCatalog: true },
       );
     },
     [aliases, allModels, runAction],
@@ -1251,7 +1363,7 @@ export function ModelsView() {
         { action: "set-models-mode", mode: next },
         `Provider catalog mode set to ${next}`,
         "providers:mode",
-        { restart: false },
+        { restart: true, refreshCatalog: true },
       );
     },
     [modelsCatalogConfig.mode, runAction],
@@ -1310,7 +1422,7 @@ export function ModelsView() {
       },
       `Saved provider override for ${provider}`,
       `providers:set:${provider}`,
-      { restart: false },
+      { restart: true, refreshCatalog: true },
     );
   }, [providerDraftJson, providerDraftResolvedId, runAction]);
 
@@ -1322,7 +1434,7 @@ export function ModelsView() {
         { action: "remove-provider-config", provider: key },
         `Removed provider override for ${key}`,
         `providers:remove:${key}`,
-        { restart: false },
+        { restart: true, refreshCatalog: true },
       );
     },
     [runAction],
@@ -1522,6 +1634,9 @@ export function ModelsView() {
   const mainAgent = agents.find((agent) => agent.id === "main") || null;
   const mainHasOverride = Boolean(mainAgent && !mainAgent.usesDefaults);
   const activeMeta = getModelMeta(defaultResolved) || getModelMeta(defaultPrimary);
+  const activeProviderKey = modelProvider(defaultResolved || defaultPrimary);
+  const activeProviderAuth = providerAuthMap.get(activeProviderKey);
+  const activeProviderConnected = activeProviderAuth?.connected ?? false;
   const imageModel = status?.imageModel || "";
   const imageFallbacks = status?.imageFallbacks || [];
   const heartbeatModel = heartbeat?.model || "";
@@ -1561,12 +1676,15 @@ export function ModelsView() {
     // Always show custom endpoint as last option
     "custom",
   ];
+  const providerSetupOptions = connectableProviders.filter(
+    (provider) => provider !== "custom" && Boolean(CONNECT_PROVIDER_META[provider]),
+  );
 
   return (
     <SectionLayout>
       <SectionHeader
         title="Models"
-        description="Choose and manage your AI models"
+        description="Pick a model family, choose which provider powers it, and keep the result saved in OpenClaw."
         actions={
           <div className="flex items-center gap-2">
             <ApiWarningBadge warning={apiWarning} degraded={apiDegraded} />
@@ -1616,6 +1734,17 @@ export function ModelsView() {
             </h2>
           </div>
 
+          {mainHasOverride && mainAgent && (
+            <div className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
+              <p className="text-sm font-medium text-foreground">
+                {mainAgent.name} is currently using its own model setup.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                The shared default below is for agents that follow the default setup. {mainAgent.name} is currently set to {getFriendlyModelName(mainAgent.modelPrimary || defaultPrimary)} separately, so change that in Per-Agent if you want this agent itself to switch.
+              </p>
+            </div>
+          )}
+
           {/* Hero card */}
           <div className="rounded-xl border border-[var(--accent-brand-border)] bg-gradient-to-br from-[var(--accent-brand-subtle)] to-transparent p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1645,10 +1774,21 @@ export function ModelsView() {
                 )}
               </div>
               <StatusPill
-                tone={defaultResolved === defaultPrimary ? "good" : "warn"}
-                label={defaultResolved === defaultPrimary ? "Active" : "Fallback active"}
+                tone={!activeProviderConnected ? "warn" : defaultResolved === defaultPrimary ? "good" : "warn"}
+                label={!activeProviderConnected ? "No credentials" : defaultResolved === defaultPrimary ? "Active" : "Fallback active"}
               />
             </div>
+
+            {!activeProviderConnected && activeProviderKey && (
+              <div className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                <p className="text-xs font-medium text-amber-600 dark:text-amber-200">
+                  {getProviderDisplayName(activeProviderKey)} is not connected
+                </p>
+                <p className="mt-0.5 text-xs text-amber-500/70 dark:text-amber-400/60">
+                  Add an API key below to start using this model.
+                </p>
+              </div>
+            )}
 
             {/* Change Model button */}
             <div className="mt-4">
@@ -1661,6 +1801,9 @@ export function ModelsView() {
                 <RefreshCw className="h-3.5 w-3.5" />
                 Change Model
               </button>
+              <p className="mt-2 text-xs text-muted-foreground/70">
+                Choose the model family you want first, then pick the provider route underneath it.
+              </p>
             </div>
 
             {/* Fallback chain */}
@@ -1720,19 +1863,27 @@ export function ModelsView() {
           </div>
         </section>
 
-        {/* ━━━ SECTION 2: Connected Providers ━━━ */}
-        <section className="rounded-2xl border border-border p-5 bg-card">
+        {/* ━━━ SECTION 2: Providers & Keys ━━━ */}
+        <section ref={providerAccessRef} className="rounded-2xl border border-border p-5 bg-card">
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <Shield className="h-4 w-4 text-[var(--accent-brand-text)]" />
               <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Connected Providers
+                Providers & Keys
               </h2>
               <StatusPill
                 tone={connectedProviderCount > 0 ? "good" : "warn"}
                 label={`${connectedProviderCount}/${providerAuthSummary.length}`}
               />
             </div>
+          </div>
+          <div className="mb-4 rounded-xl border border-border/70 bg-muted/20 p-3">
+            <p className="text-sm font-medium text-foreground">
+              The same model can come from different providers.
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              For example, Claude can run directly from Anthropic or through OpenRouter. The model picker shows those routes side by side, and this section controls which routes are ready to use.
+            </p>
           </div>
 
           {/* Provider chips */}
@@ -1804,7 +1955,7 @@ export function ModelsView() {
           {connectableProviders.length > 0 && (
             <div className="mt-4">
               <div className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground/40">
-                Connect a new provider
+                Add another provider
               </div>
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                 {connectableProviders.slice(0, 12).map((p) => {
@@ -1949,14 +2100,22 @@ export function ModelsView() {
           {/* Manage keys link */}
           {hasCredentialProviders && (
             <div className="mt-3">
-              <a
-                href="/accounts"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
-              >
-                <KeyRound className="h-3.5 w-3.5" />
-                Advanced Key Management
-                <ExternalLink className="h-3 w-3" />
-              </a>
+              <div className="rounded-lg border border-border/60 bg-muted/20 p-3">
+                <p className="text-xs font-medium text-foreground">
+                  Need more detail about saved keys or logins?
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Open Keys & Access to inspect saved API keys, auth profiles, env sources, and channel logins. Model choice and provider setup stay here in Models.
+                </p>
+                <a
+                  href="/accounts"
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50"
+                >
+                  <KeyRound className="h-3.5 w-3.5" />
+                  Open Keys & Access
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
             </div>
           )}
         </section>
@@ -2887,6 +3046,8 @@ export function ModelsView() {
                 : undefined
           }
           excludeModels={pickerExcludeModels}
+          onConnectProvider={openProviderSetup}
+          connectableProviders={providerSetupOptions}
           onSelect={handlePickerSelect}
           onClose={() => setPickerTarget(null)}
           title={pickerTitle}

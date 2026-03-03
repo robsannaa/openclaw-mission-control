@@ -46,6 +46,7 @@ import {
   Settings2,
   Webhook,
   Stethoscope,
+  HelpCircle,
 } from "lucide-react";
 import { getChatUnreadCount, subscribeChatStore } from "@/lib/chat-store";
 import {
@@ -64,6 +65,8 @@ type NavItem = {
   comingSoon?: boolean;
   group?: string;
 };
+
+const isAgentbayHosting = process.env.NEXT_PUBLIC_AGENTBAY_HOSTED === "true";
 
 const navItems: NavItem[] = [
   // ── Core ──
@@ -91,12 +94,13 @@ const navItems: NavItem[] = [
   { section: "search", label: "Web Search", icon: Search, href: "/search" },
   // ── Configuration ──
   { group: "Configuration", section: "models", label: "Models", icon: Cpu, href: "/models" },
-  { section: "accounts", label: "Accounts & Keys", icon: KeyRound, href: "/accounts" },
+  { section: "accounts", label: "Keys & Access", icon: KeyRound, href: "/accounts" },
   { section: "security", label: "Security", icon: ShieldCheck, href: "/security" },
   { section: "hooks", label: "Hooks", icon: Webhook, href: "/hooks" },
-  { section: "tailscale", label: "Tailscale", icon: Waypoints, href: "/tailscale" },
+  ...(!isAgentbayHosting ? [{ section: "tailscale", label: "Tailscale", icon: Waypoints, href: "/tailscale" } as NavItem] : []),
   { section: "settings", label: "Settings", icon: Settings2, href: "/settings" },
   { section: "config", label: "Config", icon: Settings, href: "/config" },
+  ...(isAgentbayHosting ? [{ section: "help" as const, label: "Help & support", icon: HelpCircle, href: "/help" } as NavItem] : []),
   // ── Monitoring ──
   { group: "Monitoring", section: "doctor", label: "Doctor", icon: Stethoscope, href: "/doctor" },
   { section: "usage", label: "Usage", icon: BarChart3, href: "/usage" },
@@ -147,6 +151,7 @@ function deriveSectionFromPath(pathname: string): string | null {
     "logs",
     "config",
     "settings",
+    "help",
   ]);
   return known.has(first) ? first : null;
 }

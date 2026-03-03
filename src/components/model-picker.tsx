@@ -28,15 +28,146 @@ type ModelPickerProps = {
   currentModel?: string;
   excludeModels?: string[];
   onSelect: (fullModel: string) => void;
+  onConnectProvider?: (provider: string) => void;
+  connectableProviders?: string[];
   onClose: () => void;
   title?: string;
 };
+
+type ModelRoute = ModelOption & {
+  familyId: string;
+  familyName: string;
+  familyDescription: string | null;
+  familyContextWindow: string | null;
+  familyPriceTier: string | null;
+  preferredProvider: string;
+};
+
+type ModelFamily = {
+  id: string;
+  name: string;
+  description: string | null;
+  contextWindow: string | null;
+  priceTier: string | null;
+  preferredProvider: string;
+  routes: ModelRoute[];
+  totalRoutes: number;
+  readyCount: number;
+  hasCurrent: boolean;
+};
+
+const LOCAL_PROVIDERS = new Set(["ollama", "vllm", "lmstudio"]);
+
+function splitModelKey(key: string): { provider: string; model: string } {
+  const slash = key.indexOf("/");
+  if (slash < 0) {
+    return { provider: "custom", model: key };
+  }
+  return {
+    provider: key.slice(0, slash),
+    model: key.slice(slash + 1),
+  };
+}
+
+function getOpenRouterUpstreamKey(key: string): string | null {
+  if (!key.startsWith("openrouter/")) return null;
+  const rest = key.slice("openrouter/".length);
+  const slash = rest.indexOf("/");
+  if (slash < 0) return null;
+  return rest;
+}
+
+function normalizeFamilyKey(key: string): string {
+  const upstreamKey = getOpenRouterUpstreamKey(key);
+  const canonicalKey = upstreamKey || key;
+  const { provider, model } = splitModelKey(canonicalKey);
+  return `${provider}/${model.replace(/-\d{8}$/, "")}`.toLowerCase();
+}
+
+function getFamilyDetails(key: string) {
+  const upstreamKey = getOpenRouterUpstreamKey(key);
+  const canonicalKey = upstreamKey || key;
+  const canonicalMeta = getModelMeta(canonicalKey);
+  const routeMeta = getModelMeta(key);
+  const meta = canonicalMeta || routeMeta;
+  const name = (meta?.displayName || getFriendlyModelName(canonicalKey)).replace(
+    /\s+\(via [^)]+\)$/i,
+    "",
+  );
+  const { provider } = splitModelKey(canonicalKey);
+  return {
+    id: normalizeFamilyKey(key),
+    name,
+    description: meta?.description || null,
+    contextWindow: meta?.contextWindow || null,
+    priceTier: meta?.priceTier || null,
+    preferredProvider: meta?.provider || provider,
+  };
+}
+
+function routeMatchesSearch(route: ModelRoute, query: string): boolean {
+  if (!query) return true;
+  const meta = getModelMeta(route.key);
+  return (
+    route.name.toLowerCase().includes(query) ||
+    route.key.toLowerCase().includes(query) ||
+    route.provider.toLowerCase().includes(query) ||
+    getProviderDisplayName(route.provider).toLowerCase().includes(query) ||
+    (meta?.displayName?.toLowerCase().includes(query) ?? false) ||
+    (meta?.description?.toLowerCase().includes(query) ?? false)
+  );
+}
+
+function familyMatchesSearch(family: ModelFamily, query: string): boolean {
+  if (!query) return true;
+  return (
+    family.name.toLowerCase().includes(query) ||
+    (family.description?.toLowerCase().includes(query) ?? false)
+  );
+}
+
+function sortRoutes(
+  routes: ModelRoute[],
+  currentModel: string | undefined,
+  preferredProvider: string,
+) {
+  return [...routes].sort((a, b) => {
+    if (a.key === currentModel) return -1;
+    if (b.key === currentModel) return 1;
+    const aReady = a.local || a.ready ? 0 : a.authConnected ? 1 : 2;
+    const bReady = b.local || b.ready ? 0 : b.authConnected ? 1 : 2;
+    if (aReady !== bReady) return aReady - bReady;
+    const aPreferred =
+      a.provider === preferredProvider ? 0 : a.provider === "openrouter" ? 1 : 2;
+    const bPreferred =
+      b.provider === preferredProvider ? 0 : b.provider === "openrouter" ? 1 : 2;
+    if (aPreferred !== bPreferred) return aPreferred - bPreferred;
+    return getProviderDisplayName(a.provider).localeCompare(
+      getProviderDisplayName(b.provider),
+    );
+  });
+}
+
+function getRouteStatus(route: ModelRoute) {
+  if (route.local) {
+    return { label: "Local", tone: "good" as const };
+  }
+  if (route.ready) {
+    return { label: "Ready", tone: "good" as const };
+  }
+  if (route.authConnected) {
+    return { label: "Provider connected", tone: "neutral" as const };
+  }
+  return { label: "Needs key", tone: "warn" as const };
+}
 
 export function ModelPicker({
   models,
   currentModel,
   excludeModels,
   onSelect,
+  onConnectProvider,
+  connectableProviders,
   onClose,
   title = "Choose Model",
 }: ModelPickerProps) {
@@ -57,51 +188,89 @@ export function ModelPicker({
     [excludeModels],
   );
 
-  const filteredModels = useMemo(() => {
+  const connectableProviderSet = useMemo(
+    () => new Set(connectableProviders || []),
+    [connectableProviders],
+  );
+
+  const groupedFamilies = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return models
-      .filter((m) => !excludeSet.has(m.key))
-      .filter((m) => {
-        if (providerFilter !== "all" && m.provider !== providerFilter)
-          return false;
-        if (!query) return true;
-        const meta = getModelMeta(m.key);
-        return (
-          m.name.toLowerCase().includes(query) ||
-          m.key.toLowerCase().includes(query) ||
-          m.provider.toLowerCase().includes(query) ||
-          (meta?.displayName?.toLowerCase().includes(query) ?? false) ||
-          (meta?.description?.toLowerCase().includes(query) ?? false)
+    const familyMap = new Map<string, ModelFamily>();
+
+    for (const model of models) {
+      if (excludeSet.has(model.key)) continue;
+      const details = getFamilyDetails(model.key);
+      const route: ModelRoute = {
+        ...model,
+        familyId: details.id,
+        familyName: details.name,
+        familyDescription: details.description,
+        familyContextWindow: details.contextWindow,
+        familyPriceTier: details.priceTier,
+        preferredProvider: details.preferredProvider,
+      };
+
+      const current = familyMap.get(details.id);
+      if (current) {
+        current.routes.push(route);
+        continue;
+      }
+
+      familyMap.set(details.id, {
+        id: details.id,
+        name: details.name,
+        description: details.description,
+        contextWindow: details.contextWindow,
+        priceTier: details.priceTier,
+        preferredProvider: details.preferredProvider,
+        routes: [route],
+        totalRoutes: 0,
+        readyCount: 0,
+        hasCurrent: false,
+      });
+    }
+
+    return [...familyMap.values()]
+      .map((family) => {
+        const providerMatchedRoutes = family.routes.filter((route) => {
+          if (providerFilter === "all") return true;
+          return route.provider === providerFilter;
+        });
+
+        const familyQueryMatch = familyMatchesSearch(family, query);
+        const visibleRoutes = providerMatchedRoutes.filter((route) =>
+          familyQueryMatch ? true : routeMatchesSearch(route, query),
         );
+        if (!visibleRoutes.length) return null;
+
+        const sortedRoutes = sortRoutes(
+          visibleRoutes,
+          currentModel,
+          family.preferredProvider,
+        );
+        return {
+          ...family,
+          routes: sortedRoutes,
+          totalRoutes: providerMatchedRoutes.length,
+          readyCount: providerMatchedRoutes.filter((route) => route.local || route.ready).length,
+          hasCurrent: sortedRoutes.some((route) => route.key === currentModel),
+        };
       })
+      .filter((family): family is ModelFamily => Boolean(family))
       .sort((a, b) => {
-        // Current model first
-        if (a.key === currentModel) return -1;
-        if (b.key === currentModel) return 1;
-        // Ready before not ready
-        const aReady = a.ready || a.local ? 0 : 1;
-        const bReady = b.ready || b.local ? 0 : 1;
+        if (a.hasCurrent) return -1;
+        if (b.hasCurrent) return 1;
+        const aReady = a.readyCount > 0 ? 0 : 1;
+        const bReady = b.readyCount > 0 ? 0 : 1;
         if (aReady !== bReady) return aReady - bReady;
-        // Group by provider
-        if (a.provider !== b.provider)
-          return a.provider.localeCompare(b.provider);
         return a.name.localeCompare(b.name);
       });
   }, [models, excludeSet, providerFilter, search, currentModel]);
 
-  // Group by provider for section headers
-  const groupedModels = useMemo(() => {
-    const groups: { provider: string; models: ModelOption[] }[] = [];
-    let current: { provider: string; models: ModelOption[] } | null = null;
-    for (const m of filteredModels) {
-      if (!current || current.provider !== m.provider) {
-        current = { provider: m.provider, models: [] };
-        groups.push(current);
-      }
-      current.models.push(m);
-    }
-    return groups;
-  }, [filteredModels]);
+  const filteredRoutes = useMemo(
+    () => groupedFamilies.flatMap((family) => family.routes),
+    [groupedFamilies],
+  );
 
   // Provider chips
   const providerChips = useMemo(() => {
@@ -124,17 +293,17 @@ export function ModelPicker({
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setFocusIndex((i) => Math.min(i + 1, filteredModels.length - 1));
+        setFocusIndex((i) => Math.min(i + 1, filteredRoutes.length - 1));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         setFocusIndex((i) => Math.max(i - 1, 0));
       } else if (e.key === "Enter" && focusIndex >= 0) {
         e.preventDefault();
-        const model = filteredModels[focusIndex];
+        const model = filteredRoutes[focusIndex];
         if (model) onSelect(model.key);
       }
     },
-    [filteredModels, focusIndex, onClose, onSelect],
+    [filteredRoutes, focusIndex, onClose, onSelect],
   );
 
   // Scroll focused item into view
@@ -169,7 +338,12 @@ export function ModelPicker({
       <div className="relative z-10 flex max-h-[75vh] w-full max-w-2xl flex-col rounded-xl border border-border bg-card shadow-sm">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+            <p className="mt-1 text-xs text-muted-foreground/70">
+              Pick the model first, then choose which provider route should power it.
+            </p>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -188,7 +362,7 @@ export function ModelPicker({
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search models by name, provider, or description..."
+              placeholder="Search model families, providers, or route ids..."
               className="w-full rounded-md border border-border bg-muted/40 py-2.5 pl-10 pr-4 text-sm text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-cyan-500/40"
             />
           </div>
@@ -233,87 +407,146 @@ export function ModelPicker({
 
         {/* Model list */}
         <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-          {filteredModels.length === 0 ? (
+          {groupedFamilies.length === 0 ? (
             <div className="py-12 text-center text-sm text-muted-foreground">
               No models match your search.
             </div>
           ) : (
-            groupedModels.map((group, groupIdx) => (
-              <div key={`${group.provider}:${groupIdx}`} className="mb-1">
-                <div className="sticky top-0 z-10 bg-card px-3 py-1.5">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/60">
-                    {getProviderDisplayName(group.provider)}
-                  </p>
-                </div>
-                {group.models.map((model) => {
-                  flatIndex++;
-                  const meta = getModelMeta(model.key);
-                  const isCurrent = model.key === currentModel;
-                  const isFocused = flatIndex === focusIndex;
-                  const needsAuth = !model.ready && !model.local && !model.authConnected;
-                  const currentFlatIndex = flatIndex;
-
-                  return (
-                    <button
-                      key={model.key}
-                      type="button"
-                      data-index={currentFlatIndex}
-                      onClick={() => onSelect(model.key)}
-                      className={cn(
-                        "flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
-                        isCurrent && "bg-violet-500/10 border border-violet-500/20",
-                        !isCurrent && isFocused && "bg-accent",
-                        !isCurrent && !isFocused && "hover:bg-accent/70",
-                        needsAuth && "opacity-50",
+            groupedFamilies.map((family) => (
+              <div
+                key={family.id}
+                className={cn(
+                  "mb-3 rounded-xl border p-3",
+                  family.hasCurrent
+                    ? "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)]"
+                    : "border-border bg-card/70",
+                )}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-sm font-semibold text-foreground">
+                        {family.name}
+                      </h3>
+                      {family.hasCurrent && (
+                        <span className="rounded-md border border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] px-1.5 py-0.5 text-[11px] font-medium text-[var(--accent-brand-text)]">
+                          Current route
+                        </span>
                       )}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-foreground">
-                            {meta?.displayName || getFriendlyModelName(model.key)}
-                          </span>
-                          {isCurrent && (
-                            <span className="rounded-md bg-violet-500/20 px-1.5 py-0.5 text-xs font-medium text-violet-400">
-                              Current
-                            </span>
-                          )}
-                          {needsAuth && (
-                            <span className="rounded-md bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400">
-                              Needs API key
-                            </span>
-                          )}
-                          {model.local && (
-                            <span className="rounded-md bg-emerald-500/15 px-1.5 py-0.5 text-xs font-medium text-emerald-400">
-                              Local
-                            </span>
-                          )}
-                        </div>
-                        {meta?.description && (
-                          <p className="mt-0.5 text-xs text-muted-foreground/70">
-                            {meta.description}
-                          </p>
+                    </div>
+                    {family.description && (
+                      <p className="mt-1 text-xs text-muted-foreground/75">
+                        {family.description}
+                      </p>
+                    )}
+                    <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground/60">
+                      {family.priceTier && <span>{family.priceTier}</span>}
+                      {family.contextWindow && <span>{family.contextWindow} context</span>}
+                      <span>
+                        {family.totalRoutes} route{family.totalRoutes === 1 ? "" : "s"}
+                      </span>
+                      <span>
+                        {family.readyCount} ready now
+                      </span>
+                    </div>
+                  </div>
+                  <span className="rounded-md border border-border bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                    Prefer {getProviderDisplayName(family.preferredProvider)}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid gap-2">
+                  {family.routes.map((route) => {
+                    flatIndex++;
+                    const isCurrent = route.key === currentModel;
+                    const isFocused = flatIndex === focusIndex;
+                    const currentFlatIndex = flatIndex;
+                    const status = getRouteStatus(route);
+                    const canConnect =
+                      !route.ready &&
+                      !route.local &&
+                      !route.authConnected &&
+                      connectableProviderSet.has(route.provider) &&
+                      !LOCAL_PROVIDERS.has(route.provider) &&
+                      typeof onConnectProvider === "function";
+
+                    return (
+                      <div
+                        key={route.key}
+                        className={cn(
+                          "flex items-start gap-3 rounded-xl border p-1",
+                          isCurrent &&
+                            "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)]",
+                          !isCurrent && isFocused && "border-border bg-accent",
+                          !isCurrent && !isFocused && "border-border/70 bg-muted/10",
                         )}
-                        <div className="mt-1 flex items-center gap-2">
-                          {meta?.priceTier && (
-                            <span className="text-xs text-muted-foreground/50">
-                              {meta.priceTier}
-                            </span>
+                      >
+                        <button
+                          type="button"
+                          data-index={currentFlatIndex}
+                          onClick={() => onSelect(route.key)}
+                          className={cn(
+                            "flex min-w-0 flex-1 items-start gap-3 rounded-lg px-2 py-2 text-left transition-colors",
+                            !isCurrent && "hover:bg-accent/70",
                           )}
-                          {meta?.contextWindow && (
-                            <span className="text-xs text-muted-foreground/50">
-                              {meta.contextWindow} context
-                            </span>
-                          )}
-                          {!meta && (
-                            <span className="text-xs text-muted-foreground/40">
-                              {model.key}
-                            </span>
-                          )}
-                        </div>
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-medium text-foreground">
+                                {getProviderDisplayName(route.provider)}
+                              </span>
+                              {route.provider === family.preferredProvider && (
+                                <span className="rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                  Direct
+                                </span>
+                              )}
+                              <span
+                                className={cn(
+                                  "rounded-md px-1.5 py-0.5 text-[11px] font-medium",
+                                  status.tone === "good" &&
+                                    "bg-emerald-500/15 text-emerald-600 dark:text-emerald-300",
+                                  status.tone === "warn" &&
+                                    "bg-amber-500/15 text-amber-600 dark:text-amber-300",
+                                  status.tone === "neutral" &&
+                                    "bg-muted text-muted-foreground",
+                                )}
+                              >
+                                {status.label}
+                              </span>
+                              {isCurrent && (
+                                <span className="rounded-md bg-[var(--accent-brand)]/15 px-1.5 py-0.5 text-[11px] font-medium text-[var(--accent-brand-text)]">
+                                  Selected
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground/60">
+                              <code className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground/70">
+                                {route.key}
+                              </code>
+                              {route.authKind && !route.local && (
+                                <span>via {route.authKind}</span>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+
+                        {canConnect && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onConnectProvider?.(route.provider);
+                              onClose();
+                            }}
+                            className="shrink-0 self-center rounded-lg border border-[var(--accent-brand-border)] bg-card px-2.5 py-1.5 text-[11px] font-medium text-[var(--accent-brand-text)] transition-colors hover:bg-[var(--accent-brand-subtle)]"
+                          >
+                            Connect
+                          </button>
+                        )}
                       </div>
-                    </button>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             ))
           )}
@@ -322,7 +555,9 @@ export function ModelPicker({
         {/* Footer */}
         <div className="border-t border-border px-5 py-3">
           <p className="text-xs text-muted-foreground/50">
-            {filteredModels.length} model{filteredModels.length !== 1 ? "s" : ""} available
+            {groupedFamilies.length} model famil
+            {groupedFamilies.length === 1 ? "y" : "ies"} · {filteredRoutes.length} provider route
+            {filteredRoutes.length === 1 ? "" : "s"}
             {search && ` matching "${search}"`}
           </p>
         </div>

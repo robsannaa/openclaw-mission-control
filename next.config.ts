@@ -11,9 +11,12 @@ function git(cmd: string): string {
 }
 
 const nextConfig: NextConfig = {
+  turbopack: {},
   env: {
     NEXT_PUBLIC_APP_VERSION: git("describe --tags --always") || "dev",
     NEXT_PUBLIC_COMMIT_HASH: git("rev-parse --short HEAD") || "unknown",
+    AGENTBAY_HOSTED: process.env.AGENTBAY_HOSTED || "false",
+    NEXT_PUBLIC_AGENTBAY_HOSTED: process.env.NEXT_PUBLIC_AGENTBAY_HOSTED || process.env.AGENTBAY_HOSTED || "false",
   },
   // Ensure modules resolve from project root (avoids HOME being used as context)
   webpack: (config, { dir }) => {

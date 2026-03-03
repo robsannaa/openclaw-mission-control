@@ -674,6 +674,13 @@ export function Header() {
           <span className="text-xs">🦞</span>
           <h1 className="text-sm font-sans font-normal">
             Mission Control
+            {process.env.NEXT_PUBLIC_APP_VERSION && (
+              <span className="ml-1.5 font-mono text-[11px] font-normal text-muted-foreground">
+                {process.env.NEXT_PUBLIC_APP_VERSION.startsWith("v")
+                  ? process.env.NEXT_PUBLIC_APP_VERSION
+                  : `v${process.env.NEXT_PUBLIC_APP_VERSION}`}
+              </span>
+            )}
           </h1>
           <GatewayStatusBadge status={gwStatus} health={gwHealth} />
         </div>

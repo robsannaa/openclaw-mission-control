@@ -665,6 +665,17 @@ export async function POST(request: NextRequest) {
           // non-fatal
         }
 
+        // 3b. Enable OpenResponses HTTP endpoint for streaming chat
+        try {
+          await ensureConfigValue(
+            home,
+            "gateway.http.endpoints.responses.enabled",
+            true,
+          );
+        } catch {
+          // non-fatal — chat falls back to CLI if this isn't enabled
+        }
+
         // 4. Start gateway if not running
         const gatewayUrl = await getGatewayUrl();
         const gwHealth = await checkGatewayHealth(gatewayUrl);

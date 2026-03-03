@@ -25,10 +25,14 @@ import {
   KeyRound,
   ArrowRight,
   ExternalLink,
+  Eye,
+  EyeOff,
+  Check,
+  Loader2,
 } from "lucide-react";
-import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { TypingDots } from "@/components/typing-dots";
 import { cn } from "@/lib/utils";
 import { addUnread, clearUnread, setChatActive } from "@/lib/chat-store";
 import {
@@ -71,6 +75,18 @@ function formatTime(d: Date | undefined, timeFormat: TimeFormatPreference) {
 function formatModel(model: string) {
   const parts = model.split("/");
   return parts[parts.length - 1] || model;
+}
+
+function possessiveLabel(name: string) {
+  return name.endsWith("s") ? `${name}'` : `${name}'s`;
+}
+
+function createChatSessionKey(agentId: string) {
+  const suffix =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  return `agent:${agentId}:mission-control:${suffix}`;
 }
 
 /** Convert File[] to FileUIPart[] (data URLs) for sendMessage */
@@ -235,6 +251,203 @@ function MessageContent({ text }: { text: string }) {
   );
 }
 
+/* ── Inline API key setup ─────────────────────── */
+
+const PROVIDERS = [
+  { id: "openai", emoji: "🟢", name: "OpenAI", hint: "ChatGPT, GPT-4o", keyHint: "sk-...", url: "https://platform.openai.com/api-keys" },
+  { id: "anthropic", emoji: "🟣", name: "Anthropic", hint: "Claude", keyHint: "sk-ant-...", url: "https://console.anthropic.com/settings/keys" },
+  { id: "google", emoji: "🔵", name: "Google", hint: "Gemini", keyHint: "AIza...", url: "https://aistudio.google.com/apikey" },
+  { id: "openrouter", emoji: "🟠", name: "OpenRouter", hint: "Many models", keyHint: "sk-or-...", url: "https://openrouter.ai/keys" },
+] as const;
+
+/** Default model to use for each provider (matches onboarding-wizard.tsx) */
+const PROVIDER_DEFAULT_MODELS: Record<string, string> = {
+  anthropic: "anthropic/claude-sonnet-4-20250514",
+  openai: "openai/gpt-4o",
+  google: "google/gemini-2.0-flash",
+  openrouter: "openrouter/anthropic/claude-sonnet-4",
+};
+
+function ApiKeySetup({ onKeySaved, compact }: { onKeySaved: () => void; compact?: boolean }) {
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const [key, setKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const provider = PROVIDERS.find((p) => p.id === selectedProvider);
+
+  useEffect(() => {
+    if (selectedProvider) {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [selectedProvider]);
+
+  const handleSave = useCallback(async () => {
+    if (!selectedProvider || !key.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/models", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "auth-provider", provider: selectedProvider, token: key.trim() }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        // Also set this provider's default model as the primary so
+        // chat works immediately instead of falling back to an
+        // unconfigured provider (e.g. Anthropic when only OpenAI has a key).
+        const defaultModel = PROVIDER_DEFAULT_MODELS[selectedProvider];
+        if (defaultModel) {
+          fetch("/api/models", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "set-primary", model: defaultModel }),
+          }).catch(() => {/* best-effort */});
+        }
+        setSuccess(true);
+        setTimeout(() => onKeySaved(), 600);
+      } else {
+        setError(data.error || "That key didn\u2019t work. Double-check you copied the full key and try again.");
+      }
+    } catch {
+      setError("Can\u2019t connect to OpenClaw right now. Check the sidebar \u2014 if the gateway shows \u201coffline,\u201d click it to restart.");
+    }
+    setSaving(false);
+  }, [selectedProvider, key, onKeySaved]);
+
+  if (success) {
+    return (
+      <div className={cn(
+        "flex items-center justify-center gap-2 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-6 animate-modal-in",
+        compact && "p-4"
+      )}>
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20">
+          <Check className="h-4 w-4 text-emerald-500" />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Connected!</p>
+          <p className="text-xs text-muted-foreground">Loading your models...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={cn("w-full", compact && "max-w-full")}>
+      {!compact && (
+        <>
+          <div className="mb-5 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-brand)] text-[var(--accent-brand-on)] shadow-sm">
+              <KeyRound className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                Add your API key
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                One-time setup &middot; takes 30 seconds
+              </p>
+            </div>
+          </div>
+          <p className="mb-5 text-xs leading-relaxed text-muted-foreground">
+            An API key is a password that lets your agent connect to an AI
+            service (like ChatGPT or Claude). Pick a provider, grab a key, and paste it below.
+          </p>
+        </>
+      )}
+
+      {/* Provider selector */}
+      <div className={cn("grid grid-cols-2 gap-2", compact ? "mb-3" : "mb-5")}>
+        {PROVIDERS.map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => {
+              setSelectedProvider(selectedProvider === p.id ? null : p.id);
+              setKey("");
+              setError(null);
+              setShowKey(false);
+            }}
+            className={cn(
+              "group flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-left transition-all",
+              selectedProvider === p.id
+                ? "border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] shadow-sm"
+                : "border-foreground/8 bg-muted/40 hover:border-[var(--accent-brand-border)] hover:bg-[var(--accent-brand-subtle)] hover:shadow-sm"
+            )}
+          >
+            <span className="text-base">{p.emoji}</span>
+            <div className="min-w-0 flex-1">
+              <span className="block text-xs font-medium text-foreground/80">{p.name}</span>
+              <span className="block text-[11px] text-muted-foreground/60">{p.hint}</span>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {/* Key input (revealed after picking a provider) */}
+      {selectedProvider && provider && (
+        <div className="animate-modal-in space-y-2.5">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-foreground/80">
+              Paste your {provider.name} key
+            </label>
+            <a
+              href={provider.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-[11px] text-[var(--accent-brand-text)] hover:underline"
+            >
+              Get a key <ExternalLink className="h-2.5 w-2.5" />
+            </a>
+          </div>
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <input
+                ref={inputRef}
+                type={showKey ? "text" : "password"}
+                value={key}
+                onChange={(e) => { setKey(e.target.value); setError(null); }}
+                onKeyDown={(e) => { if (e.key === "Enter" && key.trim()) handleSave(); }}
+                placeholder={provider.keyHint}
+                className="w-full rounded-lg border border-foreground/10 bg-card px-3 py-2 pr-9 font-mono text-xs text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-[var(--accent-brand-border)] focus:ring-1 focus:ring-[var(--accent-brand-ring)]"
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground/40 hover:text-foreground/60"
+                tabIndex={-1}
+              >
+                {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={handleSave}
+              disabled={!key.trim() || saving}
+              className={cn(
+                "flex items-center gap-1.5 rounded-lg px-4 py-2 text-xs font-medium transition-all",
+                key.trim() && !saving
+                  ? "bg-[var(--accent-brand)] text-[var(--accent-brand-on)] shadow-sm hover:opacity-90 hover:shadow-md"
+                  : "bg-muted text-muted-foreground/60"
+              )}
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ArrowRight className="h-3.5 w-3.5" />}
+              {saving ? "Saving..." : "Connect"}
+            </button>
+          </div>
+          {error && (
+            <p className="text-xs text-red-400">{error}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Chat panel for a single agent ─────────────── */
 /* These are always mounted; hidden via CSS when not selected */
 
@@ -247,6 +460,9 @@ function ChatPanel({
   isVisible,
   availableModels,
   modelsLoaded,
+  onKeySaved,
+  isPostOnboarding,
+  onClearPostOnboarding,
 }: {
   agentId: string;
   agentName: string;
@@ -256,14 +472,29 @@ function ChatPanel({
   isVisible: boolean;
   availableModels: Array<{ key: string; name: string }>;
   modelsLoaded: boolean;
+  onKeySaved: () => void;
+  isPostOnboarding: boolean;
+  onClearPostOnboarding: () => void;
 }) {
   const timeFormat = useSyncExternalStore(
     subscribeTimeFormatPreference,
     getTimeFormatSnapshot,
     getTimeFormatServerSnapshot,
   );
+  const modelStorageKey = `mc-chat-model:${agentId}`;
   const [inputValue, setInputValue] = useState("");
-  const [modelOverride, setModelOverride] = useState<string | null>(null);
+  const [chatSessionKey, setChatSessionKey] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return createChatSessionKey(agentId);
+  });
+  const [modelOverride, setModelOverride] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      return localStorage.getItem(modelStorageKey) || null;
+    } catch {
+      return null;
+    }
+  });
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -273,10 +504,77 @@ function ChatPanel({
   const modelMenuRef = useRef<HTMLDivElement>(null);
   const prevMsgCountRef = useRef(0);
 
+  // Whether the agent model is known (not the placeholder "unknown" value)
+  const agentModelKnown = agentModel.includes("/");
+
+  // Whether the agent's default model provider has a configured API key
+  const defaultModelAvailable = useMemo(() => {
+    if (!modelsLoaded || availableModels.length === 0 || !agentModelKnown) return false;
+    const defaultProvider = agentModel.split("/")[0]; // e.g. "anthropic"
+    return availableModels.some((m) => m.key.split("/")[0] === defaultProvider);
+  }, [modelsLoaded, availableModels, agentModel, agentModelKnown]);
+
+  const manualChatModel = useMemo(() => {
+    const requested = modelOverride?.trim() || null;
+    if (!requested) return null;
+    if (!modelsLoaded || availableModels.length === 0) return requested;
+    return availableModels.some((m) => m.key === requested) ? requested : null;
+  }, [availableModels, modelOverride, modelsLoaded]);
+
+  const automaticChatModel = useMemo(() => {
+    if (manualChatModel) return null;
+    if (!modelsLoaded || availableModels.length === 0 || !agentModelKnown) return null;
+    if (defaultModelAvailable) return null;
+    const preferredDefaults = Object.values(PROVIDER_DEFAULT_MODELS);
+    return (
+      availableModels.find((m) => preferredDefaults.includes(m.key))?.key ||
+      availableModels[0]?.key ||
+      null
+    );
+  }, [
+    agentModelKnown,
+    availableModels,
+    defaultModelAvailable,
+    manualChatModel,
+    modelsLoaded,
+  ]);
+
+  const activeChatModel = manualChatModel ?? automaticChatModel;
+  const modelOverrideSource = manualChatModel
+    ? "manual"
+    : automaticChatModel
+      ? "automatic"
+      : "agent";
+  const activeChatModelLabel = activeChatModel
+    ? formatModel(activeChatModel)
+    : `${possessiveLabel(agentName)} setup`;
+  const agentSetupLabel = agentModelKnown ? formatModel(agentModel) : "unknown";
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      if (modelOverride && (!modelsLoaded || availableModels.some((m) => m.key === modelOverride))) {
+        localStorage.setItem(modelStorageKey, modelOverride);
+      } else {
+        localStorage.removeItem(modelStorageKey);
+      }
+    } catch {
+      // Ignore storage failures; they should not block chat.
+    }
+  }, [availableModels, modelOverride, modelStorageKey, modelsLoaded]);
+
   const addFiles = useCallback((files: FileList | File[]) => {
     const list = Array.isArray(files) ? files : Array.from(files);
     if (list.length) setAttachedFiles((prev) => [...prev, ...list]);
   }, []);
+
+  const ensureChatSessionKey = useCallback(() => {
+    const existing = chatSessionKey.trim();
+    if (existing) return existing;
+    const next = createChatSessionKey(agentId);
+    setChatSessionKey(next);
+    return next;
+  }, [agentId, chatSessionKey]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -313,14 +611,13 @@ function ChatPanel({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [modelMenuOpen]);
 
-  // Create transport that sends agentId alongside messages
+  // Create transport for chat requests. Per-request fields are attached via sendMessage.
   const transport = useMemo(
     () =>
       new TextStreamChatTransport({
         api: "/api/chat",
-        body: { agentId },
       }),
-    [agentId]
+    []
   );
 
   const { messages, sendMessage, status, setMessages, error } = useChat({
@@ -372,25 +669,61 @@ function ChatPanel({
     }
   }, [isSelected, isVisible, agentId]);
 
+  const sendWithActiveModel = useCallback(
+    async (
+      payload: {
+        text: string;
+        files?: Array<{ type: "file"; mediaType: string; filename?: string; url: string }>;
+      },
+    ) => {
+      const sessionKey = ensureChatSessionKey();
+      await sendMessage(payload, {
+        body: activeChatModel
+          ? { agentId, model: activeChatModel, sessionKey }
+          : { agentId, sessionKey },
+      });
+    },
+    [activeChatModel, agentId, ensureChatSessionKey, sendMessage],
+  );
+
+  const retryLastUserMessage = useCallback(() => {
+    const lastUser = [...messages].reverse().find((m) => m.role === "user");
+    if (!lastUser) return;
+    const retryText =
+      lastUser.parts
+        ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+        .map((p) => p.text)
+        .join("") || "";
+    if (retryText) void sendWithActiveModel({ text: retryText });
+  }, [messages, sendWithActiveModel]);
+
   const handleSend = useCallback(async () => {
     const text = inputValue.trim();
     const hasFiles = attachedFiles.length > 0;
     if ((!text && !hasFiles) || isLoading || noApiKeys) return;
+    onClearPostOnboarding();
     setInputValue("");
     if (inputRef.current) inputRef.current.style.height = "auto";
     const fileParts = hasFiles ? await filesToUIParts(attachedFiles) : undefined;
     setAttachedFiles([]);
-    await sendMessage(
+    await sendWithActiveModel(
       { text: text || "", files: fileParts },
-      { body: { model: modelOverride ?? undefined } }
     );
-  }, [inputValue, isLoading, noApiKeys, attachedFiles, modelOverride, sendMessage]);
+  }, [
+    attachedFiles,
+    inputValue,
+    isLoading,
+    noApiKeys,
+    onClearPostOnboarding,
+    sendWithActiveModel,
+  ]);
 
   const clearChat = useCallback(() => {
     setMessages([]);
     prevMsgCountRef.current = 0;
+    setChatSessionKey(createChatSessionKey(agentId));
     setTimeout(() => inputRef.current?.focus(), 100);
-  }, [setMessages]);
+  }, [agentId, setMessages]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -423,68 +756,12 @@ function ChatPanel({
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
           noApiKeys ? (
-            /* ── No API keys — onboarding empty state ── */
+            /* ── No API keys — inline setup ── */
             <div className="flex h-full items-center justify-center px-4 md:px-6">
               <div className="relative w-full max-w-md animate-modal-in">
-                {/* Warm radial glow behind the card */}
                 <div className="pointer-events-none absolute -inset-12 rounded-full bg-[var(--accent-brand)] opacity-[0.04] blur-3xl" />
-
                 <div className="relative rounded-2xl border border-[var(--accent-brand-border)]/60 bg-card p-6 shadow-lg shadow-[var(--accent-brand-ring)]/10">
-                  {/* Step indicator */}
-                  <div className="mb-5 flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-brand)] text-[var(--accent-brand-on)] shadow-sm">
-                      <KeyRound className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                        Add your API key
-                      </h3>
-                      <p className="text-xs text-muted-foreground">
-                        One-time setup &middot; takes 30 seconds
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Explanation */}
-                  <p className="mb-5 text-xs leading-relaxed text-muted-foreground">
-                    An API key is a password that lets your agent connect to an AI
-                    service (like ChatGPT or Claude). Get one from any provider below,
-                    then paste it in Settings.
-                  </p>
-
-                  {/* Provider cards */}
-                  <div className="mb-5 grid grid-cols-2 gap-2">
-                    {[
-                      { emoji: "🟢", name: "OpenAI", hint: "ChatGPT, GPT-4o", url: "https://platform.openai.com/api-keys" },
-                      { emoji: "🟣", name: "Anthropic", hint: "Claude", url: "https://console.anthropic.com/settings/keys" },
-                      { emoji: "🔵", name: "Google", hint: "Gemini", url: "https://aistudio.google.com/apikey" },
-                      { emoji: "🟠", name: "OpenRouter", hint: "Many models", url: "https://openrouter.ai/keys" },
-                    ].map((p) => (
-                      <a
-                        key={p.name}
-                        href={p.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group flex items-center gap-2.5 rounded-xl border border-foreground/8 bg-muted/40 px-3 py-2.5 transition-all hover:border-[var(--accent-brand-border)] hover:bg-[var(--accent-brand-subtle)] hover:shadow-sm"
-                      >
-                        <span className="text-base">{p.emoji}</span>
-                        <div className="min-w-0 flex-1">
-                          <span className="block text-xs font-medium text-foreground/80 group-hover:text-foreground">{p.name}</span>
-                          <span className="block text-[11px] text-muted-foreground/60">{p.hint}</span>
-                        </div>
-                        <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-[var(--accent-brand-text)]" />
-                      </a>
-                    ))}
-                  </div>
-
-                  {/* CTA */}
-                  <Link
-                    href="/accounts"
-                    className="group flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent-brand)] px-5 py-2.5 text-sm font-medium text-[var(--accent-brand-on)] shadow-sm transition-all hover:opacity-90 hover:shadow-md"
-                  >
-                    I have a key &mdash; paste it now
-                    <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                  </Link>
+                  <ApiKeySetup onKeySaved={onKeySaved} />
                 </div>
               </div>
             </div>
@@ -501,23 +778,43 @@ function ChatPanel({
                 <p className="mt-1 text-xs text-muted-foreground">
                   Send a message to start a conversation with your agent.
                 </p>
-                <p className="mt-0.5 text-xs text-muted-foreground/60">
-                  Using {formatModel(agentModel)}
-                </p>
+                {(activeChatModel || agentModelKnown) && (
+                  <p className="mt-0.5 text-xs text-muted-foreground/60">
+                    {activeChatModel
+                      ? `This chat will use ${activeChatModelLabel}.`
+                      : `This chat follows ${possessiveLabel(agentName)} setup (${agentSetupLabel}).`}
+                  </p>
+                )}
+                {activeChatModel && modelOverrideSource === "automatic" && !defaultModelAvailable && agentModelKnown && (
+                  <p className="mt-2 max-w-xs text-[11px] leading-relaxed text-amber-500/70">
+                    Mission Control temporarily switched this chat from {agentSetupLabel}
+                    to {activeChatModelLabel} because the agent&apos;s setup isn&apos;t
+                    ready right now.
+                  </p>
+                )}
               </div>
               {/* Quick prompts */}
               <div className="mt-4 flex flex-wrap justify-center gap-2">
-                {[
-                  "What did you do today?",
-                  "Check my scheduled tasks",
-                  "Summarize recent activity",
-                  "What tasks are pending?",
-                ].map((prompt) => (
+                {(isPostOnboarding
+                  ? [
+                      "Say hello!",
+                      "What can you do?",
+                      "Tell me a joke",
+                      "Help me get started",
+                    ]
+                  : [
+                      "What did you do today?",
+                      "Check my scheduled tasks",
+                      "Summarize recent activity",
+                      "What tasks are pending?",
+                    ]
+                ).map((prompt) => (
                   <button
                     key={prompt}
                     type="button"
                     onClick={() => {
-                      sendMessage({ text: prompt });
+                      onClearPostOnboarding();
+                      void sendWithActiveModel({ text: prompt });
                     }}
                     className="rounded-lg border border-foreground/10 bg-muted/60 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
                   >
@@ -637,8 +934,8 @@ function ChatPanel({
               );
             })}
 
-            {/* Loading indicator */}
-            {isLoading && (
+            {/* Loading indicator — only when waiting for first token, not during streaming */}
+            {status === "submitted" && (
               <div className="mb-6 flex gap-3">
                 <div
                   className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-xs"
@@ -652,7 +949,9 @@ function ChatPanel({
                     <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    {agentName} is thinking...
+                    {activeChatModel
+                      ? `${agentName} is thinking with ${activeChatModelLabel}...`
+                      : `${agentName} is thinking...`}
                   </span>
                 </div>
               </div>
@@ -660,38 +959,86 @@ function ChatPanel({
 
             {/* Error display */}
             {error && (
-              /No API key found|api[._-]key|auth.profiles|FailoverError|Configure auth/i.test(error.message) ? (
-                /* Friendly API key error — inline card */
-                <div className="mb-6 overflow-hidden rounded-xl border border-[var(--accent-brand-border)]/60 bg-card shadow-sm animate-modal-in">
-                  <div className="flex items-center gap-2.5 border-b border-[var(--accent-brand-border)]/40 bg-[var(--accent-brand-subtle)] px-4 py-2.5">
+              /No API key found|api[._-]key|auth.profiles|FailoverError|Configure auth|unauthorized|invalid.*key|401/i.test(error.message) ? (
+                /* Friendly API key error — inline setup */
+                <div className="mb-6 overflow-hidden rounded-xl border border-[var(--accent-brand-border)]/60 bg-card p-4 shadow-sm animate-modal-in">
+                  <div className="mb-3 flex items-center gap-2">
                     <KeyRound className="h-3.5 w-3.5 text-[var(--accent-brand-text)]" />
-                    <span className="text-xs font-medium text-[var(--accent-brand-text)]">API key missing</span>
+                    <span className="text-xs font-medium text-[var(--accent-brand-text)]">Your agent needs an API key to reply</span>
                   </div>
-                  <div className="px-4 py-3.5">
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      Your agent needs an API key to reply. Grab one from a provider
-                      like{" "}
-                      <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="font-medium text-[var(--accent-brand-text)] underline decoration-[var(--accent-brand-border)] underline-offset-2 hover:text-[var(--accent-brand)]">
-                        OpenAI
-                      </a>{" "}
-                      or{" "}
-                      <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener noreferrer" className="font-medium text-[var(--accent-brand-text)] underline decoration-[var(--accent-brand-border)] underline-offset-2 hover:text-[var(--accent-brand)]">
-                        Anthropic
-                      </a>
-                      , then paste it in Settings.
-                    </p>
-                    <Link
-                      href="/accounts"
-                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[var(--accent-brand)] px-3.5 py-1.5 text-xs font-medium text-[var(--accent-brand-on)] transition-all hover:opacity-90 hover:shadow-sm"
+                  <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
+                    The AI provider rejected the request. This usually means your API key
+                    is missing, expired, or doesn&apos;t have enough credits. Add or update it below.
+                  </p>
+                  <ApiKeySetup onKeySaved={onKeySaved} compact />
+                </div>
+              ) : /avoid sending your message with a different model|switch this chat back to the agent setup|could not use .* because the OpenClaw gateway/i.test(error.message) ? (
+                <div className="mb-6 rounded-lg border border-violet-500/20 bg-violet-500/5 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-violet-500">
+                      Your selected chat model was protected
+                    </span>
+                    <button
+                      type="button"
+                      onClick={retryLastUserMessage}
+                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-violet-500 transition-colors hover:bg-violet-500/10"
                     >
-                      <KeyRound className="h-3 w-3" />
-                      Add API Key
-                      <ArrowRight className="h-3 w-3" />
-                    </Link>
+                      <RefreshCw className="h-3 w-3" />
+                      Try again
+                    </button>
                   </div>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-violet-500/80">
+                    Mission Control stopped the request instead of sending it with the wrong model.
+                    You can try again, or switch this chat back to the agent setup below.
+                  </p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-violet-500/60">
+                    {error.message}
+                  </p>
+                </div>
+              ) : /timeout|timed out|ECONNREFUSED|ENOTFOUND|fetch failed|network/i.test(error.message) ? (
+                /* Connection / network error */
+                <div className="mb-6 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-amber-400">
+                      Connection problem
+                    </span>
+                    <button
+                      type="button"
+                      onClick={retryLastUserMessage}
+                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-amber-400 transition-colors hover:bg-amber-500/10"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Try again
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-amber-400/70">
+                    Could not reach the AI provider. Check that your internet connection is
+                    working and that the OpenClaw gateway is online (green dot in the sidebar).
+                  </p>
+                </div>
+              ) : /rate.?limit|429|quota|exceeded|billing/i.test(error.message) ? (
+                /* Rate limit / quota error */
+                <div className="mb-6 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-amber-400">
+                      Usage limit reached
+                    </span>
+                    <button
+                      type="button"
+                      onClick={retryLastUserMessage}
+                      className="flex items-center gap-1 rounded px-2 py-1 text-xs text-amber-400 transition-colors hover:bg-amber-500/10"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Try again
+                    </button>
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-amber-400/70">
+                    Your AI provider says you&apos;ve hit a usage or billing limit. Wait a minute
+                    and try again, or check your plan&apos;s dashboard to add credits.
+                  </p>
                 </div>
               ) : (
-                /* Generic error */
+                /* Generic error — still helpful */
                 <div className="mb-6 rounded-lg border border-red-500/20 bg-red-500/5 px-4 py-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-medium text-red-400">
@@ -699,22 +1046,7 @@ function ChatPanel({
                     </span>
                     <button
                       type="button"
-                      onClick={() => {
-                        const lastUser = [...messages]
-                          .reverse()
-                          .find((m) => m.role === "user");
-                        if (lastUser) {
-                          const retryText =
-                            lastUser.parts
-                              ?.filter(
-                                (p): p is { type: "text"; text: string } =>
-                                  p.type === "text"
-                              )
-                              .map((p) => p.text)
-                              .join("") || "";
-                          if (retryText) sendMessage({ text: retryText });
-                        }
-                      }}
+                      onClick={retryLastUserMessage}
                       className="flex items-center gap-1 rounded px-2 py-1 text-xs text-red-400 transition-colors hover:bg-red-500/10"
                     >
                       <RefreshCw className="h-3 w-3" />
@@ -723,6 +1055,10 @@ function ChatPanel({
                   </div>
                   <p className="mt-1 text-xs text-red-400/70">
                     {error.message}
+                  </p>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-red-400/50">
+                    If this keeps happening, try switching models (brain icon below),
+                    or visit the Doctor page from the sidebar to run a system check.
                   </p>
                 </div>
               )
@@ -805,18 +1141,24 @@ function ChatPanel({
                   <button
                     type="button"
                     onClick={() => setModelMenuOpen((open) => !open)}
-                    title={modelOverride ? formatModel(modelOverride) : `AI model: ${formatModel(agentModel)}`}
+                    title={
+                      activeChatModel
+                        ? `This chat uses ${activeChatModelLabel}`
+                        : `This chat follows ${possessiveLabel(agentName)} setup (${agentSetupLabel})`
+                    }
                     className={cn(
                       "flex h-7 items-center gap-1 rounded-md px-1.5 text-xs transition-colors",
-                      modelOverride
+                      activeChatModel
                         ? "bg-violet-500/10 text-violet-400"
                         : "text-muted-foreground/40 hover:bg-muted hover:text-foreground/70"
                     )}
                   >
                     <Brain className="h-3.5 w-3.5" />
-                    {modelOverride && (
-                      <span className="hidden text-xs sm:inline">{formatModel(modelOverride)}</span>
-                    )}
+                    <span className="hidden text-xs sm:inline">
+                      {activeChatModel
+                        ? `Chat: ${activeChatModelLabel}`
+                        : `Chat: ${agentSetupLabel}`}
+                    </span>
                   </button>
                   {modelMenuOpen && (
                     <div className="absolute left-0 bottom-full z-50 mb-1 min-w-48 overflow-hidden rounded-lg border border-border bg-popover py-1 shadow-xl backdrop-blur-sm animate-enter">
@@ -828,13 +1170,13 @@ function ChatPanel({
                         }}
                         className={cn(
                           "flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors",
-                          !modelOverride
+                          !activeChatModel
                             ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
                             : "text-foreground/80 hover:bg-muted hover:text-foreground"
                         )}
                       >
                         <Brain className="h-3.5 w-3.5 shrink-0" />
-                        Default ({formatModel(agentModel)})
+                        Use agent setup ({agentSetupLabel})
                       </button>
                       {availableModels.map((m) => (
                         <button
@@ -846,14 +1188,14 @@ function ChatPanel({
                           }}
                           className={cn(
                             "flex w-full items-center gap-2 px-3 py-2 text-left text-xs transition-colors",
-                            modelOverride === m.key
+                            activeChatModel === m.key
                               ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
                               : "text-foreground/80 hover:bg-muted hover:text-foreground"
                           )}
                         >
-                          <Cpu className="h-3.5 w-3.5 shrink-0" />
-                          {formatModel(m.name)}
-                        </button>
+                            <Cpu className="h-3.5 w-3.5 shrink-0" />
+                            {formatModel(m.name)}
+                          </button>
                       ))}
                     </div>
                   )}
@@ -869,6 +1211,24 @@ function ChatPanel({
                   </button>
                 )}
               </div>
+              {activeChatModel && (
+                <div className="flex items-center justify-between gap-2 border-t border-foreground/8 px-3 pb-2 pt-1.5 text-[11px] sm:px-4">
+                  <p className="min-w-0 truncate text-muted-foreground/60">
+                    {modelOverrideSource === "automatic"
+                      ? `Temporary chat model: ${activeChatModelLabel}. Agent setup is ${agentSetupLabel}.`
+                      : `Chat model: ${activeChatModelLabel}. Agent setup: ${agentSetupLabel}.`}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModelOverride(null);
+                    }}
+                    className="shrink-0 text-[11px] font-medium text-violet-500/80 transition-colors hover:text-violet-500"
+                  >
+                    Use agent setup
+                  </button>
+                </div>
+              )}
             </div>
 
             <button
@@ -904,6 +1264,8 @@ function ChatPanel({
 
 /* ── Main chat view with agent selector ────────── */
 
+const isHosted = process.env.NEXT_PUBLIC_AGENTBAY_HOSTED === "true";
+
 export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>("main");
@@ -914,19 +1276,40 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   const [now, setNow] = useState(() => Date.now());
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  // ── Warm-up state: friendly loading for new users ──
+  const [warmupExpired, setWarmupExpired] = useState(false);
+  const mountedAtRef = useRef(0);
+  const warmingUp = !warmupExpired && agents.length === 0;
+
+  // ── Post-onboarding first-time prompts ──
+  const [isPostOnboarding, setIsPostOnboarding] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return localStorage.getItem("mc-post-onboarding") === "1"; } catch { return false; }
+  });
+
+  const clearPostOnboarding = useCallback(() => {
+    if (!isPostOnboarding) return;
+    setIsPostOnboarding(false);
+    try { localStorage.removeItem("mc-post-onboarding"); } catch {}
+  }, [isPostOnboarding]);
+
   // Track which agents have been "opened" (we'll mount their ChatPanel forever)
   const [mountedAgents, setMountedAgents] = useState<Set<string>>(
     new Set(["main"])
   );
 
   // Fetch agents on mount (auto-discovery)
+  const agentsLoadedRef = useRef(false);
   const fetchAgents = useCallback(() => {
-    setAgentsLoading(true);
+    // Only show loading spinner on initial fetch, not on background polls.
+    // Setting loading on every poll clears the agent dropdown momentarily.
+    if (!agentsLoadedRef.current) setAgentsLoading(true);
     fetch("/api/agents")
       .then((r) => r.json())
       .then((data) => {
         const agentList = data.agents || [];
         setAgents(agentList);
+        if (agentList.length > 0) agentsLoadedRef.current = true;
         if (
           agentList.length > 0 &&
           !agentList.find((a: Agent) => a.id === selectedAgent)
@@ -944,18 +1327,31 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   }, [selectedAgent]);
 
   useEffect(() => {
+    mountedAtRef.current = Date.now();
+  }, []);
+
+  // End warm-up after 20s timeout
+  useEffect(() => {
+    const remaining = 20_000 - (Date.now() - mountedAtRef.current);
+    const t = setTimeout(() => setWarmupExpired(true), Math.max(remaining, 0));
+    return () => clearTimeout(t);
+  }, []);
+
+  // Fetch agents: fast-poll (2s) during warm-up, normal (30s) otherwise
+  useEffect(() => {
     queueMicrotask(() => {
       if (isVisible) void fetchAgents();
     });
+    const ms = warmingUp ? 2000 : 30000;
     const interval = setInterval(() => {
       if (isVisible && document.visibilityState === "visible") {
         void fetchAgents();
       }
-    }, 30000);
+    }, ms);
     return () => clearInterval(interval);
-  }, [fetchAgents, isVisible]);
+  }, [fetchAgents, isVisible, warmingUp]);
 
-  useEffect(() => {
+  const fetchModels = useCallback(() => {
     fetch("/api/models?scope=configured", { cache: "no-store" })
       .then((r) => r.json())
       .then((data) => {
@@ -972,6 +1368,16 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
       .catch(() => { })
       .finally(() => setModelsLoaded(true));
   }, []);
+
+  // Fetch models on mount AND whenever the chat view becomes visible again
+  // (user may have added a provider key on /models in the meantime)
+  useEffect(() => {
+    fetchModels();
+  }, [fetchModels]);
+
+  useEffect(() => {
+    if (isVisible) fetchModels();
+  }, [isVisible, fetchModels]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -1027,8 +1433,8 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* ── Top bar: agent selector ─────────────── */}
       <div className="shrink-0 border-b border-foreground/10 bg-card/60 px-4 md:px-6 py-3">
-        <div className="flex items-center justify-between overflow-x-auto">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
             {/* Agent dropdown */}
             <div className="relative" ref={dropdownRef}>
               <button
@@ -1052,11 +1458,11 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                 <div className="absolute left-0 top-full z-50 mt-1 min-w-60 overflow-hidden rounded-lg border border-foreground/10 bg-card/95 py-1 shadow-xl backdrop-blur-sm">
                   {agentsLoading ? (
                     <div className="px-3 py-2 text-xs text-muted-foreground">
-                      Loading agents...
+                      {warmingUp ? "Starting up..." : "Loading agents..."}
                     </div>
                   ) : agents.length === 0 ? (
                     <div className="px-3 py-2 text-xs text-muted-foreground">
-                      No agents found
+                      No agents available
                     </div>
                   ) : (
                     agents.map((agent) => (
@@ -1108,13 +1514,13 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
               <div className="flex items-center gap-1.5 rounded-md border border-foreground/10 bg-muted/60 px-2 py-1">
                 <Cpu className="h-3 w-3 text-muted-foreground" />
                 <span className="text-xs text-muted-foreground">
-                  {formatModel(currentAgent.model)}
+                  Agent setup: {formatModel(currentAgent.model)}
                 </span>
               </div>
             )}
           </div>
 
-          <div className="flex items-center gap-1 text-xs text-muted-foreground/60">
+          <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground/60">
             <span>
               {agents.length} agent{agents.length !== 1 ? "s" : ""}
             </span>
@@ -1128,22 +1534,101 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
        * This ensures chat state (messages, streams) persist across tab switches
        * and agent switches.
        */}
-      {Array.from(mountedAgents).map((agentId) => {
-        const agent = agents.find((a) => a.id === agentId);
-        return (
-          <ChatPanel
-            key={agentId}
-            agentId={agentId}
-            agentName={agent ? agentDisplayName(agent) : agentId}
-            agentEmoji={agent?.emoji || "🤖"}
-            agentModel={agent?.model || "unknown"}
-            isSelected={agentId === selectedAgent}
-            isVisible={isVisible}
-            availableModels={availableModels}
-            modelsLoaded={modelsLoaded}
-          />
-        );
-      })}
+      {!agentsLoading && agents.length === 0 ? (
+        warmingUp ? (
+          /* ── Warm-up: agent is starting ── */
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/80 text-xl">
+              🤖
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground/90">
+                Getting your agent ready
+                <TypingDots size="sm" className="ml-1 text-muted-foreground" />
+              </h3>
+              <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-muted-foreground">
+                This usually only takes a few seconds.
+              </p>
+            </div>
+          </div>
+        ) : isHosted ? (
+          /* ── Hosted post-warm-up: friendly fallback ── */
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/80 text-xl">
+              🤖
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground/90">
+                Your agent isn&apos;t available yet
+              </h3>
+              <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-muted-foreground">
+                Try refreshing the page. If the problem persists, please contact support.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={fetchAgents}
+              className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-muted/60 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
+            >
+              <RefreshCw className="h-3 w-3" />
+              Refresh
+            </button>
+          </div>
+        ) : (
+          /* ── Self-hosted: existing guidance ── */
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-4 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/80 text-xl">
+              🤖
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground/90">
+                No agents found
+              </h3>
+              <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-muted-foreground">
+                Your agent hasn&apos;t started yet. Check that the gateway is online
+                (green dot in the sidebar), then refresh this page.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={fetchAgents}
+                className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-muted/60 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
+              >
+                <RefreshCw className="h-3 w-3" />
+                Refresh
+              </button>
+              <a
+                href="/doctor"
+                className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-muted/60 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
+              >
+                <Cpu className="h-3 w-3" />
+                Run Doctor
+              </a>
+            </div>
+          </div>
+        )
+      ) : (
+        Array.from(mountedAgents).map((agentId) => {
+          const agent = agents.find((a) => a.id === agentId);
+          return (
+            <ChatPanel
+              key={agentId}
+              agentId={agentId}
+              agentName={agent ? agentDisplayName(agent) : agentId}
+              agentEmoji={agent?.emoji || "🤖"}
+              agentModel={agent?.model || "unknown"}
+              isSelected={agentId === selectedAgent}
+              isVisible={isVisible}
+              availableModels={availableModels}
+              modelsLoaded={modelsLoaded}
+              onKeySaved={fetchModels}
+              isPostOnboarding={isPostOnboarding}
+              onClearPostOnboarding={clearPostOnboarding}
+            />
+          );
+        })
+      )}
     </div>
   );
 }

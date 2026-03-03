@@ -745,10 +745,10 @@ export function AccountsKeysView() {
         title={
           <span className="inline-flex items-center gap-2">
             <KeyRound className="h-5 w-5" />
-            Accounts & Keys
+            Keys & Access
           </span>
         }
-        description="Complete visibility into channels, integrations, env keys, and discovered credential sources OpenClaw can access."
+        description="Advanced view of saved keys, auth profiles, channel logins, env credentials, and discovered access sources. Use Models for everyday provider setup and model choice."
         meta={
           data
             ? `Last sync: ${new Date(data.generatedAt).toLocaleString(
@@ -821,6 +821,27 @@ export function AccountsKeysView() {
 
         {data ? (
           <>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <div className="rounded-xl border border-[var(--accent-brand-border)] bg-[var(--accent-brand-subtle)] p-4">
+                <p className="text-sm font-semibold text-foreground">Start in Models for everyday setup</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Choose the model you want, connect providers, and decide what new chats should use.
+                </p>
+                <a
+                  href="/models"
+                  className="mt-3 inline-flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  Open Models setup
+                </a>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-card p-4">
+                <p className="text-sm font-semibold text-foreground">Use this page when you need details</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Inspect saved API keys, auth profiles, channel accounts, env values, and secrets audit results without changing your model setup flow.
+                </p>
+              </div>
+            </div>
+
             <div className="rounded-xl border border-border/70 bg-card p-4">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 {statusPill(data.sourceOfTruth.gatewayConfig, "Gateway Config")}
@@ -882,12 +903,9 @@ export function AccountsKeysView() {
                 {data.summary.modelProvidersConnected} of {data.summary.modelProvidersTotal} providers connected
                 {data.summary.authProfiles > 0 && ` · ${data.summary.authProfiles} auth profiles`}
               </p>
-              <a
-                href="/models"
-                className="mt-3 inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                Manage in Models →
-              </a>
+              <p className="mt-2 text-xs text-muted-foreground">
+                This section is for inspection. To connect providers, pick routes, or change the model used by chats, go to Models.
+              </p>
             </div>
 
             <div className="rounded-xl border border-border/70 bg-card p-4">

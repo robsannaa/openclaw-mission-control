@@ -1,10 +1,49 @@
 import { NextResponse } from "next/server";
-import { runCliJson } from "@/lib/openclaw";
-import { getOpenClawBin } from "@/lib/paths";
+import { runCliJson, gatewayCall } from "@/lib/openclaw";
+import { getOpenClawBin, getGatewayUrl } from "@/lib/paths";
 import { execFile } from "child_process";
 import { promisify } from "util";
 
 const exec = promisify(execFile);
+
+// ── Auto-enable OpenResponses endpoint for streaming chat ──
+let _responsesEndpointEnsured = false;
+
+function ensureResponsesEndpoint(): void {
+  if (_responsesEndpointEnsured) return;
+  _responsesEndpointEnsured = true;
+
+  // Fire-and-forget — don't block the health check response
+  (async () => {
+    try {
+      const cfg = await gatewayCall<{ hash?: string; config?: Record<string, unknown> }>(
+        "config.get",
+        undefined,
+        8000,
+      );
+      // Check if already enabled
+      const gw = (cfg?.config as Record<string, unknown>)?.gateway as Record<string, unknown> | undefined;
+      const http = gw?.http as Record<string, unknown> | undefined;
+      const endpoints = http?.endpoints as Record<string, unknown> | undefined;
+      const responses = endpoints?.responses as Record<string, unknown> | undefined;
+      if (responses?.enabled === true) return; // Already enabled
+
+      await gatewayCall(
+        "config.patch",
+        {
+          raw: JSON.stringify({
+            gateway: { http: { endpoints: { responses: { enabled: true } } } },
+          }),
+          baseHash: String(cfg?.hash || ""),
+        },
+        10000,
+      );
+    } catch {
+      // Non-fatal — streaming falls back to CLI
+      _responsesEndpointEnsured = false; // retry next health check
+    }
+  })();
+}
 
 async function runGatewayServiceCommand(
   subcommand: "restart" | "stop" | "start",
@@ -18,58 +57,78 @@ async function runGatewayServiceCommand(
 }
 
 /**
- * GET /api/gateway - Returns comprehensive gateway health status.
- *
- * Uses `runCliJson(["health"])` which is routed through the unified
- * OpenClawClient (AutoTransport by default). AutoTransport probes the
- * Gateway over HTTP first and falls back to CLI — so this works in
- * Docker (where the CLI binary is slow) and on Mac (where CLI is fast).
- *
- * Timeout bumped to 30s for environments with cold CLI starts.
+ * Quick gateway liveness check — just probe the HTTP endpoint.
+ * This avoids the slow `openclaw health --json` CLI which loads all
+ * plugins and takes 15-20s (often exceeding the frontend's 15s abort).
  */
-export async function GET() {
+async function probeGatewayHttp(): Promise<{
+  ok: boolean;
+  port: number;
+  url: string;
+}> {
+  const url = await getGatewayUrl();
+  const port = parseInt(new URL(url).port, 10) || 18789;
   try {
-    const health = await runCliJson<Record<string, unknown>>(
-      ["health"],
-      30000
-    );
-    // Validate the response has the expected shape — a malformed or empty
-    // response should not silently report "degraded".
-    if (!health || typeof health !== "object") {
-      return NextResponse.json({
-        status: "offline",
-        health: { ok: false, error: "Unexpected health check response" },
-      });
-    }
-    return NextResponse.json({
-      status: health.ok ? "online" : "degraded",
-      health,
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(3000),
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const isTimeout =
-      message.includes("timed out") ||
-      message.includes("TIMEOUT") ||
-      message.includes("aborted");
-    return NextResponse.json({
-      status: "offline",
-      health: {
-        ok: false,
-        error: isTimeout
-          ? "Gateway health check timed out"
-          : "Gateway is not running",
-      },
-    });
+    return { ok: res.ok, port, url };
+  } catch {
+    return { ok: false, port, url };
   }
 }
 
 /**
- * POST /api/gateway - Restart/stop the gateway.
- * Body: { action: "restart" | "stop" }
+ * GET /api/gateway - Returns gateway health status.
  *
- * For restart: sends SIGTERM to the gateway process, then the macOS app
- * or daemon manager automatically restarts it.
+ * Strategy:
+ *   1. Quick HTTP probe to the gateway (< 3s) for liveness.
+ *   2. If alive, run `openclaw health --json` via direct CLI spawn
+ *      (not through auto-transport which re-routes through the gateway).
+ *   3. Return online/offline based on the probe; include full health
+ *      data when the CLI completes in time.
  */
+export async function GET() {
+  // Fast liveness check first
+  const probe = await probeGatewayHttp();
+
+  if (!probe.ok) {
+    return NextResponse.json({
+      status: "offline",
+      health: { ok: false, error: "Gateway HTTP endpoint not reachable" },
+    });
+  }
+
+  // Gateway is alive — ensure OpenResponses endpoint is enabled for streaming chat
+  ensureResponsesEndpoint();
+
+  // Try to get full health data via CLI (directly,
+  // bypassing auto-transport to avoid the recursive exec-through-gateway issue).
+  try {
+    const bin = await getOpenClawBin();
+    const { stdout } = await exec(bin, ["health", "--json"], {
+      timeout: 25000,
+      env: { ...process.env, NO_COLOR: "1" },
+    });
+    // Parse JSON from stdout (may have non-JSON prefix lines from plugin loading)
+    const jsonStart = stdout.indexOf("{");
+    if (jsonStart >= 0) {
+      const health = JSON.parse(stdout.slice(jsonStart));
+      return NextResponse.json({
+        status: health.ok ? "online" : "degraded",
+        health,
+      });
+    }
+  } catch {
+    // CLI timed out or failed — but gateway IS reachable via HTTP
+  }
+
+  // Gateway is reachable but full health data unavailable — report online
+  return NextResponse.json({
+    status: "online",
+    health: { ok: true, port: probe.port, note: "Lite probe (full health unavailable)" },
+  });
+}
 export async function POST(req: Request) {
   try {
     const body = await req.json();
