@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Baskervville, Figtree, Geist_Mono } from "next/font/google";
+import { Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 import { Header, AgentChatPanel } from "@/components/header";
@@ -11,15 +11,9 @@ import { SetupGate } from "@/components/setup-gate";
 import { UsageAlertMonitor } from "@/components/usage-alert-monitor";
 import { OpenClawUpdateBanner } from "@/components/openclaw-update-banner";
 
-const figtree = Figtree({
-  variable: "--font-figtree",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
-});
-
-const baskervville = Baskervville({
-  variable: "--font-baskervville",
-  subsets: ["latin"],
-  weight: "400",
 });
 
 const geistMono = Geist_Mono({
@@ -103,17 +97,17 @@ export default function RootLayout({
         <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
       </head>
       <body
-        className={`${figtree.variable} ${baskervville.variable} ${geistMono.variable} antialiased`}
+        className={`${inter.variable} ${geistMono.variable} antialiased`}
       >
         <ThemeProvider>
           <SetupGate>
             <KeyboardShortcuts />
-            <div className="flex h-screen overflow-hidden">
+            <div className="flex h-screen overflow-hidden bg-stone-50 text-stone-900 dark:bg-[#101214] dark:text-stone-100">
               <Sidebar />
               <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                 <Header />
                 <RestartAnnouncementBar />
-                <main className="flex flex-1 overflow-hidden">
+                <main className="flex flex-1 overflow-hidden bg-stone-50 dark:bg-[#101214]">
                   {children}
                 </main>
               </div>

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runCliJson, runCli, gatewayCall } from "@/lib/openclaw";
+import { runCliJson } from "@/lib/openclaw";
+import { patchConfig, fetchConfig } from "@/lib/gateway-config";
 
 export const dynamic = "force-dynamic";
 
@@ -90,13 +91,8 @@ export async function GET(request: NextRequest) {
     // Also fetch the hooks.internal config to know if the system is enabled
     let hooksInternalEnabled = false;
     try {
-      const configData = await gatewayCall<Record<string, unknown>>(
-        "config.get",
-        undefined,
-        8000,
-      );
-      const parsed = (configData.parsed || {}) as Record<string, unknown>;
-      const hooks = (parsed.hooks || {}) as Record<string, unknown>;
+      const configData = await fetchConfig(8000);
+      const hooks = (configData.parsed.hooks || {}) as Record<string, unknown>;
       const internal = (hooks.internal || {}) as Record<string, unknown>;
       hooksInternalEnabled = internal.enabled === true;
     } catch {
@@ -138,15 +134,7 @@ export async function POST(request: NextRequest) {
         const enabling = action === "enable-hook";
 
         try {
-          // Use config.patch via gateway to update hooks.internal.entries.<name>.enabled
-          const configData = await gatewayCall<Record<string, unknown>>(
-            "config.get",
-            undefined,
-            8000,
-          );
-          const hash = configData.hash as string;
-
-          const patch = {
+          await patchConfig({
             hooks: {
               internal: {
                 entries: {
@@ -154,26 +142,10 @@ export async function POST(request: NextRequest) {
                 },
               },
             },
-          };
-
-          await gatewayCall(
-            "config.patch",
-            {
-              raw: JSON.stringify(patch),
-              baseHash: hash,
-              restartDelayMs: 2000,
-            },
-            10000,
-          );
+          }, { restartDelayMs: 2000 });
           return NextResponse.json({ ok: true, action, name });
-        } catch {
-          // Fallback: try CLI command
-          try {
-            await runCli(["hooks", enabling ? "enable" : "disable", name], 10000);
-            return NextResponse.json({ ok: true, action, name, viaCli: true });
-          } catch (cliErr) {
-            return NextResponse.json({ error: String(cliErr) }, { status: 500 });
-          }
+        } catch (err) {
+          return NextResponse.json({ error: String(err) }, { status: 500 });
         }
       }
 
@@ -185,36 +157,18 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "names required" }, { status: 400 });
 
         try {
-          const configData = await gatewayCall<Record<string, unknown>>(
-            "config.get",
-            undefined,
-            8000,
-          );
-          const hash = configData.hash as string;
-
           const entries: Record<string, { enabled: boolean }> = {};
           for (const name of names) {
             entries[name] = { enabled: true };
           }
-
-          const patch = {
+          await patchConfig({
             hooks: {
               internal: {
                 enabled: true,
                 entries,
               },
             },
-          };
-
-          await gatewayCall(
-            "config.patch",
-            {
-              raw: JSON.stringify(patch),
-              baseHash: hash,
-              restartDelayMs: 2000,
-            },
-            10000,
-          );
+          }, { restartDelayMs: 2000 });
           return NextResponse.json({ ok: true, action, count: names.length });
         } catch (err) {
           return NextResponse.json({ error: String(err) }, { status: 500 });
@@ -226,30 +180,13 @@ export async function POST(request: NextRequest) {
         const enabled = body.enabled as boolean;
 
         try {
-          const configData = await gatewayCall<Record<string, unknown>>(
-            "config.get",
-            undefined,
-            8000,
-          );
-          const hash = configData.hash as string;
-
-          const patch = {
+          await patchConfig({
             hooks: {
               internal: {
                 enabled,
               },
             },
-          };
-
-          await gatewayCall(
-            "config.patch",
-            {
-              raw: JSON.stringify(patch),
-              baseHash: hash,
-              restartDelayMs: 2000,
-            },
-            10000,
-          );
+          }, { restartDelayMs: 2000 });
           return NextResponse.json({ ok: true, action, enabled });
         } catch (err) {
           return NextResponse.json({ error: String(err) }, { status: 500 });
@@ -264,14 +201,7 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: "name and env required" }, { status: 400 });
 
         try {
-          const configData = await gatewayCall<Record<string, unknown>>(
-            "config.get",
-            undefined,
-            8000,
-          );
-          const hash = configData.hash as string;
-
-          const patch = {
+          await patchConfig({
             hooks: {
               internal: {
                 entries: {
@@ -279,17 +209,7 @@ export async function POST(request: NextRequest) {
                 },
               },
             },
-          };
-
-          await gatewayCall(
-            "config.patch",
-            {
-              raw: JSON.stringify(patch),
-              baseHash: hash,
-              restartDelayMs: 2000,
-            },
-            10000,
-          );
+          }, { restartDelayMs: 2000 });
           return NextResponse.json({ ok: true, action, name });
         } catch (err) {
           return NextResponse.json({ error: String(err) }, { status: 500 });

@@ -7,6 +7,7 @@ type Snapshot = {
   status: GatewayStatus;
   health: GatewayHealth;
   restarting: boolean;
+  latencyMs: number | null;
 };
 
 const RESTART_EVENT = "gateway-restarting";
@@ -15,20 +16,32 @@ let snapshot: Snapshot = {
   status: "loading",
   health: null,
   restarting: false,
+  latencyMs: null,
 };
 
 const SERVER_SNAPSHOT: Snapshot = {
   status: "loading",
   health: null,
   restarting: false,
+  latencyMs: null,
 };
+
+const VALID_STATUSES = new Set<GatewayStatus>(["online", "degraded", "offline", "loading"]);
+
+function toGatewayStatus(value: unknown): GatewayStatus {
+  if (typeof value === "string" && VALID_STATUSES.has(value as GatewayStatus)) {
+    return value as GatewayStatus;
+  }
+  return "offline";
+}
 
 const listeners = new Set<() => void>();
 let subscribers = 0;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let fastPollCount = 0;
-let inFlight = false;
+let liteInFlight = false;
+let fullInFlight = false;
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -39,27 +52,57 @@ function setSnapshot(next: Partial<Snapshot>) {
   emit();
 }
 
-async function poll() {
-  if (inFlight || typeof window === "undefined") return;
-  inFlight = true;
+/** Lightweight poll via /api/status — 3s max, used for normal ticks. */
+async function pollLite() {
+  if (liteInFlight || typeof window === "undefined") return;
+  liteInFlight = true;
   try {
-    // Abort if the API doesn't respond within 15s — prevents the poll
-    // from hanging when the server-side CLI timeout is long (30s).
+    const res = await fetch("/api/status", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) {
+      setSnapshot({ status: "offline", health: null, latencyMs: null });
+      switchToOfflinePolling();
+      return;
+    }
+    const data = await res.json();
+    const nextStatus = toGatewayStatus(data.gateway);
+    setSnapshot({
+      status: nextStatus,
+      latencyMs: typeof data.latencyMs === "number" ? data.latencyMs : null,
+    });
+    if (nextStatus === "offline" || nextStatus === "degraded") {
+      switchToOfflinePolling();
+    }
+  } catch {
+    setSnapshot({ status: "offline", health: null, latencyMs: null });
+    switchToOfflinePolling();
+  } finally {
+    liteInFlight = false;
+  }
+}
+
+/** Full poll via /api/gateway — used for fast/recovery ticks and initial load. */
+async function poll() {
+  if (fullInFlight || typeof window === "undefined") return;
+  fullInFlight = true;
+  try {
     const res = await fetch("/api/gateway", {
       cache: "no-store",
       signal: AbortSignal.timeout(15000),
     });
     if (!res.ok) {
-      // Proxy 502, 503, etc. — treat as offline without trying to parse HTML.
-      setSnapshot({ status: "offline", health: null });
+      setSnapshot({ status: "offline", health: null, latencyMs: null });
       switchToOfflinePolling();
       return;
     }
     const data = await res.json();
-    const nextStatus = ((data.status as GatewayStatus) || "offline");
+    const nextStatus = toGatewayStatus(data.status);
     setSnapshot({
       status: nextStatus,
       health: (data.health as GatewayHealth) || null,
+      latencyMs: null,
     });
 
     if (fastPollCount > 0 && nextStatus === "online") {
@@ -69,14 +112,13 @@ async function poll() {
     } else if (nextStatus === "offline" || nextStatus === "degraded") {
       switchToOfflinePolling();
     } else if (fastPollCount === 0) {
-      // Ensure we're on normal interval when healthy and not in fast mode.
       switchToNormalPolling();
     }
   } catch {
-    setSnapshot({ status: "offline", health: null });
+    setSnapshot({ status: "offline", health: null, latencyMs: null });
     switchToOfflinePolling();
   } finally {
-    inFlight = false;
+    fullInFlight = false;
   }
 }
 
@@ -89,7 +131,7 @@ function clearPollTimer() {
 function switchToNormalPolling() {
   clearPollTimer();
   pollTimer = setInterval(() => {
-    void poll();
+    void pollLite();
   }, 12000);
 }
 
@@ -130,10 +172,12 @@ function handleRestartingSignal() {
   }, 5000);
 }
 
-function start() {
+async function start() {
   if (typeof window === "undefined") return;
   window.addEventListener(RESTART_EVENT, handleRestartingSignal);
-  void poll();
+  // Fast preflight via /api/status (3s max) then full health data (sequenced to avoid race)
+  await pollLite();
+  await poll();
   switchToNormalPolling();
 }
 
@@ -147,7 +191,8 @@ function stop() {
     restartTimer = null;
   }
   fastPollCount = 0;
-  inFlight = false;
+  liteInFlight = false;
+  fullInFlight = false;
 }
 
 export function notifyGatewayRestarting() {

@@ -3,6 +3,7 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import { homedir } from "os";
 import { runCli, gatewayCall } from "@/lib/openclaw";
+import { getGatewayToken, getGatewayUrl } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,29 @@ type ConfigGet = {
   path?: string;
   hash?: string;
   parsed?: Record<string, unknown>;
+};
+
+type ToolInvokeEnvelope<T> = {
+  ok?: boolean;
+  result?: T;
+  error?: {
+    message?: string;
+  };
+};
+
+type WebSearchToolResult = {
+  details?: {
+    query?: string;
+    provider?: string;
+    model?: string;
+    tookMs?: number;
+    content?: string;
+    citations?: string[];
+  };
+  content?: Array<{
+    type?: string;
+    text?: string;
+  }>;
 };
 
 const SAFE_TOKEN_RE = /^[A-Za-z0-9._-]+$/;
@@ -75,6 +99,62 @@ function dig(obj: unknown, ...keys: string[]): unknown {
 function preview(key: string): string {
   if (key.length <= 8) return "••••";
   return `${key.slice(0, 4)}••••${key.slice(-4)}`;
+}
+
+function parseWebSearchResultText(text: string): WebSearchToolResult["details"] | null {
+  try {
+    return JSON.parse(text) as WebSearchToolResult["details"];
+  } catch {
+    return null;
+  }
+}
+
+async function invokeGatewayWebSearch(query: string) {
+  const gwUrl = await getGatewayUrl();
+  const token = getGatewayToken();
+  const response = await fetch(`${gwUrl}/tools/invoke`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      tool: "web_search",
+      args: { query },
+      action: "json",
+    }),
+    signal: AbortSignal.timeout(60000),
+  });
+
+  const body = (await response.json().catch(() => null)) as
+    | ToolInvokeEnvelope<WebSearchToolResult>
+    | null;
+
+  if (!response.ok) {
+    const detail =
+      body?.error?.message ||
+      (body ? JSON.stringify(body) : response.statusText);
+    throw new Error(`Gateway web_search failed (${response.status}): ${detail}`);
+  }
+
+  if (!body?.ok || !body.result) {
+    throw new Error(body?.error?.message || "Gateway web_search returned no result");
+  }
+
+  const details =
+    body.result.details ||
+    parseWebSearchResultText(
+      body.result.content
+        ?.map((item) => (item?.type === "text" ? String(item.text || "") : ""))
+        .filter(Boolean)
+        .join("\n") || "",
+    );
+
+  if (!details) {
+    throw new Error("Gateway web_search returned an unreadable payload");
+  }
+
+  return details;
 }
 
 /**
@@ -304,24 +384,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const startedAt = Date.now();
     const resultCount = Math.min(Math.max(Number(body.resultCount) || 5, 1), 10);
 
-    const message = `Use the web_search tool to search for: ${query} (return up to ${resultCount} results). Show the results with titles, URLs, and brief snippets.`;
-    const startedAt = Date.now();
+    try {
+      const result = await invokeGatewayWebSearch(query);
+      return NextResponse.json({
+        ok: true,
+        query,
+        agentId,
+        resultCount,
+        provider: result.provider || null,
+        model: result.model || null,
+        output: String(result.content || "").trim(),
+        citations: Array.isArray(result.citations) ? result.citations.slice(0, resultCount) : [],
+        durationMs: Date.now() - startedAt,
+        method: "gateway-tool",
+      });
+    } catch (gatewayErr) {
+      const message = `Use the web_search tool to search for: ${query} (return up to ${resultCount} results). Show the results with titles, URLs, and brief snippets.`;
+      const output = await runCli(
+        ["agent", "--agent", agentId, "--message", message],
+        60_000
+      );
 
-    const output = await runCli(
-      ["agent", "--agent", agentId, "--message", message],
-      60_000
-    );
-
-    return NextResponse.json({
-      ok: true,
-      query,
-      agentId,
-      resultCount,
-      output: output.trim(),
-      durationMs: Date.now() - startedAt,
-    });
+      return NextResponse.json({
+        ok: true,
+        query,
+        agentId,
+        resultCount,
+        output: output.trim(),
+        durationMs: Date.now() - startedAt,
+        method: "cli-agent",
+        warning: String(gatewayErr),
+      });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json(

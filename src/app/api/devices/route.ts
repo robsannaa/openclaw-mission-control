@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runCliJson, runCli } from "@/lib/openclaw";
+import { gatewayCall } from "@/lib/openclaw";
 
 type TokenInfo = {
   role: string;
@@ -48,10 +48,7 @@ type DeviceListResult = {
  */
 export async function GET() {
   try {
-    const data = await runCliJson<DeviceListResult>(
-      ["devices", "list"],
-      15000
-    );
+    const data = await gatewayCall<DeviceListResult>("device.pair.list", {}, 15000);
 
     // Sanitize: strip actual token values, keep metadata
     const paired = (data.paired || []).map((d) => ({
@@ -102,11 +99,12 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        const output = await runCli(
-          ["devices", "approve", requestId],
-          15000
+        const result = await gatewayCall<Record<string, unknown>>(
+          "device.pair.approve",
+          { requestId },
+          15000,
         );
-        return NextResponse.json({ ok: true, action, requestId, output: output.trim() });
+        return NextResponse.json({ ok: true, action, requestId, result });
       }
 
       case "reject": {
@@ -117,11 +115,12 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        const output = await runCli(
-          ["devices", "reject", requestId],
-          15000
+        const result = await gatewayCall<Record<string, unknown>>(
+          "device.pair.reject",
+          { requestId },
+          15000,
         );
-        return NextResponse.json({ ok: true, action, requestId, output: output.trim() });
+        return NextResponse.json({ ok: true, action, requestId, result });
       }
 
       case "revoke": {
@@ -133,11 +132,12 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        const output = await runCli(
-          ["devices", "revoke", "--device", deviceId, "--role", role],
-          15000
+        const result = await gatewayCall<Record<string, unknown>>(
+          "device.token.revoke",
+          { deviceId, role },
+          15000,
         );
-        return NextResponse.json({ ok: true, action, deviceId, role, output: output.trim() });
+        return NextResponse.json({ ok: true, action, deviceId, role, result });
       }
 
       default:

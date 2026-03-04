@@ -10,12 +10,14 @@
  */
 
 import { getGatewayUrl } from "../paths";
+import { GatewayRpcClient } from "../gateway-rpc";
 import { parseJsonFromCliOutput, type RunCliResult } from "../openclaw-cli";
 import type { OpenClawClient, TransportMode } from "../openclaw-client";
 
 export class HttpTransport implements OpenClawClient {
   private token: string;
   private gatewayUrlCache: string | null = null;
+  private rpcClient: GatewayRpcClient | null = null;
 
   constructor(gatewayUrl?: string, token?: string) {
     this.token = token || process.env.OPENCLAW_GATEWAY_TOKEN || "";
@@ -45,6 +47,7 @@ export class HttpTransport implements OpenClawClient {
     tool: string,
     args: Record<string, unknown> = {},
     timeout = 15000,
+    action?: "json",
   ): Promise<T> {
     const gwUrl = await this.getGwUrl();
     const controller = new AbortController();
@@ -56,16 +59,33 @@ export class HttpTransport implements OpenClawClient {
           "Content-Type": "application/json",
           ...this.authHeaders(),
         },
-        body: JSON.stringify({ tool, args }),
+        body: JSON.stringify({
+          tool,
+          args,
+          ...(action ? { action } : {}),
+        }),
         signal: controller.signal,
       });
+      const body = (await res.json().catch(() => null)) as
+        | { ok?: boolean; result?: T; error?: { message?: string } }
+        | T
+        | null;
       if (!res.ok) {
-        const text = await res.text().catch(() => "");
+        const text =
+          (body && typeof body === "object" && "error" in body && body.error?.message) ||
+          JSON.stringify(body) ||
+          "";
         throw new Error(
           `Gateway /tools/invoke ${tool} returned ${res.status}: ${text}`,
         );
       }
-      return (await res.json()) as T;
+      if (body && typeof body === "object" && "ok" in body) {
+        if (body.ok === false) {
+          throw new Error(body.error?.message || `Tool ${tool} failed`);
+        }
+        return (body.result as T) ?? ({} as T);
+      }
+      return (body || {}) as T;
     } finally {
       clearTimeout(timer);
     }
@@ -75,16 +95,37 @@ export class HttpTransport implements OpenClawClient {
    * Execute a shell command inside the Gateway via the exec tool.
    * Returns the raw stdout.
    */
+  private resultToText(
+    result:
+      | { output?: string; stdout?: string; result?: string; content?: unknown; details?: unknown; text?: string }
+      | string,
+  ): string {
+    if (typeof result === "string") return result;
+    if (typeof result.output === "string") return result.output;
+    if (typeof result.stdout === "string") return result.stdout;
+    if (typeof result.result === "string") return result.result;
+    if (typeof result.text === "string") return result.text;
+    if (Array.isArray(result.content)) {
+      const text = result.content
+        .map((item) =>
+          item && typeof item === "object" && "text" in item ? String(item.text || "") : "",
+        )
+        .filter(Boolean)
+        .join("\n");
+      if (text) return text;
+    }
+    if (typeof result.details === "string") return result.details;
+    return JSON.stringify(result.details || result);
+  }
+
   private async execCommand(
     command: string,
     timeout = 15000,
   ): Promise<string> {
     const result = await this.invoke<
-      { output?: string; stdout?: string; result?: string } | string
-    >("exec", { command }, timeout);
-    // The exec tool's response shape can vary; handle common forms.
-    if (typeof result === "string") return result;
-    return result.output || result.stdout || result.result || JSON.stringify(result);
+      { output?: string; stdout?: string; result?: string; content?: unknown; details?: unknown } | string
+    >("exec", { command }, timeout, "json");
+    return this.resultToText(result);
   }
 
   // ── OpenClawClient interface ──────────────────────
@@ -103,10 +144,9 @@ export class HttpTransport implements OpenClawClient {
     const command = `openclaw ${args.join(" ")}`;
     if (stdin) {
       const result = await this.invoke<
-        { output?: string; stdout?: string; result?: string } | string
-      >("exec", { command, stdin }, timeout);
-      if (typeof result === "string") return result;
-      return result.output || result.stdout || result.result || JSON.stringify(result);
+        { output?: string; stdout?: string; result?: string; content?: unknown; details?: unknown } | string
+      >("exec", { command, stdin }, timeout, "json");
+      return this.resultToText(result);
     }
     return this.execCommand(command, timeout);
   }
@@ -130,24 +170,19 @@ export class HttpTransport implements OpenClawClient {
     params?: Record<string, unknown>,
     timeout = 15000,
   ): Promise<T> {
-    // For sessions.list, use the dedicated sessions_list tool directly.
-    if (method === "sessions.list") {
-      return this.invoke<T>("sessions_list", params || {}, timeout);
+    if (!this.rpcClient) {
+      this.rpcClient = new GatewayRpcClient(this.gatewayUrlCache || undefined, this.token);
     }
-    // For other RPC methods, delegate to the exec tool running the CLI.
-    const command = params
-      ? `openclaw gateway call ${method} --json --params '${JSON.stringify(params).replace(/'/g, "'\\''")}'`
-      : `openclaw gateway call ${method} --json`;
-    const raw = await this.execCommand(command, timeout + 5000);
-    return parseJsonFromCliOutput<T>(raw, `gateway call ${method}`);
+    return this.rpcClient.request<T>(method, params || {}, timeout);
   }
 
   async readFile(path: string): Promise<string> {
     const result = await this.invoke<
-      { content?: string; output?: string } | string
+      { content?: string; output?: string; details?: unknown; text?: string } | string
     >("read", { path });
     if (typeof result === "string") return result;
-    return result.content || result.output || "";
+    if (typeof result.content === "string") return result.content;
+    return this.resultToText(result);
   }
 
   async writeFile(path: string, content: string): Promise<void> {

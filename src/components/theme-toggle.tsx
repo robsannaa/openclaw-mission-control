@@ -61,8 +61,8 @@ export function ThemeToggle() {
         className={cn(
           "flex h-8 w-8 items-center justify-center rounded-lg border transition-colors",
           open
-            ? "border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300"
-            : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground"
+            ? "border-stone-300 bg-stone-100 text-stone-900 dark:border-[#2c343d] dark:bg-[#171a1d] dark:text-[#f5f7fa]"
+            : "border-stone-200 bg-white text-stone-500 hover:bg-stone-100 hover:text-stone-700 dark:border-[#2c343d] dark:bg-[#171a1d] dark:text-[#a8b0ba] dark:hover:bg-[#20252a] dark:hover:text-[#f5f7fa]"
         )}
         aria-label={`Theme: ${currentTheme.label}`}
         title={`Theme: ${currentTheme.label}`}
@@ -71,7 +71,7 @@ export function ThemeToggle() {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-36 overflow-hidden rounded-xl border border-border bg-popover py-1 shadow-2xl backdrop-blur-sm">
+        <div className="absolute right-0 top-full z-50 mt-2 w-40 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 shadow-xl dark:border-[#2c343d] dark:bg-[#171a1d]">
           {THEMES.map((t) => {
             const Icon = t.icon;
             const isActive = theme === t.value;
@@ -86,14 +86,14 @@ export function ThemeToggle() {
                 className={cn(
                   "flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm transition-colors",
                   isActive
-                    ? "bg-violet-500/10 text-violet-600 dark:text-violet-300"
-                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                    ? "bg-stone-100 text-stone-900 dark:bg-[#20252a] dark:text-[#f5f7fa]"
+                    : "text-stone-500 hover:bg-stone-100 hover:text-stone-900 dark:text-[#a8b0ba] dark:hover:bg-[#20252a] dark:hover:text-[#f5f7fa]"
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
                 <span className="font-medium">{t.label}</span>
                 {isActive && (
-                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-violet-400" />
+                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 )}
               </button>
             );

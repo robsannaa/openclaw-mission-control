@@ -1634,7 +1634,11 @@ export function MemoryGraphView() {
   }, [collapsed.nodeById, inspectorCollapsed, layer]);
 
   if (loading || !graph) {
-    return <LoadingState label="Building memory graph..." className="min-h-0" />;
+    return (
+      <div className="flex flex-1 flex-col">
+        <LoadingState label="Building memory graph..." />
+      </div>
+    );
   }
 
   return (

@@ -56,6 +56,11 @@ type Agent = {
   lastActive: number | null;
 };
 
+type ChatBootstrapResponse = {
+  agents?: Agent[];
+  models?: Array<{ key?: string; name?: string }>;
+};
+
 /* ── Agent display helpers ──────────────────────── */
 
 /** Show a friendly display name: use agent name, but if it's just the raw ID, show model instead */
@@ -176,7 +181,7 @@ const chatMarkdownComponents: React.ComponentProps<
     }
     return (
       <code
-        className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs text-violet-300"
+        className="rounded bg-stone-100 px-1.5 py-0.5 font-mono text-xs text-stone-700 dark:bg-stone-800 dark:text-stone-200"
         {...props}
       >
         {children}
@@ -193,7 +198,7 @@ const chatMarkdownComponents: React.ComponentProps<
   ),
   blockquote: ({ children, ...props }) => (
     <blockquote
-      className="my-2 border-l-2 border-violet-500/40 pl-3 text-xs italic opacity-90"
+      className="my-2 border-l-2 border-emerald-300 pl-3 text-xs italic opacity-90 dark:border-emerald-500/40"
       {...props}
     >
       {children}
@@ -204,7 +209,7 @@ const chatMarkdownComponents: React.ComponentProps<
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-violet-400 underline decoration-violet-500/30 hover:text-violet-300"
+      className="text-emerald-700 underline decoration-emerald-300/70 hover:text-emerald-600 dark:text-emerald-300 dark:decoration-emerald-500/40 dark:hover:text-emerald-200"
       {...props}
     >
       {children}
@@ -917,7 +922,7 @@ function ChatPanel({
                       className={cn(
                         "mt-2 text-xs",
                         isUser
-                          ? "text-right text-violet-400/40"
+                          ? "text-right text-stone-400 dark:text-stone-500"
                           : "text-muted-foreground/60"
                       )}
                     >
@@ -1298,18 +1303,27 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
     new Set(["main"])
   );
 
-  // Fetch agents on mount (auto-discovery)
-  const agentsLoadedRef = useRef(false);
-  const fetchAgents = useCallback(() => {
+  // Fetch chat bootstrap data on mount (gateway config + sessions only)
+  const bootstrapLoadedRef = useRef(false);
+  const fetchBootstrap = useCallback(() => {
     // Only show loading spinner on initial fetch, not on background polls.
     // Setting loading on every poll clears the agent dropdown momentarily.
-    if (!agentsLoadedRef.current) setAgentsLoading(true);
-    fetch("/api/agents")
+    if (!bootstrapLoadedRef.current) setAgentsLoading(true);
+    fetch("/api/chat/bootstrap", { cache: "no-store" })
       .then((r) => r.json())
-      .then((data) => {
+      .then((data: ChatBootstrapResponse) => {
         const agentList = data.agents || [];
+        const modelList = Array.isArray(data.models) ? data.models : [];
         setAgents(agentList);
-        if (agentList.length > 0) agentsLoadedRef.current = true;
+        setAvailableModels(
+          modelList
+            .map((m) => ({
+              key: String(m.key ?? ""),
+              name: String(m.name ?? m.key ?? ""),
+            }))
+            .filter((m) => m.key)
+        );
+        bootstrapLoadedRef.current = true;
         if (
           agentList.length > 0 &&
           !agentList.find((a: Agent) => a.id === selectedAgent)
@@ -1321,9 +1335,13 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
             return next;
           });
         }
+        setModelsLoaded(true);
         setAgentsLoading(false);
       })
-      .catch(() => setAgentsLoading(false));
+      .catch(() => {
+        setModelsLoaded(true);
+        setAgentsLoading(false);
+      });
   }, [selectedAgent]);
 
   useEffect(() => {
@@ -1340,44 +1358,16 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   // Fetch agents: fast-poll (2s) during warm-up, normal (30s) otherwise
   useEffect(() => {
     queueMicrotask(() => {
-      if (isVisible) void fetchAgents();
+      if (isVisible) void fetchBootstrap();
     });
     const ms = warmingUp ? 2000 : 30000;
     const interval = setInterval(() => {
       if (isVisible && document.visibilityState === "visible") {
-        void fetchAgents();
+        void fetchBootstrap();
       }
     }, ms);
     return () => clearInterval(interval);
-  }, [fetchAgents, isVisible, warmingUp]);
-
-  const fetchModels = useCallback(() => {
-    fetch("/api/models?scope=configured", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((data) => {
-        const list = Array.isArray(data.models) ? data.models : [];
-        setAvailableModels(
-          list
-            .map((m: { key?: string; name?: string }) => ({
-              key: String(m.key ?? ""),
-              name: String(m.name ?? m.key ?? ""),
-            }))
-            .filter((m: { key: string }) => m.key)
-        );
-      })
-      .catch(() => { })
-      .finally(() => setModelsLoaded(true));
-  }, []);
-
-  // Fetch models on mount AND whenever the chat view becomes visible again
-  // (user may have added a provider key on /models in the meantime)
-  useEffect(() => {
-    fetchModels();
-  }, [fetchModels]);
-
-  useEffect(() => {
-    if (isVisible) fetchModels();
-  }, [isVisible, fetchModels]);
+  }, [fetchBootstrap, isVisible, warmingUp]);
 
   useEffect(() => {
     if (!isVisible) return;
@@ -1432,7 +1422,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       {/* ── Top bar: agent selector ─────────────── */}
-      <div className="shrink-0 border-b border-foreground/10 bg-card/60 px-4 md:px-6 py-3">
+      <div className="shrink-0 border-b border-stone-200 bg-stone-50 px-4 py-4 md:px-6 dark:border-stone-700 dark:bg-stone-900">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex min-w-0 flex-wrap items-center gap-3">
             {/* Agent dropdown */}
@@ -1441,21 +1431,21 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                 type="button"
                 onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
                 className={cn(
-                  "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-xs transition-colors",
-                  "border-foreground/10 bg-card hover:bg-muted"
+                  "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                  "border-stone-200 bg-white text-stone-700 hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
                 )}
               >
                 <span className="text-xs">
                   {currentAgent?.emoji || "🤖"}
                 </span>
-                <span className="font-medium text-foreground/90">
+                <span className="font-medium">
                   {currentAgent ? agentDisplayName(currentAgent) : selectedAgent}
                 </span>
-                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                <ChevronDown className="h-3.5 w-3.5 text-stone-400 dark:text-stone-500" />
               </button>
 
               {agentDropdownOpen && (
-                <div className="absolute left-0 top-full z-50 mt-1 min-w-60 overflow-hidden rounded-lg border border-foreground/10 bg-card/95 py-1 shadow-xl backdrop-blur-sm">
+                <div className="absolute left-0 top-full z-50 mt-1 min-w-60 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 shadow-xl dark:border-stone-700 dark:bg-stone-800">
                   {agentsLoading ? (
                     <div className="px-3 py-2 text-xs text-muted-foreground">
                       {warmingUp ? "Starting up..." : "Loading agents..."}
@@ -1473,8 +1463,8 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                         className={cn(
                           "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
                           agent.id === selectedAgent
-                            ? "bg-violet-500/10 text-violet-300"
-                            : "text-foreground/70 hover:bg-muted hover:text-foreground"
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                            : "text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
                         )}
                       >
                         <span className="text-xs">
@@ -1498,7 +1488,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                           </span>
                         </div>
                         {agent.id === selectedAgent && (
-                          <span className="text-xs text-violet-400">
+                          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
                             active
                           </span>
                         )}
@@ -1511,16 +1501,16 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
 
             {/* Model badge */}
             {currentAgent && (
-              <div className="flex items-center gap-1.5 rounded-md border border-foreground/10 bg-muted/60 px-2 py-1">
-                <Cpu className="h-3 w-3 text-muted-foreground" />
-                <span className="text-xs text-muted-foreground">
+              <div className="flex items-center gap-1.5 rounded-full border border-stone-200 bg-white px-2.5 py-1 dark:border-stone-700 dark:bg-stone-800">
+                <Cpu className="h-3 w-3 text-stone-400 dark:text-stone-500" />
+                <span className="text-xs text-stone-500 dark:text-stone-300">
                   Agent setup: {formatModel(currentAgent.model)}
                 </span>
               </div>
             )}
           </div>
 
-          <div className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground/60">
+          <div className="flex shrink-0 items-center gap-1 text-xs text-stone-400 dark:text-stone-500">
             <span>
               {agents.length} agent{agents.length !== 1 ? "s" : ""}
             </span>
@@ -1567,7 +1557,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
             </div>
             <button
               type="button"
-              onClick={fetchAgents}
+              onClick={fetchBootstrap}
               className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-muted/60 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
             >
               <RefreshCw className="h-3 w-3" />
@@ -1592,7 +1582,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={fetchAgents}
+                onClick={fetchBootstrap}
                 className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-muted/60 px-3 py-2 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
               >
                 <RefreshCw className="h-3 w-3" />
@@ -1622,7 +1612,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
               isVisible={isVisible}
               availableModels={availableModels}
               modelsLoaded={modelsLoaded}
-              onKeySaved={fetchModels}
+              onKeySaved={fetchBootstrap}
               isPostOnboarding={isPostOnboarding}
               onClearPostOnboarding={clearPostOnboarding}
             />

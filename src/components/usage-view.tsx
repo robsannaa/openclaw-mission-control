@@ -488,7 +488,13 @@ function MetricTile({
   variant?: "subtle" | "surface";
 }) {
   return (
-    <div className={cn(variant === "surface" ? "glass" : "glass-subtle", "rounded-lg px-4 py-3.5")}>
+    <div
+      className={cn(
+        variant === "surface"
+          ? "rounded-xl border border-stone-200 bg-white px-4 py-3.5 shadow-sm dark:border-[#2c343d] dark:bg-[#171a1d]"
+          : "rounded-xl border border-stone-200 bg-stone-50 px-4 py-3.5 dark:border-[#2c343d] dark:bg-[#15191d]",
+      )}
+    >
       <p className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground/60">{label}</p>
       <p className="mt-1.5 text-xl font-semibold leading-none tabular-nums text-foreground">{value}</p>
       {sub && <p className="mt-1.5 text-xs text-muted-foreground/60">{sub}</p>}
@@ -508,7 +514,7 @@ function Panel({
   children: React.ReactNode;
 }) {
   return (
-    <section className="glass rounded-lg p-4 md:p-5">
+    <section className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-[#2c343d] dark:bg-[#171a1d] md:p-5">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <div>
           <h2 className="text-xs font-sans font-semibold text-foreground/90">{title}</h2>
@@ -837,7 +843,11 @@ export function UsageView() {
   }, [orBilling, orModelBreakdown]);
 
   if (loading) {
-    return <LoadingState label="Loading usage data..." size="lg" className="h-full" />;
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading usage data..." size="lg" />
+      </SectionLayout>
+    );
   }
 
   if (error || !data) {
@@ -846,11 +856,11 @@ export function UsageView() {
     return (
       <SectionLayout>
         <SectionHeader
-          title={<span className="font-serif font-bold text-base">Usage</span>}
+          title="Usage"
           description="Cost estimation, token economics, cache metrics, and agent throughput."
         />
         <SectionBody width="narrow" padding="roomy" innerClassName="space-y-4">
-          <section className="glass rounded-2xl border border-red-500/25 bg-red-500/5 p-5 md:p-6">
+          <section className="rounded-2xl border border-red-200 bg-white p-5 shadow-sm md:p-6 dark:border-red-500/20 dark:bg-[#171a1d]">
             <div className="flex items-start gap-3">
               <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-red-700 dark:text-red-200">
                 <AlertTriangle className="h-4 w-4" />
@@ -864,7 +874,7 @@ export function UsageView() {
               </div>
             </div>
 
-            <div className="mt-4 rounded-xl border border-foreground/10 bg-background/50 p-3">
+            <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-[#2c343d] dark:bg-[#15191d]">
               <p className="text-xs font-medium text-foreground/90">What you can try now</p>
               <ul className="mt-1.5 list-disc space-y-1 pl-4 text-xs text-muted-foreground/80">
                 <li>Retry once after a few seconds.</li>
@@ -898,7 +908,7 @@ export function UsageView() {
               This opens Gmail with the exact runtime error and context prefilled.
             </p>
 
-            <details className="mt-3 rounded-xl border border-foreground/10 bg-background/40 p-3">
+            <details className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-[#2c343d] dark:bg-[#15191d]">
               <summary className="cursor-pointer text-xs font-medium text-foreground/85">
                 Technical Error Details
               </summary>
@@ -933,7 +943,7 @@ export function UsageView() {
   return (
     <SectionLayout>
       <SectionHeader
-        title={<span className="font-serif font-bold text-base">Usage</span>}
+        title="Usage"
         description="Cost estimation, token economics, cache metrics, and agent throughput."
         actions={
           <div className="flex items-center gap-2">
@@ -1128,7 +1138,7 @@ export function UsageView() {
                   href={selectedProviderCapability.docsUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-1 inline-block text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
+                  className="mt-1 inline-block text-xs font-medium text-emerald-700 hover:underline dark:text-emerald-300"
                 >
                   Provider docs
                 </a>
@@ -1286,7 +1296,10 @@ export function UsageView() {
           <Panel title="Provider Billing" subtitle="Loading OpenRouter billing data...">
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {[1, 2, 3, 4].map((i) => (
-                <div key={i} className="glass-subtle animate-pulse rounded-lg px-4 py-3.5">
+                <div
+                  key={i}
+                  className="animate-pulse rounded-xl border border-stone-200 bg-stone-50 px-4 py-3.5 dark:border-[#2c343d] dark:bg-[#15191d]"
+                >
                   <div className="h-2.5 w-20 rounded bg-foreground/10" />
                   <div className="mt-3 h-5 w-16 rounded bg-foreground/10" />
                   <div className="mt-2 h-2 w-24 rounded bg-foreground/10" />
@@ -1443,7 +1456,10 @@ export function UsageView() {
                       const pct = orThirtyDaySpend > 0 ? Math.round((m.usage / orThirtyDaySpend) * 100) : 0;
                       const totalTokens = m.prompt_tokens + m.completion_tokens + m.reasoning_tokens;
                       return (
-                        <div key={m.model} className="glass-subtle rounded-lg px-3 py-2.5">
+                        <div
+                          key={m.model}
+                          className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 dark:border-[#2c343d] dark:bg-[#15191d]"
+                        >
                           <div className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
                               <p className="truncate text-xs font-semibold text-foreground/90">{shortModel(m.model)}</p>
@@ -1490,7 +1506,7 @@ export function UsageView() {
                       href="https://openrouter.ai/settings/keys"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="font-medium text-blue-700 hover:underline dark:text-blue-300"
+                      className="font-medium text-emerald-700 hover:underline dark:text-emerald-300"
                     >
                       openrouter.ai/settings/keys
                     </a>{" "}
@@ -1820,7 +1836,10 @@ export function UsageView() {
                   const pressure = m.contextTokens > 0 ? Math.round((m.totalTokens / Math.max(1, m.sessions)) / m.contextTokens * 100) : 0;
                   const pct = totals.totalTokens > 0 ? Math.round((m.totalTokens / totals.totalTokens) * 100) : 0;
                   return (
-                    <div key={m.model} className="glass-subtle rounded-lg px-3 py-2.5">
+                    <div
+                      key={m.model}
+                      className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 dark:border-[#2c343d] dark:bg-[#15191d]"
+                    >
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="truncate text-xs font-semibold text-foreground/90">{shortModel(m.model)}</p>
@@ -1871,12 +1890,12 @@ export function UsageView() {
             <Panel title="Model Routing" subtitle="Primary, fallbacks, and auth">
               {modelConfig ? (
                 <div className="space-y-2.5 text-xs">
-                  <div className="glass-subtle rounded-lg p-3">
+                  <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-[#2c343d] dark:bg-[#15191d]">
                     <p className="text-[10px] uppercase tracking-widest text-muted-foreground/60">Primary</p>
                     <p className="mt-1 font-semibold text-foreground/90">{shortModel(modelConfig.primary)}</p>
                   </div>
                   {modelConfig.fallbacks.length > 0 && (
-                    <div className="glass-subtle rounded-lg p-3">
+                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-[#2c343d] dark:bg-[#15191d]">
                       <p className="text-[10px] uppercase tracking-widest text-muted-foreground/60">Fallback Chain</p>
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         {modelConfig.fallbacks.map((f, i) => (
@@ -1888,7 +1907,7 @@ export function UsageView() {
                     </div>
                   )}
                   {modelConfig.authProviders.length > 0 && (
-                    <div className="glass-subtle rounded-lg p-3">
+                    <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 dark:border-[#2c343d] dark:bg-[#15191d]">
                       <p className="text-[10px] uppercase tracking-widest text-muted-foreground/60">Auth Providers</p>
                       <div className="mt-1.5 space-y-1.5">
                         {modelConfig.authProviders.map((ap) => (
@@ -1909,7 +1928,10 @@ export function UsageView() {
             <Panel title="Session Storage" subtitle="JSONL footprint by agent">
               <div className="space-y-2 text-xs">
                 {sessionFileSizes.map((s) => (
-                  <div key={s.agentId} className="flex items-center justify-between glass-subtle rounded-lg px-3 py-2">
+                  <div
+                    key={s.agentId}
+                    className="flex items-center justify-between rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 dark:border-[#2c343d] dark:bg-[#15191d]"
+                  >
                     <div>
                       <p className="font-semibold text-foreground/90">{s.agentId}</p>
                       <p className="text-xs text-muted-foreground/60">{s.fileCount} file{s.fileCount !== 1 ? "s" : ""}</p>
@@ -1929,13 +1951,16 @@ export function UsageView() {
               const p = s.contextTokens > 0 ? Math.round((s.totalTokens / s.contextTokens) * 100) : 0;
               const hasCache = s.cacheReadTokens > 0 || s.cacheWriteTokens > 0;
               return (
-                <div key={`${s.sessionId}-${i}`} className="glass-subtle rounded-lg px-3 py-2.5">
+                <div
+                  key={`${s.sessionId}-${i}`}
+                  className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 dark:border-[#2c343d] dark:bg-[#15191d]"
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
                         <p className="truncate text-xs font-semibold text-foreground/90">{s.agentId} · {shortModel(s.model)}</p>
                         {s.thinkingLevel && (
-                          <span className="shrink-0 rounded-md border border-violet-500/20 bg-violet-500/10 px-1.5 py-0.5 text-[10px] font-medium text-violet-700 dark:text-violet-300">
+                          <span className="shrink-0 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
                             think:{s.thinkingLevel}
                           </span>
                         )}

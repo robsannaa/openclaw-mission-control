@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
 import { runCliJson, runCliCaptureBoth } from "@/lib/openclaw";
+import { buildModelsSummary } from "@/lib/models-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -305,11 +306,10 @@ export async function POST(request: NextRequest) {
 
     if (action === "check-models") {
       try {
-        const data = await runCliJson<unknown>(["models", "status"], 15000);
-        return NextResponse.json({ ok: true, action, models: data });
-      } catch {
-        const { stdout, stderr } = await runCliCaptureBoth(["models", "status"], 15000);
-        return NextResponse.json({ ok: true, action, output: stdout || stderr });
+        const summary = await buildModelsSummary();
+        return NextResponse.json({ ok: true, action, models: summary.status });
+      } catch (err) {
+        return NextResponse.json({ ok: true, action, output: String(err) });
       }
     }
 

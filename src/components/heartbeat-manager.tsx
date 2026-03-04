@@ -1081,7 +1081,11 @@ export function HeartbeatManager() {
   }, [data]);
 
   if (loading) {
-    return <LoadingState label="Loading heartbeat configuration..." />;
+    return (
+      <div className="flex flex-1 flex-col">
+        <LoadingState label="Loading heartbeat configuration..." />
+      </div>
+    );
   }
 
   if (!data) {

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { runCliJson, runCli, gatewayCall } from "@/lib/openclaw";
+import { runCli, gatewayCall } from "@/lib/openclaw";
+import { fetchConfig, patchConfig } from "@/lib/gateway-config";
 import { getOpenClawHome } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
@@ -73,27 +74,23 @@ function deriveAccountStatus(row: Record<string, unknown>): string {
 
 async function listPlugins(): Promise<PluginListItem[]> {
   try {
-    const raw = await runCliJson<Record<string, unknown>>(
-      ["plugins", "list"],
-      15000
-    );
-    const pluginsRaw = Array.isArray(raw.plugins) ? raw.plugins : [];
-    return pluginsRaw
-      .filter(isRecord)
-      .map((plugin) => ({
-        id: String(plugin.id || ""),
-        enabled: Boolean(plugin.enabled),
-        status: typeof plugin.status === "string" ? plugin.status : undefined,
-        error:
-          typeof plugin.error === "string"
-            ? plugin.error
-            : plugin.error == null
-              ? null
-              : String(plugin.error),
-        channelIds: Array.isArray(plugin.channelIds)
-          ? plugin.channelIds.map((id) => String(id))
-          : [],
-      }))
+    const configData = await fetchConfig(15000);
+    const resolved = configData.resolved;
+    const plugins = (resolved as Record<string, unknown>).plugins;
+    if (!plugins || !isRecord(plugins)) return [];
+    const entries = isRecord(plugins.entries) ? plugins.entries : {};
+    return Object.entries(entries)
+      .filter(([, v]) => isRecord(v))
+      .map(([id, v]) => {
+        const entry = v as Record<string, unknown>;
+        return {
+          id,
+          enabled: Boolean(entry.enabled),
+          status: typeof entry.status === "string" ? entry.status : undefined,
+          error: typeof entry.error === "string" ? entry.error : entry.error == null ? null : String(entry.error),
+          channelIds: Array.isArray(entry.channelIds) ? entry.channelIds.map((cid) => String(cid)) : [],
+        };
+      })
       .filter((plugin) => plugin.id.length > 0);
   } catch {
     return [];
@@ -139,7 +136,7 @@ async function ensureChannelPluginReady(channel: string): Promise<{
     return { autoEnabled: false };
   }
 
-  await runCli(["plugins", "enable", plugin.id], 20000);
+  await patchConfig({ plugins: { entries: { [plugin.id]: { enabled: true } } } });
   return {
     autoEnabled: true,
     note: `Enabled plugin "${plugin.id}" automatically. Restart the gateway to activate the channel runtime.`,
@@ -330,10 +327,10 @@ export async function GET(request: NextRequest) {
 
   try {
     if (scope === "all" || scope === "list") {
-      // Get channel list + status + config in parallel
-      const [channelList, statusResult, configResult, localChannelsConfig] = await Promise.all([
-        runCliJson<Record<string, unknown>>(["channels", "list"], 10000).catch(() => ({})),
-        runCliJson<Record<string, unknown>>(["channels", "status"], 10000).catch(() => ({})),
+      // Get runtime status + config in parallel. channels.list is not advertised
+      // by the current gateway, so derive the catalog from status + config.
+      const [statusResult, configResult, localChannelsConfig] = await Promise.all([
+        gatewayCall<Record<string, unknown>>("channels.status", {}, 10000).catch(() => ({})),
         gatewayCall<Record<string, unknown>>("config.get", undefined, 10000).catch(() => null),
         readChannelsConfigFallback(),
       ]);
@@ -351,7 +348,7 @@ export async function GET(request: NextRequest) {
             : localChannelsConfig;
 
       // Build enriched channel info from modern + legacy schemas.
-      const channels = normalizeChannels(channelList, statusResult, channelsConfig);
+      const channels = normalizeChannels({}, statusResult, channelsConfig);
 
       // Also include known channels that might not be in `channels list` yet
       // (user may want to set them up)
@@ -518,9 +515,10 @@ export async function GET(request: NextRequest) {
     }
 
     // scope=status
-    const status = await runCliJson<Record<string, unknown>>(
-      ["channels", "status"],
-      10000
+    const status = await gatewayCall<Record<string, unknown>>(
+      "channels.status",
+      {},
+      10000,
     );
     return NextResponse.json(status);
   } catch (err) {
@@ -626,10 +624,28 @@ export async function POST(request: NextRequest) {
       }
 
       case "logout": {
-        const args = ["channels", "logout", "--channel", channel];
-        if (body.account) args.push("--account", body.account as string);
-        const output = await runCli(args, 15000);
-        return NextResponse.json({ ok: true, output: output.trim() });
+        try {
+          const result = await gatewayCall<Record<string, unknown>>(
+            "channels.logout",
+            {
+              channel,
+              ...(body.account ? { accountId: body.account as string } : {}),
+            },
+            15000,
+          );
+          return NextResponse.json({ ok: true, result });
+        } catch (error) {
+          // Some channels do not support runtime logout via gateway.
+          const args = ["channels", "logout", "--channel", channel];
+          if (body.account) args.push("--account", body.account as string);
+          const output = await runCli(args, 15000);
+          return NextResponse.json({
+            ok: true,
+            output: output.trim(),
+            fallback: "cli",
+            warning: String(error),
+          });
+        }
       }
 
       case "enable": {

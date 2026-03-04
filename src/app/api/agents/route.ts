@@ -1,29 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFile, writeFile, readdir } from "fs/promises";
+import { readFile } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome, getDefaultWorkspaceSync } from "@/lib/paths";
-import { runCliJson, runCli, parseJsonFromCliOutput } from "@/lib/openclaw";
+import { runCli, parseJsonFromCliOutput } from "@/lib/openclaw";
 import { fetchGatewaySessions, summarizeSessionsByAgent } from "@/lib/gateway-sessions";
+import {
+  gatewayCallWithRetry,
+  patchConfig as applyConfigPatchWithRetry,
+  fetchConfig,
+  extractBindings,
+} from "@/lib/gateway-config";
 
 const OPENCLAW_HOME = getOpenClawHome();
 export const dynamic = "force-dynamic";
 
-type CliAgent = {
-  id: string;
-  name?: string;
-  identityName?: string;
-  identityEmoji?: string;
-  identityTheme?: string;
-  identityAvatar?: string;
-  identitySource?: string;
-  workspace: string;
-  agentDir: string;
-  model: string;
-  bindings: number;
-  isDefault?: boolean;
-  bindingDetails?: string[];
-  routes?: string[];
-};
+// CliAgent type removed — agents list now derived from config.get RPC
 
 type AgentFull = {
   id: string;
@@ -138,8 +129,177 @@ async function readTextSafe(path: string): Promise<string | null> {
   }
 }
 
+// gatewayCallWithRetry and applyConfigPatchWithRetry imported from @/lib/gateway-config
+
+function normalizeStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    const key = String(entry || "").trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  return out;
+}
+
+function cloneConfigRows(value: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((row) => ({ ...asRecord(row) }));
+}
+
+function buildBindingsForAgent(
+  agentId: string,
+  bindingsValue: unknown,
+  existingBindingsValue: unknown,
+): Record<string, unknown>[] {
+  const nextBindings = cloneConfigRows(existingBindingsValue).filter(
+    (binding) => String(binding.agentId || "").trim() !== agentId,
+  );
+
+  for (const binding of normalizeStringList(bindingsValue)) {
+    const [channelRaw, ...accountParts] = binding.split(":");
+    const channel = channelRaw?.trim() || "";
+    if (!channel) continue;
+    const accountId = accountParts.join(":").trim() || "default";
+    nextBindings.push({
+      agentId,
+      match: {
+        channel,
+        accountId,
+      },
+    });
+  }
+
+  return nextBindings;
+}
+
+function extractIdentityFields(markdown: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of markdown.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    const match = trimmed.match(/^(?:[-*]\s*)?(?:\*\*)?([^:*]+?)(?:\*\*)?\s*:\s*(.+?)\s*$/);
+    if (!match) continue;
+    const key = match[1].trim().toLowerCase();
+    const value = match[2].trim();
+    if (!value) continue;
+    if (key === "name") out.name = value;
+    else if (key === "emoji") out.emoji = value;
+    else if (key === "theme") out.theme = value;
+    else if (key === "avatar") out.avatar = value;
+  }
+  return out;
+}
+
+async function createAgentViaCli(body: Record<string, unknown>) {
+  const name = String(body.name || "").trim();
+  const workspace =
+    String(body.workspace || "").trim() ||
+    join(getOpenClawHome(), `workspace-${name}`);
+  const agentDir = String(body.agentDir || "").trim();
+
+  const args = ["agents", "add", name, "--non-interactive", "--json", "--workspace", workspace];
+  if (agentDir) {
+    args.push("--agent-dir", agentDir);
+  }
+  if (body.model) {
+    args.push("--model", String(body.model));
+  }
+  for (const binding of normalizeStringList(body.bindings)) {
+    args.push("--bind", binding);
+  }
+
+  const output = await runCli(args, 30000);
+  let result: Record<string, unknown> = {};
+  try {
+    result = parseJsonFromCliOutput<Record<string, unknown>>(
+      output,
+      "openclaw agents add --json",
+    );
+  } catch {
+    result = { raw: output };
+  }
+
+  try {
+    const configData = await gatewayCallWithRetry<Record<string, unknown>>(
+      "config.get",
+      undefined,
+      10000,
+    );
+    const parsed = asRecord(configData.parsed);
+    const agentsSection = asRecord(parsed.agents);
+    const agentsList = cloneConfigRows(agentsSection.list);
+    const agentIdx = agentsList.findIndex((agent) => String(agent.id || "") === name);
+    if (agentIdx >= 0) {
+      const entry = { ...agentsList[agentIdx] };
+      const displayName = String(body.displayName || "").trim();
+      if (displayName) {
+        entry.name = displayName;
+      }
+
+      const model = String(body.model || "").trim();
+      const fallbacks = normalizeStringList(body.fallbacks);
+      if (model) {
+        entry.model = fallbacks.length > 0 ? { primary: model, fallbacks } : model;
+      }
+
+      const subagentsList = normalizeStringList(body.subagents);
+      if (subagentsList.length > 0) {
+        entry.subagents = {
+          ...asRecord(entry.subagents),
+          allowAgents: subagentsList,
+        };
+      }
+
+      if (body.default === true) {
+        entry.default = true;
+        for (let i = 0; i < agentsList.length; i++) {
+          if (i !== agentIdx && "default" in agentsList[i]) {
+            delete agentsList[i].default;
+          }
+        }
+      }
+
+      agentsList[agentIdx] = entry;
+      const patch: Record<string, unknown> = {
+        agents: { list: agentsList },
+      };
+      if ("bindings" in body) {
+        patch.bindings = buildBindingsForAgent(name, body.bindings, parsed.bindings);
+      }
+      await applyConfigPatchWithRetry(patch);
+    }
+  } catch (error) {
+    console.warn("Agent create: post-create config patch failed", error);
+  }
+
+  return NextResponse.json({
+    ok: true,
+    action: "create",
+    name,
+    workspace,
+    agentDir: agentDir || undefined,
+    fallback: "cli",
+    ...result,
+  });
+}
+
+function buildSyntheticMainAgent(
+  defaults: Record<string, unknown>,
+  defaultWorkspace: string,
+): Record<string, unknown> {
+  const synthetic: Record<string, unknown> = { id: "main", default: true };
+  if (defaults.model !== undefined) synthetic.model = defaults.model;
+  if (defaults.workspace !== undefined) synthetic.workspace = defaultWorkspace;
+  if (defaults.identity !== undefined) synthetic.identity = defaults.identity;
+  if (defaults.subagents !== undefined) synthetic.subagents = defaults.subagents;
+  return synthetic;
+}
+
 /**
- * Rich agent discovery — merges CLI data, config, sessions, identity.
+ * Rich agent discovery — configured agents are the source of truth.
+ * Runtime sessions enrich known agents, but do not create new rows.
  */
 export async function GET() {
   try {
@@ -148,49 +308,85 @@ export async function GET() {
       return NextResponse.json(agentsCache.payload);
     }
 
-    // 1. Get agents from CLI (includes binding info)
-    let cliAgents: CliAgent[] = [];
+    // 1. Get config via gateway RPC (replaces both CLI agents list and file read)
+    let configData: Awaited<ReturnType<typeof fetchConfig>> | null = null;
     try {
-      cliAgents = await runCliJson<CliAgent[]>(
-        ["agents", "list", "--bindings"],
-        10000
-      );
+      configData = await fetchConfig(10000);
     } catch {
-      // CLI might not be available
+      // Gateway might not be available — fall back to file
     }
 
-    // 2. Get config for deeper info (models, subagents)
-    const configPath = join(OPENCLAW_HOME, "openclaw.json");
-    const config = await readJsonSafe<Record<string, unknown>>(configPath, {});
+    // Fallback: read config from file if gateway unavailable
+    let config: Record<string, unknown> = {};
+    if (configData) {
+      config = configData.parsed;
+    } else {
+      const configPath = join(OPENCLAW_HOME, "openclaw.json");
+      config = await readJsonSafe<Record<string, unknown>>(configPath, {});
+    }
+
     const agentsConfig = (config.agents || {}) as Record<string, unknown>;
     const defaults = (agentsConfig.defaults || {}) as Record<string, unknown>;
     const configList = (agentsConfig.list || []) as Record<string, unknown>[];
 
-    const defaultModel = defaults.model as Record<string, unknown> | undefined;
+    // Also incorporate the resolved config — the gateway may compute additional
+    // agent entries (from defaults, inheritance, or overlays) that the raw
+    // parsed config does not contain.
+    const resolved = configData ? configData.resolved : {};
+    const resolvedAgents = asRecord(asRecord(resolved).agents);
+    const resolvedDefaults = asRecord(resolvedAgents.defaults);
+    const resolvedList = Array.isArray(resolvedAgents.list)
+      ? (resolvedAgents.list as Record<string, unknown>[]).filter(
+          (v) => v && typeof v === "object" && !Array.isArray(v)
+        )
+      : [];
+
+    // Merge parsed + resolved defaults: prefer resolved for model/workspace
+    const defaultModel = (resolvedDefaults.model || defaults.model) as Record<string, unknown> | undefined;
     const defaultPrimary = (defaultModel?.primary as string) || "unknown";
     const defaultFallbacks = (defaultModel?.fallbacks as string[]) || [];
     const defaultWorkspace =
-      (defaults.workspace as string) || getDefaultWorkspaceSync();
+      (resolvedDefaults.workspace as string) ||
+      (defaults.workspace as string) ||
+      getDefaultWorkspaceSync();
 
-    const discoveredDefaultAgentId =
-      cliAgents.find((a) => a.isDefault)?.id ||
-      (configList.find((c) => String(c.id || "") === "main")?.id as string | undefined) ||
-      (configList.find((c) => typeof c.id === "string")?.id as string | undefined) ||
-      "main";
-    const cliById = new Map<string, CliAgent>();
-    for (const agent of cliAgents) {
-      cliById.set(agent.id, agent);
+    // Merge agent lists: parsed entries + resolved entries not already present
+    const mergedList = [...configList];
+    const parsedIds = new Set(configList.map((c) => String(c.id || "")));
+    for (const r of resolvedList) {
+      const rid = String(r.id || "");
+      if (rid && !parsedIds.has(rid)) {
+        mergedList.push(r);
+      }
+    }
+    if (mergedList.length === 0) {
+      mergedList.push(buildSyntheticMainAgent(defaults, defaultWorkspace));
     }
 
-    // Bindings in openclaw.json are the persisted routing truth.
-    // Merge with CLI-reported bindings to avoid stale UI after recent edits.
+    const discoveredDefaultAgentId =
+      (mergedList.find((c) => c.default === true)?.id as string | undefined) ||
+      (mergedList.find((c) => String(c.id || "") === "main")?.id as string | undefined) ||
+      (mergedList.find((c) => typeof c.id === "string")?.id as string | undefined) ||
+      "main";
+
+    // Bindings from config (gateway or file).
     const configBindingsByAgent = new Map<string, string[]>();
-    const configBindings = (config.bindings || []) as Record<string, unknown>[];
+    const configBindings = configData
+      ? extractBindings(configData)
+      : ((config.bindings || []) as Record<string, unknown>[]).map((b) => {
+          const match = (b.match || {}) as Record<string, unknown>;
+          return {
+            agentId: String(b.agentId || ""),
+            match: {
+              channel: String(match.channel || ""),
+              accountId: typeof match.accountId === "string" ? match.accountId : undefined,
+            },
+          };
+        });
     for (const binding of configBindings) {
-      const agentId = String(binding.agentId || discoveredDefaultAgentId).trim();
-      const match = (binding.match || {}) as Record<string, unknown>;
-      const channel = String(match.channel || "").trim();
-      const accountId = String(match.accountId || "").trim();
+      const agentId = (binding.agentId || discoveredDefaultAgentId).trim();
+      const channel = binding.match.channel.trim();
+      const accountId = (binding.match.accountId || "").trim();
       if (!channel) continue;
       const label = accountId ? `${channel} accountId=${accountId}` : channel;
       const existing = configBindingsByAgent.get(agentId) || [];
@@ -212,16 +408,37 @@ export async function GET() {
       };
     });
 
-    const channelStatusRaw = await runCliJson<Record<string, unknown>>(
-      ["channels", "status", "--probe"],
-      12000
+    // Use gateway RPC for channel status (replaces CLI "channels status --probe")
+    const channelStatusRaw = await gatewayCallWithRetry<Record<string, unknown>>(
+      "channels.status",
+      {},
+      12000,
     ).catch(() => ({}));
     const connectedChannels = connectedChannelsFromStatus(channelStatusRaw);
 
-    // Build a lookup from config list
+    // Build a lookup from merged config list.
+    // Start with parsed entries, then layer resolved data on top for richer
+    // metadata (the resolved config contains computed names, models, identities).
     const configMap = new Map<string, Record<string, unknown>>();
-    for (const c of configList) {
+    for (const c of mergedList) {
       if (c.id) configMap.set(c.id as string, c);
+    }
+    // Enrich parsed entries with resolved data (resolved has computed fields
+    // like identity.name that may be missing from the raw parsed config)
+    for (const r of resolvedList) {
+      const rid = String(r.id || "");
+      if (!rid) continue;
+      const existing = configMap.get(rid);
+      if (existing) {
+        // Merge resolved fields into parsed entry (parsed takes precedence
+        // for user-set values, resolved fills in computed/inherited fields)
+        const merged = { ...r, ...existing };
+        // But for identity, prefer resolved if parsed has no identity
+        if (!existing.identity && r.identity) {
+          merged.identity = r.identity;
+        }
+        configMap.set(rid, merged);
+      }
     }
 
     // Session state comes from gateway RPC (source of truth), not local files.
@@ -268,54 +485,33 @@ export async function GET() {
     const agents: AgentFull[] = [];
     const workspaceIdentityCache = new Map<string, string | null>();
 
-    // Determine the set of agent ids to process
+    // Determine the set of agent ids to process from configured/resolved agent definitions only.
+    // Runtime sessions and stray directories may contain temporary helpers (e.g. tmp-probe)
+    // or foreign agent ids (e.g. Codex), which should not appear in the Agents page.
     const agentIds = new Set<string>();
-    for (const cli of cliAgents) agentIds.add(cli.id);
-    for (const cfg of configList) {
+    for (const cfg of mergedList) {
       if (cfg.id) agentIds.add(cfg.id as string);
-    }
-    for (const sessionAgentId of sessionsByAgent.keys()) {
-      if (sessionAgentId) agentIds.add(sessionAgentId);
-    }
-
-    // Also scan agents directory
-    try {
-      const agentDirs = await readdir(join(OPENCLAW_HOME, "agents"), {
-        withFileTypes: true,
-      });
-      for (const dir of agentDirs) {
-        if (dir.isDirectory()) agentIds.add(dir.name);
-      }
-    } catch {
-      // ok
     }
 
     for (const id of agentIds) {
-      const cli = cliById.get(id);
       const cfg = configMap.get(id) || {};
       const identityCfg =
         cfg.identity && typeof cfg.identity === "object"
           ? (cfg.identity as Record<string, unknown>)
           : {};
       const identityTheme =
-        (typeof cli?.identityTheme === "string" && cli.identityTheme) ||
-        (typeof identityCfg.theme === "string" ? identityCfg.theme : null);
+        typeof identityCfg.theme === "string" ? identityCfg.theme : null;
       const identityAvatar =
-        (typeof cli?.identityAvatar === "string" && cli.identityAvatar) ||
-        (typeof identityCfg.avatar === "string" ? identityCfg.avatar : null);
-      const identitySource =
-        (typeof cli?.identitySource === "string" && cli.identitySource) || null;
+        typeof identityCfg.avatar === "string" ? identityCfg.avatar : null;
+      const identitySource: string | null = null;
 
       // Name / emoji — strip markdown template hints like "_(or ...)"
       const rawName =
-        cli?.identityName ||
         (typeof identityCfg.name === "string" ? identityCfg.name : null) ||
         (cfg.name as string) ||
-        cli?.name ||
         id;
       const name = rawName.replace(/\s*_\(.*?\)_?\s*/g, "").trim() || rawName;
       const rawEmoji =
-        cli?.identityEmoji ||
         (typeof identityCfg.emoji === "string" ? identityCfg.emoji : null) ||
         "🤖";
       const emoji = rawEmoji.replace(/\s*_\(.*?\)_?\s*/g, "").trim() || rawEmoji;
@@ -345,9 +541,8 @@ export async function GET() {
 
       // Workspace
       const workspace =
-        (cfg.workspace as string) || cli?.workspace || defaultWorkspace;
-      const agentDir =
-        cli?.agentDir || join(OPENCLAW_HOME, "agents", id, "agent");
+        (cfg.workspace as string) || defaultWorkspace;
+      const agentDir = join(OPENCLAW_HOME, "agents", id, "agent");
 
       // Subagents
       const subagentsCfg = cfg.subagents as
@@ -356,19 +551,16 @@ export async function GET() {
       const subagents = (subagentsCfg?.allowAgents as string[]) || [];
 
       // Bindings / channels
-      const cliBindings = (cli?.bindingDetails || []).map((b) => b.trim());
       const persistedBindings = configBindingsByAgent.get(id) || [];
       const bindings = Array.from(
-        new Set(
-          [...persistedBindings, ...cliBindings].filter((b) => Boolean(b))
-        )
+        new Set(persistedBindings.filter((b) => Boolean(b)))
       );
       const channels: string[] = [];
       for (const b of bindings) {
         const ch = b.split(" ")[0];
         if (ch && !channels.includes(ch)) channels.push(ch);
       }
-      if (id === discoveredDefaultAgentId || cli?.isDefault) {
+      if (id === discoveredDefaultAgentId || cfg.default === true) {
         for (const ch of connectedChannels) {
           if (!channels.includes(ch)) channels.push(ch);
         }
@@ -416,7 +608,7 @@ export async function GET() {
         fallbackModels,
         workspace,
         agentDir,
-        isDefault: Boolean(cli?.isDefault || id === discoveredDefaultAgentId),
+        isDefault: Boolean(cfg.default === true || id === discoveredDefaultAgentId),
         sessionCount,
         lastActive,
         totalTokens,
@@ -511,93 +703,82 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Build CLI args
-        const args = ["agents", "add", name, "--non-interactive", "--json"];
-
-        // Workspace (default or custom)
         const workspace =
           (body.workspace as string)?.trim() ||
           join(getOpenClawHome(), `workspace-${name}`);
-        args.push("--workspace", workspace);
         const agentDir = (body.agentDir as string)?.trim();
-        if (agentDir) {
-          args.push("--agent-dir", agentDir);
-        }
-
-        // Model (optional — inherits default if not set)
-        if (body.model) {
-          args.push("--model", body.model as string);
-        }
-
-        // Bindings (optional, repeatable)
-        const bindings = (body.bindings || []) as string[];
-        for (const b of bindings) {
-          if (b.trim()) args.push("--bind", b.trim());
-        }
-
-        const output = await runCli(args, 30000);
-
-        // Try to parse JSON output
-        let result: Record<string, unknown> = {};
         try {
-          result = parseJsonFromCliOutput<Record<string, unknown>>(
-            output,
-            "openclaw agents add --json"
-          );
-        } catch {
-          result = { raw: output };
-        }
-
-        // Patch the new agent in config: displayName, model+fallbacks, default, subagents (per OpenClaw config reference)
-        const configPath = join(OPENCLAW_HOME, "openclaw.json");
-        try {
-          let config: Record<string, unknown> = {};
-          try {
-            config = JSON.parse(await readFile(configPath, "utf-8"));
-          } catch {
-            return NextResponse.json({ ok: true, action, name, workspace, ...result });
+          if (agentDir) {
+            return await createAgentViaCli(body as Record<string, unknown>);
           }
-          const agentsSection = config.agents as Record<string, unknown> | undefined;
-          const list = Array.isArray(agentsSection?.list) ? (agentsSection.list as Record<string, unknown>[]) : [];
-          const idx = list.findIndex((a) => (a.id as string) === name);
-          if (idx >= 0) {
-            const entry = { ...list[idx] };
-            const displayName = (body.displayName as string)?.trim();
-            if (displayName) entry.name = displayName;
-            const fallbacks = (body.fallbacks || []) as string[];
-            if (body.model && fallbacks.length > 0) {
-              entry.model = { primary: body.model, fallbacks };
-            } else if (body.model) {
-              entry.model = body.model;
+
+          const result = await gatewayCallWithRetry<Record<string, unknown>>(
+            "agents.create",
+            { name, workspace },
+            30000,
+          );
+
+          const configData = await gatewayCallWithRetry<Record<string, unknown>>(
+            "config.get",
+            undefined,
+            10000,
+          );
+          const parsed = asRecord(configData.parsed);
+          const agentsSection = asRecord(parsed.agents);
+          const agentsList = cloneConfigRows(agentsSection.list);
+          const agentIdx = agentsList.findIndex((agent) => String(agent.id || "") === name);
+
+          if (agentIdx >= 0) {
+            const entry = { ...agentsList[agentIdx] };
+            const displayName = String(body.displayName || "").trim();
+            if (displayName) {
+              entry.name = displayName;
             }
+
+            const model = String(body.model || "").trim();
+            const fallbacks = normalizeStringList(body.fallbacks);
+            if (model) {
+              entry.model = fallbacks.length > 0 ? { primary: model, fallbacks } : model;
+            }
+
+            const subagentsList = normalizeStringList(body.subagents);
+            if (subagentsList.length > 0) {
+              entry.subagents = {
+                ...asRecord(entry.subagents),
+                allowAgents: subagentsList,
+              };
+            }
+
             if (body.default === true) {
               entry.default = true;
-              for (let i = 0; i < list.length; i++) {
-                if (i !== idx) (list[i] as Record<string, unknown>).default = false;
+              for (let i = 0; i < agentsList.length; i++) {
+                if (i !== agentIdx && "default" in agentsList[i]) {
+                  delete agentsList[i].default;
+                }
               }
             }
-            const subagentsList = (body.subagents || []) as string[];
-            if (subagentsList.length > 0) {
-              entry.subagents = { ...((entry.subagents as Record<string, unknown>) || {}), allowAgents: subagentsList };
-            }
-            list[idx] = entry;
-            if (config.agents && typeof config.agents === "object") {
-              (config.agents as Record<string, unknown>).list = list;
-              await writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
-            }
-          }
-        } catch (patchErr) {
-          console.warn("Agent create: config patch failed", patchErr);
-        }
 
-        return NextResponse.json({
-          ok: true,
-          action,
-          name,
-          workspace,
-          agentDir: agentDir || undefined,
-          ...result,
-        });
+            agentsList[agentIdx] = entry;
+            const patch: Record<string, unknown> = {
+              agents: { list: agentsList },
+            };
+            if ("bindings" in body) {
+              patch.bindings = buildBindingsForAgent(name, body.bindings, parsed.bindings);
+            }
+            await applyConfigPatchWithRetry(patch);
+          }
+
+          return NextResponse.json({
+            ok: true,
+            action,
+            name,
+            workspace,
+            ...result,
+          });
+        } catch (error) {
+          console.warn("Agent create: gateway create failed, falling back to CLI", error);
+          return await createAgentViaCli(body as Record<string, unknown>);
+        }
       }
 
       case "update": {
@@ -609,25 +790,14 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const configPath = join(OPENCLAW_HOME, "openclaw.json");
-        let config: Record<string, unknown>;
-        try {
-          config = JSON.parse(await readFile(configPath, "utf-8"));
-        } catch {
-          return NextResponse.json(
-            { error: "Failed to read config" },
-            { status: 500 }
-          );
-        }
-
-        if (!config.agents || typeof config.agents !== "object") {
-          config.agents = {};
-        }
-        const agentsSection = config.agents as Record<string, unknown>;
-        if (!Array.isArray(agentsSection.list)) {
-          agentsSection.list = [];
-        }
-        const agentsList = agentsSection.list as Record<string, unknown>[];
+        const configData = await gatewayCallWithRetry<Record<string, unknown>>(
+          "config.get",
+          undefined,
+          10000,
+        );
+        const parsed = asRecord(configData.parsed);
+        const agentsSection = asRecord(parsed.agents);
+        const agentsList = cloneConfigRows(agentsSection.list);
         let agentIdx = agentsList.findIndex((a) => a.id === id);
         // If agent exists only at runtime (e.g. default "main") but not in config, upsert an entry
         if (agentIdx === -1) {
@@ -686,30 +856,19 @@ export async function POST(request: NextRequest) {
         }
 
         // Update bindings
+        let nextBindings: Record<string, unknown>[] | undefined;
         if ("bindings" in body) {
-          const newBindings = (body.bindings || []) as string[];
-          // Remove existing bindings for this agent
-          const existingBindings = (
-            (config.bindings || []) as Record<string, unknown>[]
-          ).filter((b) => (b.agentId as string) !== id);
-          // Add new ones
-          for (const binding of newBindings) {
-            const parts = binding.split(":");
-            existingBindings.push({
-              agentId: id,
-              match: {
-                channel: parts[0],
-                accountId: parts[1] || "default",
-              },
-            });
-          }
-          config.bindings = existingBindings;
+          nextBindings = buildBindingsForAgent(id, body.bindings, parsed.bindings);
         }
 
         agentsList[agentIdx] = agent;
-        agentsSection.list = agentsList;
-
-        await writeFile(configPath, JSON.stringify(config, null, 2), "utf-8");
+        const patch: Record<string, unknown> = {
+          agents: { list: agentsList },
+        };
+        if (nextBindings) {
+          patch.bindings = nextBindings;
+        }
+        await applyConfigPatchWithRetry(patch);
 
         return NextResponse.json({ ok: true, action: "update", id });
       }
@@ -723,75 +882,69 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const args = ["agents", "set-identity", "--agent", id, "--json"];
-        let hasExplicitIdentityField = false;
-
-        const name = String(body.name || "").trim();
-        if (name) {
-          args.push("--name", name);
-          hasExplicitIdentityField = true;
-        }
-        const emoji = String(body.emoji || "").trim();
-        if (emoji) {
-          args.push("--emoji", emoji);
-          hasExplicitIdentityField = true;
-        }
-        const theme = String(body.theme || "").trim();
-        if (theme) {
-          args.push("--theme", theme);
-          hasExplicitIdentityField = true;
-        }
-        const avatar = String(body.avatar || "").trim();
-        if (avatar) {
-          args.push("--avatar", avatar);
-          hasExplicitIdentityField = true;
-        }
-
         const fromIdentity = body.fromIdentity === true;
-        if (fromIdentity) {
-          args.push("--from-identity");
-        }
-
-        const workspace = String(body.workspace || "").trim();
-        if (workspace) {
-          args.push("--workspace", workspace);
-        }
-
         const identityFile = String(body.identityFile || "").trim();
-        if (identityFile) {
-          args.push("--identity-file", identityFile);
+        const explicitIdentity: Record<string, string> = {};
+        const name = String(body.name || "").trim();
+        if (name) explicitIdentity.name = name;
+        const emoji = String(body.emoji || "").trim();
+        if (emoji) explicitIdentity.emoji = emoji;
+        const theme = String(body.theme || "").trim();
+        if (theme) explicitIdentity.theme = theme;
+        const avatar = String(body.avatar || "").trim();
+        if (avatar) explicitIdentity.avatar = avatar;
+
+        const nextIdentity: Record<string, string> = {};
+
+        if (fromIdentity) {
+          const workspace =
+            String(body.workspace || "").trim() ||
+            getDefaultWorkspaceSync();
+          const identityPath = identityFile || join(workspace, "IDENTITY.md");
+          const markdown = await readTextSafe(identityPath);
+          if (!markdown) {
+            return NextResponse.json(
+              { error: "No IDENTITY.md found in this agent's workspace. Create one first, or set identity fields manually above." },
+              { status: 400 },
+            );
+          }
+          Object.assign(nextIdentity, extractIdentityFields(markdown));
         }
 
-        if (!fromIdentity && !hasExplicitIdentityField) {
+        Object.assign(nextIdentity, explicitIdentity);
+
+        if (Object.keys(nextIdentity).length === 0) {
           return NextResponse.json(
             { error: "Provide identity fields or enable fromIdentity." },
             { status: 400 }
           );
         }
 
-        let output: string;
-        try {
-          output = await runCli(args, 30000);
-        } catch (cliErr) {
-          const msg = String(cliErr);
-          if (msg.includes("No identity data found")) {
-            return NextResponse.json(
-              { error: "No IDENTITY.md found in this agent's workspace. Create one first, or set identity fields manually above." },
-              { status: 400 }
-            );
-          }
-          throw cliErr;
+        const configData = await gatewayCallWithRetry<Record<string, unknown>>(
+          "config.get",
+          undefined,
+          10000,
+        );
+        const parsed = asRecord(configData.parsed);
+        const agentsSection = asRecord(parsed.agents);
+        const agentsList = cloneConfigRows(agentsSection.list);
+        let agentIdx = agentsList.findIndex((agent) => String(agent.id || "") === id);
+        if (agentIdx === -1) {
+          agentIdx = agentsList.length;
+          agentsList.push({ id });
         }
-        let result: Record<string, unknown> = {};
-        try {
-          result = parseJsonFromCliOutput<Record<string, unknown>>(
-            output,
-            "openclaw agents set-identity --json"
-          );
-        } catch {
-          result = { raw: output };
-        }
-        return NextResponse.json({ ok: true, action, id, ...result });
+        const agent = { ...agentsList[agentIdx] };
+        agent.identity = {
+          ...asRecord(agent.identity),
+          ...nextIdentity,
+        };
+        agentsList[agentIdx] = agent;
+
+        await applyConfigPatchWithRetry({
+          agents: { list: agentsList },
+        });
+
+        return NextResponse.json({ ok: true, action, id, identity: nextIdentity });
       }
 
       case "delete": {
@@ -803,21 +956,30 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const force = body.force !== false;
-        const args = ["agents", "delete", id, "--json"];
-        if (force) args.push("--force");
-
-        const output = await runCli(args, 30000);
-        let result: Record<string, unknown> = {};
         try {
-          result = parseJsonFromCliOutput<Record<string, unknown>>(
-            output,
-            "openclaw agents delete --json"
+          const result = await gatewayCallWithRetry<Record<string, unknown>>(
+            "agents.delete",
+            { agentId: id },
+            30000,
           );
-        } catch {
-          result = { raw: output };
+          return NextResponse.json({ ok: true, action, id, ...result });
+        } catch (error) {
+          console.warn("Agent delete: gateway delete failed, falling back to CLI", error);
+          const force = body.force !== false;
+          const args = ["agents", "delete", id, "--json"];
+          if (force) args.push("--force");
+          const output = await runCli(args, 30000);
+          let result: Record<string, unknown> = {};
+          try {
+            result = parseJsonFromCliOutput<Record<string, unknown>>(
+              output,
+              "openclaw agents delete --json"
+            );
+          } catch {
+            result = { raw: output };
+          }
+          return NextResponse.json({ ok: true, action, id, fallback: "cli", ...result });
         }
-        return NextResponse.json({ ok: true, action, id, ...result });
       }
 
       default:

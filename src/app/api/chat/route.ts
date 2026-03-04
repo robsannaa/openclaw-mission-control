@@ -1,12 +1,13 @@
-import { gatewayCall, runCli } from "@/lib/openclaw";
+import { gatewayCall } from "@/lib/openclaw";
+import { runOpenResponsesText, guessMime } from "@/lib/openresponses";
 import { getGatewayUrl, getGatewayToken } from "@/lib/paths";
 
 /**
  * Chat endpoint that sends a message to an OpenClaw agent and returns the response.
  * Works with Vercel AI SDK v5's TextStreamChatTransport.
  *
- * Tries the Gateway's OpenResponses API first (streaming, token-by-token).
- * Falls back to CLI subprocess if the gateway endpoint isn't available.
+ * Tries the Gateway's OpenResponses API first (streaming, token-by-token),
+ * then a non-streaming gateway request. This route is gateway-only.
  *
  * Request body: { messages, agentId, sessionKey?, model?, ... }
  * Each UIMessage has { id, role, parts: [{ type: 'text', text }, { type: 'file', url, filename }] }
@@ -29,22 +30,6 @@ function dataUrlToSafeMessagePart(
   } catch {
     return `[Attached: ${filename} (could not decode)]`;
   }
-}
-
-function guessMime(url: string, filename?: string): string {
-  const name = filename || url;
-  if (/\.(jpe?g)$/i.test(name)) return "image/jpeg";
-  if (/\.png$/i.test(name)) return "image/png";
-  if (/\.gif$/i.test(name)) return "image/gif";
-  if (/\.webp$/i.test(name)) return "image/webp";
-  if (/\.pdf$/i.test(name)) return "application/pdf";
-  if (/\.json$/i.test(name)) return "application/json";
-  if (/\.csv$/i.test(name)) return "text/csv";
-  if (/\.md$/i.test(name)) return "text/markdown";
-  if (/\.html?$/i.test(name)) return "text/html";
-  const mimeMatch = url.match(/^data:([^;]+);/);
-  if (mimeMatch) return mimeMatch[1];
-  return "text/plain";
 }
 
 type MessagePart = {
@@ -257,7 +242,7 @@ async function tryStreamingResponse(
     gwUrl = await getGatewayUrl();
     token = getGatewayToken();
   } catch (e) {
-    console.warn("[chat] Gateway URL/token not available, falling back to CLI:", e);
+    console.warn("[chat] Gateway URL/token not available:", e);
     return null;
   }
 
@@ -298,7 +283,7 @@ async function tryStreamingResponse(
         503,
       );
     }
-    console.warn(`[chat] Gateway unreachable at ${endpoint}, falling back to CLI:`, e);
+    console.warn(`[chat] Gateway unreachable at ${endpoint}:`, e);
     return null;
   }
 
@@ -314,7 +299,7 @@ async function tryStreamingResponse(
         status,
       );
     }
-    console.warn(`[chat] Gateway returned ${status} from ${endpoint}, falling back to CLI.`, text.slice(0, 200));
+    console.warn(`[chat] Gateway returned ${status} from ${endpoint}.`, text.slice(0, 200));
     return null;
   }
 
@@ -347,23 +332,66 @@ async function tryStreamingResponse(
   });
 }
 
-// ── CLI fallback ────────────────────────────────────
+// ── Non-streaming gateway fallback ──────────────────
 
-async function cliResponse(
-  content: string,
+async function nonStreamingResponse(
+  input: unknown,
   agentId: string,
-): Promise<Response> {
-  const args = ["agent", "--agent", agentId, "--message", content];
+  sessionKey?: string,
+  requestedModel?: string,
+): Promise<Response | null> {
+  const explicitModel = requestedModel?.trim() || undefined;
+  const activeModelInstructions = buildActiveModelInstructions(explicitModel);
 
-  console.log(`[chat] Using CLI fallback (agent=${agentId}) — this is slower than streaming`);
-  const t0 = Date.now();
-  const output = await runCli(args, 180_000);
-  console.log(`[chat] CLI response took ${((Date.now() - t0) / 1000).toFixed(1)}s`);
+  try {
+    const result = await runOpenResponsesText({
+      input,
+      agentId,
+      sessionKey,
+      requestedModel: explicitModel,
+      instructions: activeModelInstructions,
+      timeoutMs: 180_000,
+    });
 
-  return new Response(output.trim(), {
-    status: 200,
-    headers: { "Content-Type": "text/plain; charset=utf-8" },
-  });
+    if (!result.ok) {
+      if (explicitModel) {
+        return buildModelLockError(
+          explicitModel,
+          result.text || `The OpenClaw gateway returned ${result.status}.`,
+          result.status,
+        );
+      }
+      return null;
+    }
+
+    return new Response(result.text || "", {
+      status: 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  } catch (error) {
+    if (explicitModel) {
+      return buildModelLockError(
+        explicitModel,
+        `The OpenClaw gateway is unavailable right now (${String(error)}).`,
+        503,
+      );
+    }
+    return null;
+  }
+}
+
+function gatewayUnavailableResponse(): Response {
+  return new Response(
+    [
+      "Mission Control could not send this message through the OpenClaw gateway.",
+      "Chat on this page is API-only and no longer falls back to the CLI.",
+      "Check that the gateway is online and that your model provider is configured, then try again.",
+    ].join(" "),
+    {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    }
+  );
 }
 
 // ── Main handler ────────────────────────────────────
@@ -403,8 +431,16 @@ export async function POST(req: Request) {
     );
     if (streamingRes) return streamingRes;
 
-    // Fall back to CLI subprocess
-    return await cliResponse(plainText, agentId);
+    // Try a non-streaming OpenResponses request before spawning the CLI.
+    const textRes = await nonStreamingResponse(
+      openResponsesInput,
+      agentId,
+      sessionKey,
+      requestedModel,
+    );
+    if (textRes) return textRes;
+
+    return gatewayUnavailableResponse();
   } catch (err) {
     console.error("Chat API error:", err);
     const errMsg =

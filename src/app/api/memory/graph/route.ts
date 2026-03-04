@@ -4,7 +4,9 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { basename, join } from "path";
 import { getDefaultWorkspaceSync, getOpenClawHome } from "@/lib/paths";
-import { gatewayCall, runCli, runCliJson } from "@/lib/openclaw";
+import { gatewayCall, runCliJson } from "@/lib/openclaw";
+import { fetchConfig, extractAgentsList } from "@/lib/gateway-config";
+import { gatewayMemoryIndex } from "@/lib/gateway-tools";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +29,20 @@ type CliAgentRow = {
 
 async function getCliAgents(): Promise<CliAgentRow[]> {
   try {
-    const rows = await runCliJson<CliAgentRow[]>(["agents", "list"], 12000);
-    return Array.isArray(rows) ? rows : [];
+    const configData = await fetchConfig(12000);
+    const agents = extractAgentsList(configData);
+    return agents.map((a) => ({
+      id: typeof a.id === "string" ? a.id : undefined,
+      name: typeof a.name === "string" ? a.name : undefined,
+      identityName:
+        a.identity &&
+        typeof a.identity === "object" &&
+        typeof (a.identity as Record<string, unknown>).name === "string"
+          ? ((a.identity as Record<string, unknown>).name as string)
+          : undefined,
+      workspace: typeof a.workspace === "string" ? a.workspace : undefined,
+      isDefault: a.default === true,
+    }));
   } catch {
     return [];
   }
@@ -764,7 +778,7 @@ async function readIndexedMemoryFiles(limit = 12): Promise<BootstrapFile[]> {
 
 async function bestEffortReindex(): Promise<{ indexed: boolean; error?: string }> {
   try {
-    await runCli(["memory", "index"], 20000);
+    await gatewayMemoryIndex();
     return { indexed: true };
   } catch (err) {
     return { indexed: false, error: String(err) };
@@ -1024,7 +1038,7 @@ export async function GET(request: NextRequest) {
     } catch { /* workspace unreadable */ }
 
     // Fire-and-forget: ensure workspace root files are in the vector index
-    void runCli(["memory", "index"], 45000).catch(() => {});
+    void gatewayMemoryIndex().catch(() => {});
 
     let extractionError: string | undefined;
 

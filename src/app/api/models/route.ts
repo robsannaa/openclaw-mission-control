@@ -4,25 +4,30 @@ import { join } from "path";
 import { runCliJson, runCli, gatewayCall } from "@/lib/openclaw";
 import { getOpenClawHome } from "@/lib/paths";
 import { fetchGatewaySessions } from "@/lib/gateway-sessions";
+import { buildModelsSummary } from "@/lib/models-summary";
+import {
+  buildProviderCredentialPatch,
+  PROVIDER_ENV_KEYS,
+  validateProviderToken,
+} from "@/lib/provider-auth";
+import {
+  gatewayCallWithRetry as _gatewayCallWithRetry,
+  patchConfig,
+  fetchConfig,
+  isGatewayTransientError as _isGatewayTransientError,
+} from "@/lib/gateway-config";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 const OPENCLAW_HOME = getOpenClawHome();
+const MODELS_ALL_CACHE_TTL_MS = 30_000;
 
-/* ── Provider → environment variable key mapping ── */
-const PROVIDER_ENV_KEYS: Record<string, string> = {
-  openai: "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
-  google: "GEMINI_API_KEY",
-  groq: "GROQ_API_KEY",
-  xai: "XAI_API_KEY",
-  mistral: "MISTRAL_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  cerebras: "CEREBRAS_API_KEY",
-  huggingface: "HUGGINGFACE_HUB_TOKEN",
-  zai: "ZAI_API_KEY",
-  minimax: "MINIMAX_API_KEY",
-};
+let modelsAllCache:
+  | {
+      expiresAt: number;
+      payload: Record<string, unknown>;
+    }
+  | null = null;
 
 type ModelInfo = {
   key: string;
@@ -111,6 +116,10 @@ function jsonNoStore(body: unknown, init?: ResponseInit) {
       ...(init?.headers || {}),
     },
   });
+}
+
+function invalidateModelsAllCache() {
+  modelsAllCache = null;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -484,6 +493,17 @@ async function writeDefaultsAllowedModels(
   );
 }
 
+// gatewayCallWithRetry, applyConfigPatchWithRetry, isGatewayTransientError
+// imported from @/lib/gateway-config as _gatewayCallWithRetry, patchConfig, _isGatewayTransientError
+const gatewayCallWithRetry = _gatewayCallWithRetry;
+const isGatewayTransientError = _isGatewayTransientError;
+async function applyConfigPatchWithRetry(
+  rawPatch: Record<string, unknown>,
+  maxAttempts = 8,
+): Promise<void> {
+  return patchConfig(rawPatch, { maxAttempts });
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -510,75 +530,7 @@ async function waitForMatch<T>(
   return { matched: false, snapshot: last };
 }
 
-function isGatewayTransientError(error: unknown): boolean {
-  const parts = [String(error || "")];
-  if (isRecord(error)) {
-    if (typeof error.message === "string") parts.push(error.message);
-    if (typeof error.stderr === "string") parts.push(error.stderr);
-  }
-  const msg = parts.join(" ").toLowerCase();
-  return (
-    msg.includes("gateway closed") ||
-    msg.includes("1006") ||
-    msg.includes("gateway call failed") ||
-    msg.includes("econnrefused") ||
-    msg.includes("socket hang up") ||
-    msg.includes("timed out")
-  );
-}
-
-async function gatewayCallWithRetry<T>(
-  method: string,
-  params?: Record<string, unknown>,
-  timeout = 15000,
-  maxAttempts = 3
-): Promise<T> {
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      return await gatewayCall<T>(method, params, timeout);
-    } catch (error) {
-      lastError = error;
-      if (attempt === maxAttempts) {
-        throw error;
-      }
-      const transient = isGatewayTransientError(error);
-      const baseDelay = transient ? 300 : 150;
-      await sleep(Math.min(baseDelay * attempt, transient ? 1200 : 600));
-    }
-  }
-  throw lastError || new Error("Unknown gateway error");
-}
-
-async function applyConfigPatchWithRetry(
-  rawPatch: Record<string, unknown>,
-  maxAttempts = 8
-): Promise<void> {
-  const raw = JSON.stringify(rawPatch);
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const configData = await gatewayCall<Record<string, unknown>>(
-        "config.get",
-        undefined,
-        6000
-      );
-      const hash = String(configData.hash || "");
-      if (!hash) {
-        throw new Error("Missing config hash");
-      }
-      await gatewayCall("config.patch", { raw, baseHash: hash }, 15000);
-      return;
-    } catch (error) {
-      lastError = error;
-      if (attempt === maxAttempts) {
-        throw error;
-      }
-      await sleep(Math.min(400 * attempt, 2500));
-    }
-  }
-  throw lastError || new Error("Unknown config.patch error");
-}
+// (inline gatewayCallWithRetry / applyConfigPatchWithRetry / isGatewayTransientError removed — using shared lib)
 
 async function readDefaultsModelConfig(): Promise<DefaultsModelConfig | null> {
   try {
@@ -794,7 +746,9 @@ async function readLiveModels(agentIds: string[]): Promise<Record<string, LiveMo
  * GET /api/models - Returns model configuration and available models.
  *
  * Query params:
- *   scope=status  - current model config (default)
+ *   scope=status  - fast summary for first paint (default)
+ *   scope=details - full runtime/CLI-backed details for advanced controls
+ *   scope=summary - alias for fast summary
  *   scope=configured - configured models only
  *   scope=all - all 700+ available models (for the model picker)
  *   agent=<id> - get per-agent model config
@@ -803,31 +757,29 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const scope = searchParams.get("scope") || "status";
   const agentId = searchParams.get("agent");
+  const forceRefresh = searchParams.get("refresh") === "1";
 
   try {
-    if (scope === "status") {
-      const args = ["models", "status"];
-      if (agentId) args.push("--agent", agentId);
+    if (scope === "status" || scope === "summary") {
+      const summary = await buildModelsSummary();
+      return jsonNoStore(summary);
+    }
+
+    if (scope === "details") {
+      // Use buildModelsSummary() for status and models list (replaces CLI calls)
       let status: ModelStatus | null = null;
       let statusWarning: string | null = null;
+      let listModels: ModelInfo[] = [];
+      let listWarning: string | null = null;
       try {
-        status = await runCliJson<ModelStatus>(args, 10000);
+        const summary = await buildModelsSummary();
+        status = summary.status;
+        listModels = summary.models;
+        if (summary.warning) statusWarning = summary.warning;
       } catch (err) {
         statusWarning = String(err);
       }
       const fileSnapshot = await readConfigFileSnapshot();
-
-      // Also get configured models for display names
-      const listArgs = ["models", "list"];
-      if (agentId) listArgs.push("--agent", agentId);
-      let listModels: ModelInfo[] = [];
-      let listWarning: string | null = null;
-      try {
-        const list = await runCliJson<{ models: ModelInfo[] }>(listArgs, 10000);
-        listModels = list.models || [];
-      } catch (err) {
-        listWarning = String(err);
-      }
 
       // Get per-agent configs from gateway (non-critical — gracefully degrade)
       let defaultsModel: DefaultsModelConfig | null = null;
@@ -960,32 +912,18 @@ export async function GET(request: NextRequest) {
 
       // Read last actually-used model per agent from sessions metadata.
       const liveModels = await readLiveModels(agentsList.map((a) => a.id));
+      // Derive per-agent statuses from config data (replaces N CLI subprocess calls)
       const agentStatuses: Record<string, AgentRuntimeStatus> = {};
-      if (agentsList.length > 0) {
-        const statuses = await Promise.all(
-          agentsList.map(async (agent) => {
-            try {
-              const s = await runCliJson<ModelStatus>(
-                ["models", "status", "--agent", agent.id],
-                10000
-              );
-              return [
-                agent.id,
-                {
-                  defaultModel: s.defaultModel,
-                  resolvedDefault: s.resolvedDefault,
-                  fallbacks: s.fallbacks || [],
-                } satisfies AgentRuntimeStatus,
-              ] as const;
-            } catch {
-              return null;
-            }
-          })
-        );
-        for (const entry of statuses) {
-          if (!entry) continue;
-          agentStatuses[entry[0]] = entry[1];
-        }
+      for (const agent of agentsList) {
+        const agentPrimary = agent.modelPrimary || defaultsModel?.primary || "";
+        const agentFallbacks = agent.modelFallbacks != null
+          ? agent.modelFallbacks
+          : defaultsModel?.fallbacks || [];
+        agentStatuses[agent.id] = {
+          defaultModel: agentPrimary,
+          resolvedDefault: agentPrimary,
+          fallbacks: agentFallbacks,
+        };
       }
       const statusForResponse = status
         ? defaultsModel
@@ -1016,6 +954,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (scope === "all") {
+      if (!forceRefresh && modelsAllCache && modelsAllCache.expiresAt > Date.now()) {
+        return jsonNoStore(modelsAllCache.payload);
+      }
       const fileSnapshot = await readConfigFileSnapshot();
       // Fetch models and auth status in parallel
       const [listResult, statusData, ollamaModels] = await Promise.all([
@@ -1105,17 +1046,30 @@ export async function GET(request: NextRequest) {
           ? "Ollama is configured but no local tool-capable models were discovered. In OpenClaw, Ollama auto-discovery only includes models that support tool calling."
           : null;
       const warning = [listError, ollamaWarning].filter(Boolean).join(" | ");
-
-      return jsonNoStore({
+      const payload = {
         count,
         models,
         authProviders,
         oauthProfiles,
         warning: warning || undefined,
-      });
+      };
+      modelsAllCache = {
+        expiresAt: Date.now() + MODELS_ALL_CACHE_TTL_MS,
+        payload,
+      };
+      return jsonNoStore(payload);
     }
 
     // scope=configured
+    if (!agentId) {
+      const summary = await buildModelsSummary();
+      return jsonNoStore({
+        models: summary.models,
+        warning: summary.warning,
+        degraded: summary.degraded,
+      });
+    }
+
     const fileSnapshot = await readConfigFileSnapshot();
     const args = ["models", "list"];
     if (agentId) args.push("--agent", agentId);
@@ -1217,6 +1171,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const action = body.action as string;
+    invalidateModelsAllCache();
 
     switch (action) {
       case "set-primary": {
@@ -1492,21 +1447,32 @@ export async function POST(request: NextRequest) {
       }
 
       case "set-alias": {
-        await runCli(
-          ["models", "aliases", "add", body.alias, body.model],
-          10000
-        );
+        const alias = String(body.alias || "").trim();
+        const target = String(body.model || "").trim();
+        if (!alias || !target) {
+          return jsonNoStore({ error: "alias and model are required" }, { status: 400 });
+        }
+        await applyConfigPatchWithRetry({
+          agents: { defaults: { aliases: { [alias]: target } } },
+        });
         return NextResponse.json({
           ok: true,
           action,
-          alias: body.alias,
-          model: body.model,
+          alias,
+          model: target,
         });
       }
 
       case "remove-alias": {
-        await runCli(["models", "aliases", "remove", body.alias], 10000);
-        return NextResponse.json({ ok: true, action, alias: body.alias });
+        const alias = String(body.alias || "").trim();
+        if (!alias) {
+          return jsonNoStore({ error: "alias is required" }, { status: 400 });
+        }
+        // Set to null to remove via config.patch deep merge
+        await applyConfigPatchWithRetry({
+          agents: { defaults: { aliases: { [alias]: null } } },
+        });
+        return NextResponse.json({ ok: true, action, alias });
       }
 
       case "set-heartbeat": {
@@ -1625,16 +1591,17 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        await runCli(["models", "set-image", model], 10000);
+        await applyConfigPatchWithRetry({
+          agents: { defaults: { imageModel: model } },
+        });
         return NextResponse.json({ ok: true, action, model });
       }
 
       case "set-image-fallbacks": {
         const fallbacks = normalizeAllowedModelList(body.fallbacks);
-        await runCli(["models", "image-fallbacks", "clear"], 10000);
-        for (const fallback of fallbacks) {
-          await runCli(["models", "image-fallbacks", "add", fallback], 10000);
-        }
+        await applyConfigPatchWithRetry({
+          agents: { defaults: { imageFallbacks: fallbacks } },
+        });
         return NextResponse.json({ ok: true, action, fallbacks });
       }
 
@@ -1646,7 +1613,19 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        await runCli(["models", "image-fallbacks", "add", model], 10000);
+        // Fetch current list, append, then patch
+        const cfgForAdd = await fetchConfig(10000);
+        const parsedAgentsAdd = isRecord(cfgForAdd.parsed.agents) ? cfgForAdd.parsed.agents : {};
+        const parsedDefaultsAdd = isRecord(parsedAgentsAdd.defaults) ? parsedAgentsAdd.defaults : {};
+        const currentFallbacksAdd = Array.isArray(parsedDefaultsAdd.imageFallbacks)
+          ? parsedDefaultsAdd.imageFallbacks.map((f: unknown) => String(f))
+          : [];
+        if (!currentFallbacksAdd.includes(model)) {
+          currentFallbacksAdd.push(model);
+        }
+        await applyConfigPatchWithRetry({
+          agents: { defaults: { imageFallbacks: currentFallbacksAdd } },
+        });
         return NextResponse.json({ ok: true, action, model });
       }
 
@@ -1658,12 +1637,23 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        await runCli(["models", "image-fallbacks", "remove", model], 10000);
+        // Fetch current list, filter, then patch
+        const cfgForRm = await fetchConfig(10000);
+        const parsedAgentsRm = isRecord(cfgForRm.parsed.agents) ? cfgForRm.parsed.agents : {};
+        const parsedDefaultsRm = isRecord(parsedAgentsRm.defaults) ? parsedAgentsRm.defaults : {};
+        const currentFallbacksRm = Array.isArray(parsedDefaultsRm.imageFallbacks)
+          ? parsedDefaultsRm.imageFallbacks.map((f: unknown) => String(f)).filter((f: string) => f !== model)
+          : [];
+        await applyConfigPatchWithRetry({
+          agents: { defaults: { imageFallbacks: currentFallbacksRm } },
+        });
         return NextResponse.json({ ok: true, action, model });
       }
 
       case "clear-image-fallbacks": {
-        await runCli(["models", "image-fallbacks", "clear"], 10000);
+        await applyConfigPatchWithRetry({
+          agents: { defaults: { imageFallbacks: [] } },
+        });
         return NextResponse.json({ ok: true, action });
       }
 
@@ -1675,15 +1665,7 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        try {
-          await applyConfigPatchWithRetry({ models: { mode } });
-        } catch {
-          // Fallback to CLI if gateway config.patch unavailable
-          await runCli(
-            ["config", "set", "--strict-json", "models.mode", JSON.stringify(mode)],
-            10000
-          );
-        }
+        await applyConfigPatchWithRetry({ models: { mode } });
         return NextResponse.json({ ok: true, action, mode });
       }
 
@@ -1701,21 +1683,17 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        // CLI "config set" REPLACES the value at the path, which is correct
-        // for provider config (user may have removed keys from the JSON).
-        // config.patch deep-merges objects and would keep stale keys.
+        // config.patch deep-merges, which keeps stale keys the user removed.
+        // To do a full replacement: read current providers, replace the entry,
+        // and patch the whole providers block.
         const providerConfig = body.config as Record<string, unknown>;
-        const setPath = providerConfigPath(provider);
-        await runCli(
-          [
-            "config",
-            "set",
-            "--strict-json",
-            setPath,
-            JSON.stringify(providerConfig),
-          ],
-          15000
-        );
+        const cfgForSet = await fetchConfig(10000);
+        const parsedModelsSet = isRecord(cfgForSet.parsed.models) ? cfgForSet.parsed.models : {};
+        const currentProviders = isRecord(parsedModelsSet.providers)
+          ? { ...(parsedModelsSet.providers as Record<string, unknown>) }
+          : {};
+        currentProviders[provider] = providerConfig;
+        await applyConfigPatchWithRetry({ models: { providers: currentProviders } });
         return NextResponse.json({ ok: true, action, provider });
       }
 
@@ -1727,10 +1705,14 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        // CLI "config unset" removes the key from disk directly.
-        // config.patch deep-merges objects and cannot delete keys.
-        const removePath = providerConfigPath(provider);
-        await runCli(["config", "unset", removePath], 10000);
+        // Read current providers, remove the entry, and patch the whole block.
+        const cfgForRm = await fetchConfig(10000);
+        const parsedModelsRm = isRecord(cfgForRm.parsed.models) ? cfgForRm.parsed.models : {};
+        const currentProvidersRm = isRecord(parsedModelsRm.providers)
+          ? { ...(parsedModelsRm.providers as Record<string, unknown>) }
+          : {};
+        delete currentProvidersRm[provider];
+        await applyConfigPatchWithRetry({ models: { providers: currentProvidersRm } });
         return NextResponse.json({ ok: true, action, provider });
       }
 
@@ -1743,11 +1725,40 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        const authOrder = await runCliJson<Record<string, unknown>>(
-          ["models", "auth", "order", "get", "--agent", agentId, "--provider", provider],
-          10000
-        );
-        return NextResponse.json({ ok: true, action, authOrder });
+        // Extract auth order from config
+        const cfgAuth = await fetchConfig(10000);
+        const parsedAuth = isRecord(cfgAuth.parsed.auth) ? cfgAuth.parsed.auth : {};
+        const profiles = isRecord(parsedAuth.profiles) ? parsedAuth.profiles : {};
+        // Filter profiles for the given provider
+        const providerProfiles = Object.entries(profiles)
+          .filter(([, profile]) => isRecord(profile) && String(profile.provider || "") === provider)
+          .map(([id, profile]) => ({
+            id,
+            ...(isRecord(profile) ? profile : {}),
+          }));
+        // Check for agent-specific auth order
+        const parsedAgentsAuth = isRecord(cfgAuth.parsed.agents) ? cfgAuth.parsed.agents : {};
+        const agentListAuth = Array.isArray(parsedAgentsAuth.list) ? parsedAgentsAuth.list : [];
+        const agentEntry = agentListAuth.find(
+          (a: unknown) => isRecord(a) && String(a.id || "") === agentId
+        ) as Record<string, unknown> | undefined;
+        const agentAuthOrder = agentEntry && isRecord(agentEntry.authOrder)
+          ? agentEntry.authOrder
+          : {};
+        const orderForProvider = Array.isArray(agentAuthOrder[provider])
+          ? (agentAuthOrder[provider] as string[])
+          : null;
+
+        return NextResponse.json({
+          ok: true,
+          action,
+          authOrder: {
+            agentId,
+            provider,
+            profiles: providerProfiles,
+            order: orderForProvider,
+          },
+        });
       }
 
       case "set-auth-order": {
@@ -1766,31 +1777,29 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        await runCli(
-          [
-            "models",
-            "auth",
-            "order",
-            "set",
-            "--agent",
-            agentId,
-            "--provider",
-            provider,
-            ...profileIds,
-          ],
-          15000
+        // Set auth order on the agent's config entry
+        const cfgForAuthSet = await fetchConfig(10000);
+        const parsedAgentsSet = isRecord(cfgForAuthSet.parsed.agents) ? cfgForAuthSet.parsed.agents : {};
+        const agentListSet = Array.isArray(parsedAgentsSet.list) ? [...parsedAgentsSet.list] : [];
+        const agentIdxSet = agentListSet.findIndex(
+          (a: unknown) => isRecord(a) && String(a.id || "") === agentId
         );
-        const authOrder = await runCliJson<Record<string, unknown>>(
-          ["models", "auth", "order", "get", "--agent", agentId, "--provider", provider],
-          10000
-        ).catch(() => null);
+        if (agentIdxSet >= 0) {
+          const entry = { ...(agentListSet[agentIdxSet] as Record<string, unknown>) };
+          const existingOrder = isRecord(entry.authOrder) ? { ...entry.authOrder } : {};
+          existingOrder[provider] = profileIds;
+          entry.authOrder = existingOrder;
+          agentListSet[agentIdxSet] = entry;
+        } else {
+          agentListSet.push({ id: agentId, authOrder: { [provider]: profileIds } });
+        }
+        await applyConfigPatchWithRetry({ agents: { list: agentListSet } });
         return NextResponse.json({
           ok: true,
           action,
           agentId,
           provider,
           profileIds,
-          authOrder,
         });
       }
 
@@ -1803,24 +1812,22 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        await runCli(
-          [
-            "models",
-            "auth",
-            "order",
-            "clear",
-            "--agent",
-            agentId,
-            "--provider",
-            provider,
-          ],
-          15000
+        // Clear auth order for the provider on this agent
+        const cfgForAuthClear = await fetchConfig(10000);
+        const parsedAgentsClear = isRecord(cfgForAuthClear.parsed.agents) ? cfgForAuthClear.parsed.agents : {};
+        const agentListClear = Array.isArray(parsedAgentsClear.list) ? [...parsedAgentsClear.list] : [];
+        const agentIdxClear = agentListClear.findIndex(
+          (a: unknown) => isRecord(a) && String(a.id || "") === agentId
         );
-        const authOrder = await runCliJson<Record<string, unknown>>(
-          ["models", "auth", "order", "get", "--agent", agentId, "--provider", provider],
-          10000
-        ).catch(() => null);
-        return NextResponse.json({ ok: true, action, agentId, provider, authOrder });
+        if (agentIdxClear >= 0) {
+          const entry = { ...(agentListClear[agentIdxClear] as Record<string, unknown>) };
+          const existingOrder = isRecord(entry.authOrder) ? { ...entry.authOrder } : {};
+          delete existingOrder[provider];
+          entry.authOrder = existingOrder;
+          agentListClear[agentIdxClear] = entry;
+          await applyConfigPatchWithRetry({ agents: { list: agentListClear } });
+        }
+        return NextResponse.json({ ok: true, action, agentId, provider });
       }
 
       case "scan-models": {
@@ -1835,8 +1842,8 @@ export async function POST(request: NextRequest) {
 
       case "auth-provider": {
         // Paste an API key / token for a provider
-        const provider = body.provider as string;
-        const token = body.token as string;
+        const provider = String(body.provider || "").trim().toLowerCase();
+        const token = String(body.token || "").trim();
         if (!provider || !token) {
           return NextResponse.json(
             { error: "Both provider and token are required" },
@@ -1844,23 +1851,35 @@ export async function POST(request: NextRequest) {
           );
         }
         try {
+          const validation = await validateProviderToken(provider, token);
+          if (!validation.ok) {
+            return NextResponse.json(
+              { error: validation.error || `Failed to validate ${provider}` },
+              { status: 400 }
+            );
+          }
+
+          const envKey = PROVIDER_ENV_KEYS[provider];
+          if (envKey) {
+            await applyConfigPatchWithRetry(buildProviderCredentialPatch(provider, token));
+            return NextResponse.json({
+              ok: true,
+              action,
+              provider,
+              method: "env",
+              validated: true,
+            });
+          }
+
           await runCli(
             ["models", "auth", "paste-token", "--provider", provider],
             15000,
-            token // pass token via stdin
+            token
           );
-          return NextResponse.json({ ok: true, action, provider });
-        } catch (pasteErr) {
-          // Fallback: try setting the env var directly via config.patch
-          try {
-            const envKey = PROVIDER_ENV_KEYS[provider];
-            if (envKey) {
-              await applyConfigPatchWithRetry({ env: { [envKey]: token } });
-              return NextResponse.json({ ok: true, action, provider, method: "env" });
-            }
-          } catch { /* ignore */ }
+          return NextResponse.json({ ok: true, action, provider, method: "cli" });
+        } catch (authErr) {
           return NextResponse.json(
-            { error: `Failed to authenticate ${provider}: ${pasteErr}` },
+            { error: `Failed to authenticate ${provider}: ${authErr}` },
             { status: 500 }
           );
         }

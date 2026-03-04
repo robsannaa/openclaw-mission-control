@@ -408,21 +408,19 @@ export function WebSearchView() {
   return (
     <SectionLayout>
       <SectionHeader
-        className="py-2 md:py-3"
         title={
-          <span className="flex items-center gap-2 text-xs">
-            <Search className="h-5 w-5 text-cyan-400" />
+          <span className="inline-flex items-center gap-2">
+            <Search className="h-5 w-5 text-stone-700 dark:text-stone-200" />
             Web Search
           </span>
         }
         description="Configure and test real-time web search providers for your agents."
-        descriptionClassName="text-sm text-muted-foreground"
         meta={null}
         actions={
           <button
             type="button"
             onClick={() => void load()}
-            className="flex items-center gap-1.5 rounded-lg border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/80"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
           >
             {loading ? (
                 <span className="inline-flex items-center gap-0.5">
@@ -438,7 +436,7 @@ export function WebSearchView() {
         }
       />
 
-      <SectionBody width="wide" padding="compact" innerClassName="space-y-4">
+      <SectionBody width="wide" padding="regular" innerClassName="space-y-4">
         {loading && !status ? (
           <LoadingState label="Loading search config..." />
         ) : error && !status ? (

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readdir, stat } from "fs/promises";
-import { runCliJson, runCli, gatewayCall } from "@/lib/openclaw";
+import { readdir, stat, unlink } from "fs/promises";
+import { dirname, resolve } from "path";
+import { runCliJson, gatewayCall } from "@/lib/openclaw";
 import { getOpenClawHome, getDefaultWorkspace } from "@/lib/paths";
+import { buildModelsSummary } from "@/lib/models-summary";
+import { gatewayMemorySearch, gatewayMemoryIndex } from "@/lib/gateway-tools";
 
 export const dynamic = "force-dynamic";
 
@@ -75,6 +78,28 @@ async function getDbFileSize(dbPath: string): Promise<number> {
   }
 }
 
+async function deleteIfExists(path: string): Promise<boolean> {
+  try {
+    await unlink(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveNamespaceDbPath(agentId: string): Promise<string | null> {
+  try {
+    const rows = await runCliJson<MemoryStatus[]>(["memory", "status"], 15000);
+    const match = Array.isArray(rows)
+      ? rows.find((row) => String(row.agentId || "").trim() === agentId)
+      : null;
+    const dbPath = String(match?.status?.dbPath || "").trim();
+    return dbPath || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Returns all root-level .md files in the workspace (excluding MEMORY.md) for memorySearch.extraPaths. */
 async function getWorkspaceReferencePaths(): Promise<string[]> {
   try {
@@ -97,7 +122,7 @@ export async function GET(request: NextRequest) {
 
   try {
     if (scope === "status") {
-      // Get memory status for all agents
+      // Get memory status for all agents (kept as CLI — detailed runtime data)
       let agents: MemoryStatus[] = [];
       let agentsWarning: string | null = null;
       try {
@@ -140,17 +165,15 @@ export async function GET(request: NextRequest) {
         // config not available
       }
 
-      // Get authenticated embedding providers
+      // Get authenticated embedding providers without spawning the CLI.
       let authProviders: string[] = [];
       try {
-        const modelsRes = await runCliJson<Record<string, unknown>>(["models", "status"], 10000);
-        const auth = ((modelsRes as Record<string, unknown>).auth || {}) as Record<string, unknown>;
-        const providersList = (auth.providers || []) as Array<Record<string, unknown>>;
-        authProviders = providersList
-          .filter((p) => p.effective)
-          .map((p) => String(p.provider));
+        const modelsSummary = await buildModelsSummary();
+        authProviders = (modelsSummary.status.auth?.providers || [])
+          .filter((provider) => provider.effective)
+          .map((provider) => String(provider.provider || "").trim())
+          .filter(Boolean);
       } catch {
-        // fallback: try to detect from env keys
         if (process.env.OPENAI_API_KEY) authProviders.push("openai");
         if (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) authProviders.push("google");
       }
@@ -176,15 +199,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ results: [], query });
       }
 
-      const args = ["memory", "search", query.trim()];
-      if (agent) args.push("--agent", agent);
-      args.push("--max-results", maxResults);
-      if (minScore) args.push("--min-score", minScore);
-
-      const data = await runCliJson<{ results: SearchResult[] }>(
-        args,
-        15000
-      );
+      const data = await gatewayMemorySearch({
+        query: query.trim(),
+        agent: agent || undefined,
+        maxResults: parseInt(maxResults, 10) || 10,
+        minScore: minScore || undefined,
+      });
 
       const results = (data.results || []).map((r) => ({
         ...r,
@@ -212,13 +232,61 @@ export async function POST(request: NextRequest) {
       case "reindex": {
         const agent = body.agent as string | undefined;
         const force = body.force as boolean | undefined;
-        const args = ["memory", "index"];
-        if (agent) args.push("--agent", agent);
-        if (force) args.push("--force");
-        args.push("--verbose");
-
-        const output = await runCli(args, 60000);
+        const output = await gatewayMemoryIndex({
+          agent: agent || undefined,
+          force: force || undefined,
+        });
         return NextResponse.json({ ok: true, action, output });
+      }
+
+      case "delete-namespace": {
+        const agent = String(body.agent || "").trim();
+        if (!agent) {
+          return NextResponse.json(
+            { error: "agent required" },
+            { status: 400 }
+          );
+        }
+
+        const dbPath = await resolveNamespaceDbPath(agent);
+        if (!dbPath) {
+          return NextResponse.json(
+            { error: `No memory namespace found for agent ${agent}` },
+            { status: 404 }
+          );
+        }
+
+        const resolvedDbPath = resolve(dbPath);
+        const allowedRoot = resolve(getOpenClawHome(), "memory");
+        const dbDir = dirname(resolvedDbPath);
+        if (dbDir !== allowedRoot) {
+          return NextResponse.json(
+            { error: "Refusing to delete namespace outside the OpenClaw memory directory" },
+            { status: 400 }
+          );
+        }
+
+        const deletedFiles = (
+          await Promise.all([
+            deleteIfExists(resolvedDbPath).then((ok) => (ok ? resolvedDbPath : null)),
+            deleteIfExists(`${resolvedDbPath}-wal`).then((ok) => (ok ? `${resolvedDbPath}-wal` : null)),
+            deleteIfExists(`${resolvedDbPath}-shm`).then((ok) => (ok ? `${resolvedDbPath}-shm` : null)),
+          ])
+        ).filter((value): value is string => Boolean(value));
+
+        if (deletedFiles.length === 0) {
+          return NextResponse.json(
+            { error: `Namespace files were not found for agent ${agent}` },
+            { status: 404 }
+          );
+        }
+
+        return NextResponse.json({
+          ok: true,
+          action,
+          agent,
+          deletedFiles,
+        });
       }
 
       case "setup-memory": {
@@ -271,7 +339,7 @@ export async function POST(request: NextRequest) {
 
         // Trigger initial index (includes extraPaths)
         try {
-          await runCli(["memory", "index"], 30000);
+          await gatewayMemoryIndex();
         } catch {
           // indexing can fail if no memory files yet, that's fine
         }
@@ -385,7 +453,7 @@ export async function POST(request: NextRequest) {
           15000
         );
         try {
-          await runCli(["memory", "index", "--force"], 60000);
+          await gatewayMemoryIndex({ force: true });
         } catch (err) {
           return NextResponse.json(
             { ok: false, action, error: String(err), extraPaths: mergedExtra },

@@ -46,6 +46,16 @@ type TtsProvider = {
   configured: boolean;
   models: string[];
   voices?: string[];
+  supportsApiKey?: boolean;
+  authState?: "ready" | "missing" | "builtin" | "external";
+  authLabel?: string;
+  authSource?: string | null;
+  authNote?: string | null;
+  authLocation?: "config-tts" | "config-env" | "process-env" | "runtime" | "builtin" | "missing" | null;
+  canManageKey?: boolean;
+  canRemoveKey?: boolean;
+  removeMode?: "config-tts" | "config-env" | null;
+  envKey?: string | null;
 };
 
 type TtsProvidersData = {
@@ -58,7 +68,6 @@ type TalkConfig = {
   voiceAliases?: Record<string, string>;
   modelId?: string;
   outputFormat?: string;
-  apiKey?: string;
   interruptOnSpeech?: boolean;
 };
 
@@ -160,15 +169,24 @@ function ProviderCard({
   onSelect,
   loading,
   onTest,
+  onSaveKey,
+  onRemoveKey,
 }: {
   provider: TtsProvider;
   isActive: boolean;
   onSelect: () => void;
   loading: boolean;
   onTest: (provider: string, voice?: string) => void;
+  onSaveKey: (provider: string, apiKey: string) => Promise<boolean>;
+  onRemoveKey: (
+    provider: string,
+    mode: "config-tts" | "config-env",
+    envKey?: string,
+  ) => Promise<boolean>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [selectedVoice, setSelectedVoice] = useState<string>("");
+  const [draftKey, setDraftKey] = useState("");
   const color = PROVIDER_COLORS[provider.id] || "bg-zinc-500/15 text-muted-foreground border-zinc-500/20";
   const icon = PROVIDER_ICONS[provider.id] || "🔈";
   const availableVoices = provider.voices || [];
@@ -176,13 +194,19 @@ function ProviderCard({
     selectedVoice && availableVoices.includes(selectedVoice)
       ? selectedVoice
       : (availableVoices[0] ?? "");
+  const authBadgeClasses =
+    provider.authState === "ready" || provider.authState === "builtin"
+      ? "border border-emerald-500/25 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+      : provider.authState === "external"
+        ? "border border-sky-500/25 bg-sky-500/15 text-sky-700 dark:text-sky-300"
+        : "border border-amber-500/25 bg-amber-500/15 text-amber-700 dark:text-amber-300";
 
   return (
     <div
       className={cn(
         "rounded-xl border transition-all",
         isActive
-          ? "border-violet-500/30 bg-violet-500/10"
+          ? "border-emerald-500/30 bg-emerald-500/10"
           : "border-foreground/10 bg-foreground/5 hover:border-foreground/15"
       )}
     >
@@ -195,13 +219,13 @@ function ProviderCard({
               {provider.name}
             </span>
             {isActive && (
-              <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-violet-300">
+              <span className="rounded-full border border-emerald-500/25 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
                 Active
               </span>
             )}
-            {!provider.configured && (
-              <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-amber-300">
-                No API Key
+            {provider.authLabel && (
+              <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold uppercase tracking-wider", authBadgeClasses)}>
+                {provider.authLabel}
               </span>
             )}
           </div>
@@ -223,7 +247,7 @@ function ProviderCard({
             <button
               onClick={onSelect}
               disabled={loading}
-              className="rounded-lg bg-foreground/10 px-3 py-1.5 text-xs font-medium text-foreground/70 transition-colors hover:bg-foreground/10 hover:text-foreground disabled:opacity-50"
+              className="rounded-lg border border-foreground/10 bg-background px-3 py-1.5 text-xs font-medium text-foreground/70 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
             >
               {loading ? (
                 <span className="inline-flex items-center gap-0.5">
@@ -252,6 +276,65 @@ function ProviderCard({
       {/* Expanded: Models & Voices */}
       {expanded && (
         <div className="border-t border-foreground/5 px-4 py-3 space-y-3">
+          {provider.canManageKey && (
+            <div className="rounded-lg border border-foreground/10 bg-muted/40 p-3">
+              <p className="mb-1.5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Authentication
+              </p>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className={cn("rounded-full px-2 py-0.5 font-semibold uppercase tracking-wider", authBadgeClasses)}>
+                    {provider.authLabel || "Needs TTS key"}
+                  </span>
+                  {provider.authSource && (
+                    <span className="text-muted-foreground">{provider.authSource}</span>
+                  )}
+                </div>
+                {provider.authNote && (
+                  <p className="text-xs text-muted-foreground">{provider.authNote}</p>
+                )}
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <input
+                    type="password"
+                    value={draftKey}
+                    onChange={(e) => setDraftKey(e.target.value)}
+                    placeholder={provider.configured ? "Paste a new API key to replace the current one" : "Paste API key"}
+                    className="flex-1 rounded-md border border-foreground/10 bg-background px-3 py-2 text-xs text-foreground/90 outline-none transition-colors focus:border-emerald-500/40"
+                  />
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const ok = await onSaveKey(provider.id, draftKey);
+                      if (ok) setDraftKey("");
+                    }}
+                    disabled={loading || !draftKey.trim()}
+                    className="rounded-md border border-emerald-500/35 bg-emerald-500/15 px-3 py-2 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-emerald-300"
+                  >
+                    Save key
+                  </button>
+                  {provider.canRemoveKey && provider.removeMode && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!provider.removeMode) return;
+                        void onRemoveKey(provider.id, provider.removeMode, provider.envKey || undefined);
+                      }}
+                      disabled={loading}
+                      className="rounded-md border border-foreground/10 bg-background px-3 py-2 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Remove saved key
+                    </button>
+                  )}
+                </div>
+                {provider.authState === "external" && (
+                  <p className="text-xs text-muted-foreground/80">
+                    This key is managed outside Mission Control. Saving a key here gives TTS its own local configuration.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Models */}
           {provider.models.length > 0 && (
             <div>
@@ -290,7 +373,7 @@ function ProviderCard({
                       onTest(provider.id, voice);
                     }
                   }}
-                  className="flex-1 rounded-md border border-foreground/10 bg-muted px-2.5 py-1.5 text-xs text-foreground/80 outline-none focus:border-violet-500/30"
+                  className="flex-1 rounded-md border border-foreground/10 bg-muted px-2.5 py-1.5 text-xs text-foreground/80 outline-none focus:border-emerald-500/30"
                 >
                   {provider.voices.map((v) => (
                     <option key={v} value={v}>
@@ -1307,6 +1390,76 @@ export function AudioView() {
     [fetchData]
   );
 
+  const saveProviderKey = useCallback(
+    async (provider: string, apiKey: string) => {
+      const trimmed = apiKey.trim();
+      if (!trimmed) {
+        setToast({ message: "Paste an API key first", type: "error" });
+        return false;
+      }
+
+      setActionLoading(true);
+      try {
+        const res = await fetch("/api/audio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "set-provider-key", provider, apiKey: trimmed }),
+        });
+        const json = await res.json();
+        if (json.ok) {
+          setToast({ message: `${provider} key saved`, type: "success" });
+          requestRestart(`${provider} audio credentials were updated.`);
+          await fetchData();
+          return true;
+        }
+        setToast({ message: json.error || "Failed to save key", type: "error" });
+        await fetchData();
+        return false;
+      } catch (err) {
+        setToast({ message: String(err), type: "error" });
+        await fetchData();
+        return false;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [fetchData]
+  );
+
+  const removeProviderKey = useCallback(
+    async (
+      provider: string,
+      mode: "config-tts" | "config-env",
+      envKey?: string,
+    ) => {
+      setActionLoading(true);
+      try {
+        const res = await fetch("/api/audio", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "remove-provider-key", provider, mode, envKey }),
+        });
+        const json = await res.json();
+        if (json.ok) {
+          setToast({ message: `${provider} key removed`, type: "success" });
+          requestRestart(`${provider} audio credentials were removed.`);
+          await fetchData();
+          return true;
+        }
+        setToast({ message: json.error || "Failed to remove key", type: "error" });
+        await fetchData();
+        return false;
+      } catch (err) {
+        setToast({ message: String(err), type: "error" });
+        await fetchData();
+        return false;
+      } finally {
+        setActionLoading(false);
+      }
+    },
+    [fetchData]
+  );
+
   const enableTalkMode = useCallback(async () => {
     setTalkEnabling(true);
     try {
@@ -1356,7 +1509,11 @@ export function AudioView() {
   /* ── Render ────────────── */
 
   if (loading) {
-    return <LoadingState label="Loading audio configuration..." size="lg" />;
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading audio configuration..." size="lg" />
+      </SectionLayout>
+    );
   }
 
   if (!data) {
@@ -1378,21 +1535,21 @@ export function AudioView() {
     <SectionLayout>
       <SectionHeader
         title={
-          <span className="flex items-center gap-2 text-sm">
-            <Volume2 className="h-4 w-4 text-violet-400" />
+          <span className="inline-flex items-center gap-2">
+            <Volume2 className="h-5 w-5 text-stone-700 dark:text-stone-200" />
             Audio & Voice
           </span>
         }
         description="Text-to-speech, Talk Mode, and audio understanding configuration"
-        descriptionClassName="text-sm text-muted-foreground"
         actions={
           <div className="flex items-center gap-2">
             <ApiWarningBadge warning={apiWarning} degraded={apiDegraded} />
             <button
               onClick={fetchData}
-              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-foreground/10 hover:text-foreground/70"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
             >
               <RefreshCw className="h-4 w-4" />
+              Refresh
             </button>
           </div>
         }
@@ -1442,6 +1599,75 @@ export function AudioView() {
           </div>
         </div>
 
+        <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 text-xs font-semibold text-foreground/90">
+                <Radio className="h-4 w-4 text-emerald-500" />
+                Voice Provider
+              </h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Switch the active TTS engine without digging into the provider cards.
+              </p>
+            </div>
+            <span className="rounded-full border border-emerald-500/25 bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+              Active: {providersData.active || status.provider || "none"}
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {providersData.providers.map((provider) => {
+              const canSwitch = provider.configured;
+              const active = providersData.active === provider.id;
+              return (
+                <button
+                  key={provider.id}
+                  type="button"
+                  onClick={() => {
+                    if (!active && canSwitch) {
+                      void setProvider(provider.id);
+                    }
+                  }}
+                  disabled={actionLoading || !canSwitch || active}
+                  className={cn(
+                    "rounded-xl border px-3 py-3 text-left transition-all",
+                    active
+                      ? "border-emerald-500/30 bg-emerald-500/10"
+                      : canSwitch
+                        ? "border-foreground/10 bg-background hover:border-foreground/20 hover:bg-muted"
+                        : "border-foreground/10 bg-foreground/5 opacity-70"
+                  )}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{PROVIDER_ICONS[provider.id] || "🔈"}</span>
+                    <span className="text-sm font-medium text-foreground/90">{provider.name}</span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-2">
+                    {active ? (
+                      <span className="rounded-full border border-emerald-500/25 bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                        Active
+                      </span>
+                    ) : canSwitch ? (
+                      <span className="rounded-full border border-foreground/10 bg-background px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-foreground/70">
+                        Switch
+                      </span>
+                    ) : (
+                      <span className="rounded-full border border-amber-500/25 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                        {provider.authLabel || "Needs key"}
+                      </span>
+                    )}
+                  </div>
+                  {provider.authSource && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {provider.authSource}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Below: edit, test, modify */}
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1">
           Settings & testing
@@ -1464,6 +1690,9 @@ export function AudioView() {
                         ? " Replies are spoken when you sent a voice message."
                         : " Only replies to messages tagged with /tts are spoken."}
                 </p>
+                <p className="mt-2 text-xs font-medium text-foreground/70">
+                  Click a mode below to switch Auto-TTS behavior.
+                </p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {AUTO_MODES.map((m) => (
@@ -1472,20 +1701,32 @@ export function AudioView() {
                     onClick={() => setAutoMode(m.value)}
                     disabled={actionLoading}
                     className={cn(
-                      "rounded-lg border px-3 py-2.5 text-left transition-all",
+                      "rounded-lg border px-3 py-2.5 text-left transition-all cursor-pointer shadow-sm",
                       status.auto === m.value
-                        ? "border-violet-500/30 bg-violet-500/10"
-                        : "border-foreground/10 bg-foreground/5 hover:border-foreground/15"
+                        ? "border-violet-500/35 bg-violet-500/12 ring-1 ring-violet-500/20"
+                        : "border-foreground/10 bg-background hover:border-foreground/20 hover:bg-muted"
                     )}
                   >
-                    <p
-                      className={cn(
-                        "text-xs font-medium",
-                        status.auto === m.value ? "text-violet-300" : "text-foreground/70"
-                      )}
-                    >
-                      {m.label}
-                    </p>
+                    <div className="flex items-center justify-between gap-2">
+                      <p
+                        className={cn(
+                          "text-xs font-medium",
+                          status.auto === m.value ? "text-violet-300" : "text-foreground/80"
+                        )}
+                      >
+                        {m.label}
+                      </p>
+                      <span
+                        className={cn(
+                          "rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                          status.auto === m.value
+                            ? "bg-violet-500/20 text-violet-300"
+                            : "bg-foreground/5 text-muted-foreground"
+                        )}
+                      >
+                        {status.auto === m.value ? "Selected" : "Click to use"}
+                      </span>
+                    </div>
                     <p className="text-xs text-muted-foreground/60 mt-0.5">{m.desc}</p>
                   </button>
                 ))}
@@ -1508,11 +1749,13 @@ export function AudioView() {
                 loading={actionLoading}
                 onTest={(pid, voice) =>
                   testTts(
-                    "Hello! This is a test of the text to speech system.",
+                    `Hello! This is a ${p.name} voice test for the text to speech system.`,
                     pid,
                     voice
                   )
                 }
+                onSaveKey={saveProviderKey}
+                onRemoveKey={removeProviderKey}
               />
             ))}
           </div>

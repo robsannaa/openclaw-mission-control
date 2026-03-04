@@ -367,7 +367,7 @@ function StringField({
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         placeholder={placeholder || ""}
-        className="flex-1 rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none transition-colors focus:border-violet-500/30 disabled:opacity-50 font-mono"
+        className="flex-1 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs text-stone-900 outline-none transition-colors focus:border-emerald-500/30 disabled:opacity-50 font-mono dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#f5f7fa]"
       />
       {sensitive && (
         <button
@@ -400,7 +400,7 @@ function NumberField({
         onChange(v === "" ? undefined : Number(v));
       }}
       disabled={disabled}
-      className="w-full rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none transition-colors focus:border-violet-500/30 disabled:opacity-50 font-mono"
+      className="w-full rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs text-stone-900 outline-none transition-colors focus:border-emerald-500/30 disabled:opacity-50 font-mono dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#f5f7fa]"
     />
   );
 }
@@ -459,8 +459,8 @@ function EnumField({
             className={cn(
               "rounded border px-2 py-1 text-xs font-medium transition-all",
               value === opt
-                ? "border-violet-500/40 bg-violet-500/15 text-violet-300"
-                : "border-foreground/10 bg-foreground/5 text-muted-foreground hover:border-foreground/15 hover:text-foreground/70"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                : "border-stone-200 bg-stone-50 text-stone-500 hover:border-stone-300 hover:text-stone-900 dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#a8b0ba] dark:hover:text-[#f5f7fa]"
             )}
           >
             {opt}
@@ -535,7 +535,7 @@ function ArrayField({
             value={String(item)}
             onChange={(e) => updateItem(idx, e.target.value)}
             disabled={disabled}
-            className="flex-1 rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30"
+            className="flex-1 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs text-stone-900 outline-none font-mono focus:border-emerald-500/30 dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#f5f7fa]"
           />
           {!disabled && (
             <button
@@ -552,7 +552,7 @@ function ArrayField({
         <button
           type="button"
           onClick={addItem}
-          className="flex items-center gap-1 rounded-lg border border-dashed border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-violet-500/30 hover:text-violet-400"
+          className="flex items-center gap-1 rounded-lg border border-dashed border-stone-200 px-3 py-1.5 text-xs text-stone-500 transition-colors hover:border-emerald-500/30 hover:text-emerald-700 dark:border-[#2c343d] dark:text-[#a8b0ba] dark:hover:text-emerald-300"
         >
           <Plus className="h-3 w-3" />
           Add item
@@ -661,7 +661,7 @@ function ModelPrimaryFallbacksEditor({
             value={primary}
             onChange={(e) => setPrimary(e.target.value)}
             disabled={disabled}
-            className="rounded border border-foreground/10 bg-muted px-2 py-1 text-xs text-foreground/90 outline-none focus:border-violet-500/30 font-mono min-w-44"
+            className="rounded border border-stone-200 bg-stone-50 px-2 py-1 text-xs text-stone-900 outline-none focus:border-emerald-500/30 font-mono min-w-44 dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#f5f7fa]"
           >
             {options.length === 0 && (
               <option value="">Select or type below…</option>
@@ -682,7 +682,7 @@ function ModelPrimaryFallbacksEditor({
             }}
             disabled={disabled}
             placeholder="Or type provider/model…"
-            className="rounded border border-foreground/10 bg-muted px-2 py-1 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30 w-56"
+            className="rounded border border-stone-200 bg-stone-50 px-2 py-1 text-xs text-stone-900 outline-none font-mono focus:border-emerald-500/30 w-56 dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#f5f7fa]"
           />
         </div>
       </div>
@@ -736,7 +736,7 @@ function ModelPrimaryFallbacksEditor({
             <button
               type="button"
               onClick={addFallback}
-              className="flex items-center gap-1 rounded border border-dashed border-foreground/10 px-2 py-1.5 text-xs text-muted-foreground transition-colors hover:border-violet-500/30 hover:text-violet-400"
+              className="flex items-center gap-1 rounded border border-dashed border-stone-200 px-2 py-1.5 text-xs text-stone-500 transition-colors hover:border-emerald-500/30 hover:text-emerald-700 dark:border-[#2c343d] dark:text-[#a8b0ba] dark:hover:text-emerald-300"
             >
               <Plus className="h-3 w-3" />
               Add fallback
@@ -784,7 +784,7 @@ function GenericValueEditor({
         value=""
         onChange={(e) => onChange(e.target.value || undefined)}
         disabled={disabled}
-        className="flex-1 min-w-0 rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30"
+        className="flex-1 min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs text-stone-900 outline-none font-mono focus:border-emerald-500/30 dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#f5f7fa]"
       />
     );
   }
@@ -795,7 +795,7 @@ function GenericValueEditor({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
-        className="flex-1 min-w-0 rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30"
+        className="flex-1 min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs text-stone-900 outline-none font-mono focus:border-emerald-500/30 dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#f5f7fa]"
       />
     );
   }
@@ -809,7 +809,7 @@ function GenericValueEditor({
           onChange(v === "" ? undefined : Number(v));
         }}
         disabled={disabled}
-        className="flex-1 min-w-0 rounded-lg border border-foreground/10 bg-muted px-3 py-1.5 text-xs text-foreground/90 outline-none font-mono focus:border-violet-500/30"
+        className="flex-1 min-w-0 rounded-lg border border-stone-200 bg-stone-50 px-3 py-1.5 text-xs text-stone-900 outline-none font-mono focus:border-emerald-500/30 dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#f5f7fa]"
       />
     );
   }
@@ -911,7 +911,7 @@ function GenericObjectEditor({
               onChange={(e) => updateKey(key, e.target.value)}
               disabled={disabled}
               placeholder="key"
-              className="w-28 shrink-0 rounded border border-foreground/10 bg-muted/80 px-2 py-1.5 text-xs font-mono text-foreground/90 outline-none focus:border-violet-500/30"
+              className="w-28 shrink-0 rounded border border-stone-200 bg-stone-50 px-2 py-1.5 text-xs font-mono text-stone-900 outline-none focus:border-emerald-500/30 dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#f5f7fa]"
             />
             <span className="text-muted-foreground/60 pt-1.5">=</span>
             <div className="flex-1 min-w-36">
@@ -938,7 +938,7 @@ function GenericObjectEditor({
         <button
           type="button"
           onClick={addField}
-          className="flex items-center gap-1.5 rounded-lg border border-dashed border-foreground/15 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-violet-500/30 hover:text-violet-400"
+          className="flex items-center gap-1.5 rounded-lg border border-dashed border-stone-200 px-3 py-1.5 text-xs text-stone-500 transition-colors hover:border-emerald-500/30 hover:text-emerald-700 dark:border-[#2c343d] dark:text-[#a8b0ba] dark:hover:text-emerald-300"
         >
           <Plus className="h-3.5 w-3.5" />
           Add field
@@ -1018,7 +1018,7 @@ function GenericArrayEditor({
               key={t}
               type="button"
               onClick={() => addItem(t)}
-              className="rounded border border-foreground/10 px-2 py-1 text-xs font-medium text-muted-foreground hover:border-violet-500/30 hover:text-violet-400 transition-colors"
+              className="rounded border border-stone-200 px-2 py-1 text-xs font-medium text-stone-500 hover:border-emerald-500/30 hover:text-emerald-700 transition-colors dark:border-[#2c343d] dark:text-[#a8b0ba] dark:hover:text-emerald-300"
             >
               {t}
             </button>
@@ -1093,14 +1093,14 @@ function SectionFields({
   return (
     <div className="space-y-4">
       {agentsDefaultsModel != null && onJumpToSection && (
-        <div className="rounded-lg border border-violet-500/20 bg-violet-500/10 px-3 py-2.5">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 dark:border-emerald-500/20 dark:bg-emerald-500/10">
           <p className="text-xs text-foreground/80">
             Default model (primary + fallbacks) is configured under <strong>Agents → defaults → model</strong>.
           </p>
           <button
             type="button"
             onClick={() => onJumpToSection("agents")}
-            className="mt-1.5 text-xs font-medium text-violet-400 hover:text-violet-300 transition-colors"
+            className="mt-1.5 text-xs font-medium text-emerald-700 hover:text-emerald-800 transition-colors dark:text-emerald-300 dark:hover:text-emerald-200"
           >
             Go to Agents →
           </button>
@@ -1741,7 +1741,11 @@ export function ConfigEditor() {
   /* ── Loading state ─────────────── */
 
   if (loading) {
-    return <LoadingState label="Loading configuration..." size="lg" />;
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading configuration..." size="lg" />
+      </SectionLayout>
+    );
   }
 
   if (!rawConfig) {
@@ -1777,7 +1781,7 @@ export function ConfigEditor() {
       <SectionHeader
         title={
           <span className="flex items-center gap-2 text-xs">
-            <Settings2 className="h-5 w-5 text-violet-400" />
+            <Settings2 className="h-5 w-5 text-stone-700 dark:text-[#d6dce3]" />
             Configuration
           </span>
         }
@@ -1786,7 +1790,7 @@ export function ConfigEditor() {
         actions={
           <div className="flex items-center gap-2">
             {/* Search */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-muted/50 px-2.5 py-1.5">
+            <div className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 dark:border-[#2c343d] dark:bg-[#171a1d]">
               <Search className="h-3.5 w-3.5 text-muted-foreground/60" />
               <input
                 value={search}
@@ -1821,8 +1825,8 @@ export function ConfigEditor() {
               className={cn(
                 "flex items-center gap-1 rounded border px-2 py-1 text-xs transition-colors",
                 showRawJson
-                  ? "border-violet-500/30 bg-violet-500/10 text-violet-400"
-                  : "border-foreground/10 text-muted-foreground hover:bg-muted/80"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : "border-stone-200 bg-white text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:border-[#2c343d] dark:bg-[#171a1d] dark:text-[#a8b0ba] dark:hover:bg-[#20252a] dark:hover:text-[#f5f7fa]"
               )}
             >
               <Code className="h-3 w-3" />
@@ -1834,7 +1838,7 @@ export function ConfigEditor() {
               onClick={() => {
                 void fetchConfig();
               }}
-              className="rounded-lg border border-foreground/10 p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground/70"
+              className="rounded-lg border border-stone-200 bg-white p-1.5 text-stone-500 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-[#2c343d] dark:bg-[#171a1d] dark:text-[#a8b0ba] dark:hover:bg-[#20252a] dark:hover:text-[#f5f7fa]"
             >
               <RefreshCw className="h-3.5 w-3.5" />
             </button>
@@ -1863,9 +1867,9 @@ export function ConfigEditor() {
 
       {/* Unsaved changes bar */}
       {hasDirty && (
-        <div className="shrink-0 flex items-center gap-3 border-b border-violet-500/20 bg-violet-500/10 px-4 md:px-6 py-2.5">
-          <Info className="h-4 w-4 text-violet-400 shrink-0" />
-          <p className="flex-1 text-xs text-violet-300">
+        <div className="shrink-0 flex items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2.5 md:px-6 dark:border-amber-500/20 dark:bg-amber-500/10">
+          <Info className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-300" />
+          <p className="flex-1 text-xs text-amber-800 dark:text-amber-200">
             You have unsaved changes in{" "}
             <strong>
               {[rawViewDirty && "raw JSON", ...Array.from(dirtyPaths)].filter(Boolean).join(", ")}
@@ -1996,7 +2000,7 @@ export function ConfigEditor() {
                                 className={cn(
                                   "w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs transition-colors",
                                   isDirty
-                                    ? "text-violet-400 bg-violet-500/10"
+                                    ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
                                     : "text-foreground/80 hover:bg-foreground/10 hover:text-foreground"
                                 )}
                               >
@@ -2046,8 +2050,8 @@ export function ConfigEditor() {
                           className={cn(
                             "rounded-xl border transition-colors",
                             isDirty
-                              ? "border-violet-500/30 bg-violet-500/5"
-                              : "border-foreground/10 bg-foreground/5"
+                              ? "border-emerald-500/30 bg-emerald-500/10"
+                              : "border-stone-200 bg-white dark:border-[#2c343d] dark:bg-[#171a1d]"
                           )}
                         >
                           <div
@@ -2066,7 +2070,7 @@ export function ConfigEditor() {
                                   {label}
                                 </span>
                                 {isDirty && (
-                                  <span className="rounded-full bg-violet-500/20 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-violet-300">
+                                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
                                     Modified
                                   </span>
                                 )}
@@ -2116,7 +2120,7 @@ export function ConfigEditor() {
             <p className="text-sm">No settings match &ldquo;{search}&rdquo;</p>
             <button
               onClick={() => setSearch("")}
-              className="mt-2 text-xs text-violet-400 hover:text-violet-300"
+              className="mt-2 text-xs text-emerald-700 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-200"
             >
               Clear search
             </button>

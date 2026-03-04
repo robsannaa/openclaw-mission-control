@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runCliJson, runCli } from "@/lib/openclaw";
+import { gatewayCall, runCliJson, runCli } from "@/lib/openclaw";
 import { getOpenClawHome } from "@/lib/paths";
 import { readdir, readFile } from "fs/promises";
 import { join } from "path";
@@ -94,13 +94,13 @@ export async function GET() {
 
   // 2. Device pairing requests
   try {
-    const data = await runCliJson<{
+    const data = await gatewayCall<{
       pending: DeviceRequest[];
       paired: unknown[];
-    }>(["devices", "list"], 8000);
+    }>("device.pair.list", {}, 8000);
     deviceRequests.push(...(data.pending || []));
   } catch {
-    // devices command may fail
+    // gateway may be unavailable
   }
 
   return NextResponse.json({
@@ -142,11 +142,12 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        const output = await runCli(
-          ["devices", "approve", requestId],
-          10000
+        const result = await gatewayCall<Record<string, unknown>>(
+          "device.pair.approve",
+          { requestId },
+          10000,
         );
-        return NextResponse.json({ ok: true, action, requestId, output });
+        return NextResponse.json({ ok: true, action, requestId, result });
       }
 
       case "reject-device": {
@@ -157,11 +158,12 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
-        const output = await runCli(
-          ["devices", "reject", requestId],
-          10000
+        const result = await gatewayCall<Record<string, unknown>>(
+          "device.pair.reject",
+          { requestId },
+          10000,
         );
-        return NextResponse.json({ ok: true, action, requestId, output });
+        return NextResponse.json({ ok: true, action, requestId, result });
       }
 
       default:

@@ -690,7 +690,7 @@ export function SecurityView({ initialTab }: { initialTab?: SecurityTab } = {}) 
   return (
     <SectionLayout>
       <SectionHeader
-        title={<span className="font-serif font-bold text-base">Security</span>}
+        title="Security"
         description="Audit, configure, and monitor every security-relevant setting across your OpenClaw deployment."
         actions={
           <div className="flex items-center gap-2">
@@ -702,7 +702,7 @@ export function SecurityView({ initialTab }: { initialTab?: SecurityTab } = {}) 
                 void loadConfig();
               }}
               disabled={loading || mutating}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs font-medium text-foreground/80 transition-colors hover:bg-muted/80 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
             >
               {loading || mutating ? <Dots /> : <RefreshCw className="h-3.5 w-3.5" />}
               Refresh

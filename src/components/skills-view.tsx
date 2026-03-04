@@ -738,7 +738,13 @@ function SkillDetailPanel({ name, onBack, onAction }: { name: string; onBack: ()
     } catch { /* ignore */ }
   }, [name, onAction]);
 
-  if (loading) return <LoadingState label="Loading skill..." />;
+  if (loading) {
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading skill..." />
+      </SectionLayout>
+    );
+  }
   if (!detail) return <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground/60">Skill not found</div>;
 
   const missing = hasMissing(detail.missing);
@@ -1541,7 +1547,13 @@ export function SkillsView({ initialSkillName = null }: { initialSkillName?: str
     );
   }
 
-  if (loading) return <LoadingState label="Loading skills..." size="lg" />;
+  if (loading) {
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading skills..." size="lg" />
+      </SectionLayout>
+    );
+  }
 
   const workspaceCount = skills.filter((s) => getSkillOrigin(s) === "workspace").length;
 

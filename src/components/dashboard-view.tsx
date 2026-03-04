@@ -10,6 +10,7 @@ import {
   Radio,
   Smartphone,
   Wrench,
+  Users2,
   AlertCircle,
   CheckCircle,
   Zap,
@@ -33,7 +34,7 @@ import {
   Stethoscope,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SectionBody, SectionLayout } from "@/components/section-layout";
+import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 import { getTimeFormatSnapshot, withTimeFormat } from "@/lib/time-format-preference";
 import { useGatewayStatusStore } from "@/lib/gateway-status-store";
 
@@ -388,8 +389,8 @@ function MemoryCompositionBar({
 function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; connected: boolean }) {
   if (!stats) {
     return (
-      <div className="glass rounded-lg p-6">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground/60">
+      <div className="rounded-xl border border-stone-200 bg-white p-6 shadow-sm dark:border-[#2c343d] dark:bg-[#171a1d]">
+        <div className="flex items-center gap-2 text-xs text-stone-500 dark:text-[#a8b0ba]">
           <Gauge className="h-4 w-4 animate-pulse" />
           Connecting to system stats stream...
         </div>
@@ -431,7 +432,7 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
       </div>
 
       {/* Gauges row */}
-      <div className="glass grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 rounded-lg px-4 py-5">
+      <div className="grid grid-cols-1 gap-4 rounded-xl border border-stone-200 bg-white px-4 py-5 shadow-sm dark:border-[#2c343d] dark:bg-[#171a1d] sm:grid-cols-2 lg:grid-cols-3">
         <div className="relative flex justify-center">
           <RadialGauge value={stats.cpu.usage} max={100} label="CPU" unit={`${stats.cpu.cores} cores`} color={cpuColor} />
         </div>
@@ -446,10 +447,10 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
       {/* Detail cards grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {/* CPU details */}
-        <div className="glass-subtle rounded-lg p-3 space-y-2">
+        <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-sm dark:border-[#2c343d] dark:bg-[#15191d] space-y-2">
           <div className="flex items-center gap-2">
-            <Cpu className="h-3.5 w-3.5 text-emerald-400" />
-            <span className="text-xs font-sans font-semibold text-foreground/70">CPU</span>
+            <Cpu className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-xs font-sans font-semibold text-stone-700 dark:text-[#d6dce3]">CPU</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
@@ -474,10 +475,10 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* Memory details */}
-        <div className="glass-subtle rounded-lg p-3 space-y-2">
+        <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-sm dark:border-[#2c343d] dark:bg-[#15191d] space-y-2">
           <div className="flex items-center gap-2">
-            <MemoryStick className="h-3.5 w-3.5 text-violet-400" />
-            <span className="text-xs font-sans font-semibold text-foreground/70">
+            <MemoryStick className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+            <span className="text-xs font-sans font-semibold text-stone-700 dark:text-[#d6dce3]">
               Memory
               {memorySourceLabel}
             </span>
@@ -546,10 +547,10 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* Disk details */}
-        <div className="glass-subtle rounded-lg p-3 space-y-2">
+        <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-sm dark:border-[#2c343d] dark:bg-[#15191d] space-y-2">
           <div className="flex items-center gap-2">
-            <HardDrive className="h-3.5 w-3.5 text-blue-400" />
-            <span className="text-xs font-sans font-semibold text-foreground/70">Disk</span>
+            <HardDrive className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400" />
+            <span className="text-xs font-sans font-semibold text-stone-700 dark:text-[#d6dce3]">Disk</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
@@ -575,10 +576,10 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
         </div>
 
         {/* System info */}
-        <div className="glass-subtle rounded-lg p-3 space-y-2">
+        <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-sm dark:border-[#2c343d] dark:bg-[#15191d] space-y-2">
           <div className="flex items-center gap-2">
-            <Timer className="h-3.5 w-3.5 text-amber-400" />
-            <span className="text-xs font-sans font-semibold text-foreground/70">System</span>
+            <Timer className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+            <span className="text-xs font-sans font-semibold text-stone-700 dark:text-[#d6dce3]">System</span>
           </div>
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs">
@@ -604,16 +605,16 @@ function SystemStatsPanel({ stats, connected }: { stats: SystemStats | null; con
       </div>
 
       {/* OpenClaw storage stats */}
-      <div className="glass-subtle rounded-lg p-3 space-y-2">
+      <div className="rounded-xl border border-stone-200 bg-stone-50 p-3 shadow-sm dark:border-[#2c343d] dark:bg-[#15191d] space-y-2">
         <div className="flex items-center gap-2">
-          <Database className="h-3.5 w-3.5 text-pink-400" />
-          <span className="text-xs font-sans font-semibold text-foreground/70">OpenClaw Storage</span>
+          <Database className="h-3.5 w-3.5 text-stone-700 dark:text-[#d6dce3]" />
+          <span className="text-xs font-sans font-semibold text-stone-700 dark:text-[#d6dce3]">OpenClaw Storage</span>
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <OcStatMini icon={Folder} label="Workspace" value={formatBytesCompact(stats.openclaw.workspaceSizeBytes)} color="text-violet-400" />
-          <OcStatMini icon={FileText} label="Files" value={String(stats.openclaw.totalWorkspaceFiles)} color="text-blue-400" />
-          <OcStatMini icon={Database} label="Sessions" value={String(stats.openclaw.activeSessions)} sub={formatBytesCompact(stats.openclaw.sessionsSizeBytes)} color="text-emerald-400" />
-          <OcStatMini icon={FileText} label="Today's Log" value={formatBytesCompact(stats.openclaw.logSizeBytes)} color="text-amber-400" />
+          <OcStatMini icon={Folder} label="Workspace" value={formatBytesCompact(stats.openclaw.workspaceSizeBytes)} color="text-stone-700 dark:text-stone-300" />
+          <OcStatMini icon={FileText} label="Files" value={String(stats.openclaw.totalWorkspaceFiles)} color="text-sky-600 dark:text-sky-400" />
+          <OcStatMini icon={Database} label="Sessions" value={String(stats.openclaw.activeSessions)} sub={formatBytesCompact(stats.openclaw.sessionsSizeBytes)} color="text-emerald-600 dark:text-emerald-400" />
+          <OcStatMini icon={FileText} label="Today's Log" value={formatBytesCompact(stats.openclaw.logSizeBytes)} color="text-amber-600 dark:text-amber-400" />
         </div>
       </div>
     </div>
@@ -854,42 +855,37 @@ export function DashboardView() {
 
   return (
     <SectionLayout>
-      {/* ── Gateway status bar ────────────────────── */}
-      <div className="shrink-0 border-b border-border bg-card px-4 py-2.5 md:px-6">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative flex items-center gap-1.5">
-              <span className={cn("inline-flex h-2 w-2 rounded-full", isOnline ? "bg-emerald-500" : "bg-red-500")} />
-              <span className="text-xs font-medium text-foreground/90">
-                Gateway {isOnline ? "Online" : "Offline"}
-              </span>
-            </div>
-            <span className="text-xs text-muted-foreground/50">
+      <SectionHeader
+        title="Dashboard"
+        description="Live overview of gateway health, agent activity, cron jobs, and system status."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-medium text-stone-600 dark:bg-stone-800 dark:text-stone-300">
               v{gw.version} · port {gw.port} · {gw.latencyMs}ms
             </span>
+            <span className="text-xs text-stone-400 dark:text-stone-500">
+              {Math.floor((now - lastRefresh) / 1000)}s ago · auto 5s
+            </span>
           </div>
-          <span className="text-xs text-muted-foreground/40">
-            {Math.floor((now - lastRefresh) / 1000)}s ago · auto 5s
-          </span>
-        </div>
-      </div>
+        }
+      />
 
       <SectionBody width="content" padding="regular" innerClassName="space-y-6">
         <div className="space-y-6">
           {/* ── Onboarding banner ──────────────────────── */}
           {onboardStatus && !onboardStatus.configured && !onboardDismissed && (
-            <div className="glass rounded-lg border-violet-500/20 bg-violet-500/10 dark:bg-violet-500/5 p-4">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-500/20 dark:bg-emerald-500/10">
               <div className="flex items-start gap-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/15">
-                  <Rocket className="h-4.5 w-4.5 text-violet-400" />
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-500/15">
+                  <Rocket className="h-4.5 w-4.5 text-emerald-700 dark:text-emerald-300" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <h3 className="text-xs font-sans font-semibold text-foreground/90">
+                  <h3 className="text-sm font-semibold text-stone-900 dark:text-stone-100">
                     {onboardStatus.installed
                       ? "Set up your agent"
                       : "Install OpenClaw to get started"}
                   </h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground/70">
+                  <p className="mt-0.5 text-sm text-stone-600 dark:text-stone-300">
                     {onboardStatus.installed
                       ? "Configure your AI model and API key to get your agent running."
                       : "OpenClaw needs to be installed before Mission Control can work."}
@@ -898,7 +894,7 @@ export function DashboardView() {
                 <div className="flex shrink-0 items-center gap-2">
                   <Link
                     href="/onboard"
-                    className="flex items-center gap-1 rounded-lg bg-primary text-primary-foreground px-3 py-1.5 text-xs font-medium transition-colors hover:bg-primary/90"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-stone-700 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-300"
                   >
                     {onboardStatus.installed ? "Set up" : "Install"}
                     <ArrowRight className="h-3 w-3" />
@@ -922,25 +918,25 @@ export function DashboardView() {
           {/* ── Stat cards ─────────────────────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <StatCard
-              icon={Bot}
+              icon={Users2}
               value={live.agents.length}
               label="Agents"
-              color="bg-violet-500/15 text-violet-400"
+              iconClassName="text-stone-300 dark:text-[#66717d]"
             />
             <StatCard
               icon={Activity}
               value={formatTokens(live.agents.reduce((s, a) => s + a.totalTokens, 0))}
               label="Tokens Used"
-              color="bg-blue-500/15 text-blue-400"
+              iconClassName="text-stone-300 dark:text-[#66717d]"
             />
             <StatCard
               icon={Clock}
               value={`${live.cron.stats.ok}/${live.cron.stats.total}`}
               label="Cron OK"
-              color={
+              iconClassName={
                 live.cron.stats.error > 0
-                  ? "bg-amber-500/15 text-amber-400"
-                  : "bg-emerald-500/15 text-emerald-400"
+                  ? "text-amber-400 dark:text-amber-400"
+                  : "text-stone-300 dark:text-[#66717d]"
               }
               alert={live.cron.stats.error > 0 ? `${live.cron.stats.error} error` : undefined}
               alertHref={live.cron.stats.error > 0 ? "/cron?show=errors" : undefined}
@@ -950,55 +946,55 @@ export function DashboardView() {
               icon={Smartphone}
               value={system?.stats.totalDevices || 0}
               label="Devices"
-              color="bg-cyan-500/15 text-cyan-400"
+              iconClassName="text-stone-300 dark:text-[#66717d]"
             />
             <StatCard
               icon={Wrench}
               value={system?.stats.totalSkills || 0}
               label="Skills"
-              color="bg-pink-500/15 text-pink-400"
+              iconClassName="text-stone-300 dark:text-[#66717d]"
             />
           </div>
 
           {/* ── Access & pairing ─── */}
-          <div className="glass-subtle rounded-lg p-4">
+          <div className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-[#2c343d] dark:bg-[#171a1d]">
             <h2 className="mb-3 flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground">
               <KeyRound className="h-3.5 w-3.5" /> Access & pairing
             </h2>
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <p className="text-xs font-medium text-foreground/80">Gateway auth</p>
-                <p className="mt-1 text-xs text-muted-foreground/70">
+                <p className="text-xs font-medium text-stone-900 dark:text-[#f5f7fa]">Gateway auth</p>
+                <p className="mt-1 text-xs text-stone-600 dark:text-[#a8b0ba]">
                   {system?.gateway?.authMode
                     ? `Mode: ${system.gateway.authMode}${system.gateway.tokenConfigured ? " · Token set" : ""}`
                     : "Not configured (open access)"}
                   {system?.gateway?.allowTailscale && " · Tailscale allowed"}
                 </p>
-                <p className="mt-2 text-xs text-muted-foreground/50">
+                <p className="mt-2 text-xs leading-5 text-stone-500 dark:text-[#8e98a3]">
                   Set or edit the token in{" "}
-                  <Link href="/config" className="text-violet-400 hover:underline">
+                  <Link href="/config" className="text-emerald-700 hover:underline dark:text-emerald-300">
                     Config
                   </Link>{" "}
-                  under <code className="rounded bg-foreground/[0.06] px-1">gateway.auth.token</code>. The UI shows it redacted; to view or copy the full token, run on the gateway host: <code className="rounded bg-foreground/[0.06] px-1">openclaw config get gateway.auth.token</code>. For remote access, paste the token when the dashboard prompts.{" "}
+                  under <code className="rounded bg-stone-100 px-1 text-stone-700 dark:bg-[#20252a] dark:text-[#d6dce3]">gateway.auth.token</code>. The UI shows it redacted; to view or copy the full token, run on the gateway host: <code className="rounded bg-stone-100 px-1 text-stone-700 dark:bg-[#20252a] dark:text-[#d6dce3]">openclaw config get gateway.auth.token</code>. For remote access, paste the token when the dashboard prompts.{" "}
                   <a
                     href="https://docs.openclaw.ai/web/dashboard"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-violet-400 hover:underline"
+                    className="text-emerald-700 hover:underline dark:text-emerald-300"
                   >
                     Docs
                   </a>
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium text-foreground/80">Pairing requests</p>
-                <p className="mt-1 text-xs text-muted-foreground/70">
+                <p className="text-xs font-medium text-stone-900 dark:text-[#f5f7fa]">Pairing requests</p>
+                <p className="mt-1 text-xs text-stone-600 dark:text-[#a8b0ba]">
                   {(pairingSummary?.total ?? 0) > 0
                     ? `${pairingSummary?.total ?? 0} pending (device + DM) — use the bell in the header to approve or reject.`
                     : "No pending requests. New device or DM pairing will show in the header bell."}
                 </p>
                 {(pairingSummary?.total ?? 0) > 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground/50">
+                  <p className="mt-2 text-xs text-stone-500 dark:text-[#8e98a3]">
                     Click the <Bell className="inline h-3 w-3" /> icon in the top bar to manage.
                   </p>
                 )}
@@ -1036,11 +1032,11 @@ export function DashboardView() {
                       badgeLabel: "Warning",
                     },
                     info: {
-                      border: "border-blue-500/15",
-                      bg: "bg-blue-500/5",
+                      border: "border-sky-200 dark:border-sky-500/20",
+                      bg: "bg-sky-50 dark:bg-sky-500/10",
                       icon: Info,
-                      iconColor: "text-blue-400",
-                      badge: "bg-blue-500/10 text-blue-400",
+                      iconColor: "text-sky-600 dark:text-sky-300",
+                      badge: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
                       badgeLabel: "Info",
                     },
                   }[issue.severity];
@@ -1049,7 +1045,7 @@ export function DashboardView() {
                     <div
                       key={issue.id}
                       className={cn(
-                        "glass-subtle flex items-start gap-3 rounded-lg p-4",
+                        "flex items-start gap-3 rounded-xl border p-4 shadow-sm",
                         severityCfg.border,
                         severityCfg.bg
                       )}
@@ -1071,7 +1067,7 @@ export function DashboardView() {
                       {issue.fixLabel && issue.fixHref && (
                         <a
                           href={issue.fixHref}
-                          className="flex shrink-0 items-center gap-1 rounded-lg border border-foreground/10 bg-foreground/[0.04] px-2.5 py-1.5 text-xs font-medium text-foreground/70 transition-all duration-200 hover:bg-foreground/[0.08] hover:text-foreground"
+                          className="flex shrink-0 items-center gap-1 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-[#2c343d] dark:bg-[#20252a] dark:text-[#d6dce3] dark:hover:bg-[#232a31] dark:hover:text-[#f5f7fa]"
                         >
                           {issue.fixLabel}
                           <ArrowRight className="h-3 w-3" />
@@ -1086,16 +1082,16 @@ export function DashboardView() {
 
           {/* ── Getting Started ────────── */}
           {isFreshSetup && issues.length === 0 && (
-            <div className="glass rounded-lg border-violet-500/20 bg-violet-500/10 dark:bg-violet-500/5 p-5">
+            <div className="rounded-xl border border-stone-200 bg-white p-5 dark:border-stone-700 dark:bg-stone-800">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-violet-500/15">
-                  <Rocket className="h-5 w-5 text-violet-400" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-100 dark:bg-emerald-500/15">
+                  <Rocket className="h-5 w-5 text-emerald-700 dark:text-emerald-300" />
                 </div>
                 <div>
-                  <h3 className="text-xs font-sans font-semibold text-foreground/90">
+                  <h3 className="text-sm font-semibold text-stone-900 dark:text-stone-100">
                     Welcome to Mission Control
                   </h3>
-                  <p className="mt-1 text-xs text-muted-foreground/60">
+                  <p className="mt-1 text-sm text-stone-600 dark:text-stone-300">
                     Your OpenClaw agent is running. Here are some things to try:
                   </p>
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1108,7 +1104,7 @@ export function DashboardView() {
                       <a
                         key={item.href}
                         href={item.href}
-                        className="glass-subtle flex items-center gap-2.5 rounded-lg px-3 py-2.5 transition-all duration-200 hover:border-violet-500/20 hover:bg-violet-500/5"
+                        className="flex items-center gap-2.5 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2.5 transition-colors hover:border-stone-300 hover:bg-stone-100 dark:border-stone-700 dark:bg-stone-900/60 dark:hover:bg-stone-700"
                       >
                         <div className="min-w-0 flex-1">
                           <p className="text-xs font-medium text-foreground/80">{item.label}</p>
@@ -1132,9 +1128,9 @@ export function DashboardView() {
               </h2>
               <div className="space-y-2.5">
                 {live.agents.map((agent) => (
-                  <div key={agent.id} className="glass-glow rounded-lg p-4">
+                  <div key={agent.id} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-[#2c343d] dark:bg-[#171a1d]">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-500/10 text-base">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-stone-100 text-base dark:bg-[#20252a]">
                         {agent.emoji || (agent.id === "main" ? "🦞" : "🤖")}
                       </div>
                       <div className="flex-1">
@@ -1160,7 +1156,7 @@ export function DashboardView() {
                       </div>
                       <div className="mt-1 h-1.5 rounded-full bg-foreground/[0.04]">
                         <div
-                          className="h-1.5 rounded-full bg-violet-500/60 transition-all duration-1000"
+                          className="h-1.5 rounded-full bg-emerald-500/70 transition-all duration-1000"
                           style={{
                             width: `${Math.min(100, (agent.totalTokens / 200000) * 100)}%`,
                           }}
@@ -1181,10 +1177,10 @@ export function DashboardView() {
                     {system.models.map((m) => (
                       <span
                         key={m.id}
-                        className="rounded-lg border border-foreground/[0.06] bg-foreground/[0.03] px-2 py-1 text-xs text-muted-foreground"
+                        className="rounded-lg border border-stone-200 bg-stone-50 px-2 py-1 text-xs text-stone-600 dark:border-[#2c343d] dark:bg-[#20252a] dark:text-[#a8b0ba]"
                       >
                         {m.alias && (
-                          <span className="mr-1 text-violet-400">/{m.alias}</span>
+                          <span className="mr-1 text-emerald-600 dark:text-emerald-300">/{m.alias}</span>
                         )}
                         {m.id.split("/").pop()}
                       </span>
@@ -1204,7 +1200,7 @@ export function DashboardView() {
                   const progress = cronProgress(job);
                   const countdown = formatCountdown(job.nextRunAtMs);
                   return (
-                    <div key={job.id} className="glass-glow rounded-lg p-4">
+                    <div key={job.id} className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-[#2c343d] dark:bg-[#171a1d]">
                       <div className="flex items-center gap-2.5">
                         <div
                           className={cn(
@@ -1272,7 +1268,7 @@ export function DashboardView() {
                     type="button"
                     key={`${run.jobId}-${run.ts}-${i}`}
                     onClick={() => openCronJob(run.jobId)}
-                    className="w-full glass-subtle rounded-lg px-4 py-2.5 text-left transition-all duration-200 hover:border-violet-500/20 hover:bg-violet-500/5"
+                    className="w-full rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-left shadow-sm transition-colors hover:border-stone-300 hover:bg-stone-50 dark:border-[#2c343d] dark:bg-[#171a1d] dark:hover:bg-[#20252a]"
                   >
                     <div className="flex items-center gap-2">
                       {run.status === "ok" ? (
@@ -1308,7 +1304,7 @@ export function DashboardView() {
             <h2 className="mb-3 flex items-center gap-2 text-xs font-sans font-semibold uppercase tracking-wider text-muted-foreground">
               <Radio className="h-3.5 w-3.5" /> Gateway Log
             </h2>
-            <div className="glass-subtle rounded-lg p-1">
+            <div className="rounded-xl border border-stone-200 bg-white p-1 shadow-sm dark:border-[#2c343d] dark:bg-[#171a1d]">
               <div className="max-h-80 overflow-y-auto font-mono text-xs leading-5">
                 {live.logEntries.map((entry, i) => {
                   const isError =
@@ -1329,7 +1325,7 @@ export function DashboardView() {
                         "flex gap-2 rounded px-2 py-0.5",
                         isError
                           ? "bg-red-500/5 text-red-400"
-                          : "hover:bg-foreground/[0.03]"
+                          : "hover:bg-stone-50 dark:hover:bg-[#20252a]"
                       )}
                     >
                       <span className="shrink-0 text-muted-foreground/40">{time}</span>
@@ -1339,7 +1335,7 @@ export function DashboardView() {
                           isCron
                             ? "text-amber-500"
                             : isWs
-                              ? "text-blue-500"
+                              ? "text-sky-600 dark:text-sky-400"
                               : "text-muted-foreground/60"
                         )}
                       >
@@ -1364,7 +1360,7 @@ export function DashboardView() {
         {/* Doctor link */}
         <Link
           href="/doctor"
-          className="glass-subtle flex items-center gap-3 rounded-lg p-3 transition-colors hover:bg-foreground/[0.04]"
+          className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white p-3 shadow-sm transition-colors hover:bg-stone-50 dark:border-[#2c343d] dark:bg-[#171a1d] dark:hover:bg-[#20252a]"
         >
           <Stethoscope className="h-4 w-4 text-primary" />
           <div className="min-w-0 flex-1">
@@ -1391,7 +1387,7 @@ function StatCard({
   icon: Icon,
   value,
   label,
-  color,
+  iconClassName,
   alert,
   alertHref,
   onClick,
@@ -1399,7 +1395,7 @@ function StatCard({
   icon: React.ComponentType<{ className?: string }>;
   value: string | number;
   label: string;
-  color: string;
+  iconClassName?: string;
   alert?: string;
   alertHref?: string;
   onClick?: () => void;
@@ -1407,25 +1403,32 @@ function StatCard({
   return (
     <div
       className={cn(
-        "glass-glow rounded-lg p-4",
+        "rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-stone-800",
         onClick && "cursor-pointer"
       )}
       onClick={onClick}
     >
-      <div className="flex items-center gap-3">
-        <div className={cn("rounded-lg p-2", color)}>
-          <Icon className="h-4 w-4" />
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-stone-400 dark:text-[#7a8591]">
+            {label}
+          </p>
+          <p className="mt-1 text-2xl font-bold tabular-nums text-stone-900 dark:text-[#f5f7fa]">
+            {value}
+          </p>
         </div>
-        <div>
-          <p className="text-xl font-semibold tabular-nums text-foreground">{value}</p>
-          <p className="text-xs text-muted-foreground/60">{label}</p>
-        </div>
+        <Icon
+          className={cn(
+            "mt-0.5 h-4.5 w-4.5 shrink-0 stroke-[1.75]",
+            iconClassName ?? "text-stone-300 dark:text-[#66717d]"
+          )}
+        />
       </div>
       {alert && (
         alertHref ? (
           <a
             href={alertHref}
-            className="mt-2 flex items-center gap-1 text-xs text-red-400 transition-colors hover:text-red-300 group"
+            className="mt-3 flex items-center gap-1 text-xs text-red-500 transition-colors hover:text-red-400 group"
             onClick={(e) => e.stopPropagation()}
           >
             <AlertCircle className="h-3 w-3" />
@@ -1433,7 +1436,7 @@ function StatCard({
             <span className="text-red-500/50 group-hover:text-red-400">&rarr;</span>
           </a>
         ) : (
-          <p className="mt-2 flex items-center gap-1 text-xs text-red-400">
+          <p className="mt-3 flex items-center gap-1 text-xs text-red-500">
             <AlertCircle className="h-3 w-3" />
             {alert}
           </p>

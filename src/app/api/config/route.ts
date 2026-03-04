@@ -3,6 +3,7 @@ import { gatewayCall, runCliCaptureBoth } from "@/lib/openclaw";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
+import { logRequest, logError } from "@/lib/request-log";
 import { randomBytes } from "crypto";
 
 export const dynamic = "force-dynamic";
@@ -291,6 +292,7 @@ function friendlyPatchError(err: unknown): string {
  * Query: scope=config (default) | schema
  */
 export async function GET(request: NextRequest) {
+  const start = Date.now();
   const { searchParams } = new URL(request.url);
   const scope = searchParams.get("scope") || "config";
 
@@ -340,6 +342,7 @@ export async function GET(request: NextRequest) {
     const resolved = (configData.resolved || {}) as Record<string, unknown>;
     const redacted = redactSensitive(resolved) as Record<string, unknown>;
 
+    logRequest("/api/config", 200, Date.now() - start, { scope });
     return NextResponse.json({
       config: redacted,
       rawConfig: parsed, // same structure as ~/.openclaw/openclaw.json for form + raw editor
@@ -350,7 +353,7 @@ export async function GET(request: NextRequest) {
       warning,
     });
   } catch (err) {
-    console.error("Config GET error:", err);
+    logError("/api/config", err, { scope });
     try {
       const raw = await readFile(join(OPENCLAW_HOME, "openclaw.json"), "utf-8");
       const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -552,7 +555,7 @@ export async function PATCH(request: NextRequest) {
     });
   } catch (err) {
     const msg = String(err);
-    console.error("Config PATCH error:", msg);
+    logError("/api/config", err, { method: "PATCH" });
     return NextResponse.json({ error: friendlyPatchError(msg), details: msg }, { status: 400 });
   }
 }

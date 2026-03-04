@@ -36,6 +36,10 @@ const SECTION_TO_PATH: Record<string, string> = {
   help: "/help",
 };
 
+const isAgentbayHosted =
+  process.env.AGENTBAY_HOSTED === "true" ||
+  process.env.NEXT_PUBLIC_AGENTBAY_HOSTED === "true";
+
 function firstParam(value: string | string[] | undefined): string | null {
   if (Array.isArray(value)) return value[0] || null;
   return typeof value === "string" ? value : null;
@@ -62,7 +66,10 @@ export default async function Home({
 
   const section = firstParam(paramsObj.section);
   if (section) {
-    const targetPath = SECTION_TO_PATH[section.toLowerCase()] || "/dashboard";
+    const normalizedSection = section.toLowerCase();
+    const targetPath = isAgentbayHosted && (normalizedSection === "browser" || normalizedSection === "tailscale")
+      ? "/dashboard"
+      : (SECTION_TO_PATH[normalizedSection] || "/dashboard");
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(paramsObj)) {
       if (key === "section") continue;

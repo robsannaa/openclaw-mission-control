@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runCli } from "@/lib/openclaw";
+import { runOpenResponsesText } from "@/lib/openresponses";
 
 export const dynamic = "force-dynamic";
 
@@ -42,17 +43,36 @@ export async function POST(request: NextRequest) {
     const message = input ? `/skill ${skillName} ${input}` : `/skill ${skillName}`;
     const startedAt = Date.now();
 
-    const output = await runCli(
-      ["agent", "--agent", agentId, "--message", message],
-      180_000
-    );
+    let output = "";
+    let method: "openresponses" | "cli" = "openresponses";
+    try {
+      const result = await runOpenResponsesText({
+        input: message,
+        agentId,
+        timeoutMs: 180_000,
+      });
+      if (!result.ok) {
+        throw new Error(result.text || `Gateway returned ${result.status}`);
+      }
+      output = result.text;
+    } catch {
+      method = "cli";
+      output = await runCli(
+        ["agent", "--agent", agentId, "--message", message],
+        180_000
+      );
+    }
 
     return NextResponse.json({
       ok: true,
       skillName,
       agentId,
       message,
-      cliCommand: `openclaw agent --agent ${agentId} --message ${JSON.stringify(message)}`,
+      method,
+      cliCommand:
+        method === "cli"
+          ? `openclaw agent --agent ${agentId} --message ${JSON.stringify(message)}`
+          : null,
       output: output.trim(),
       durationMs: Date.now() - startedAt,
     });

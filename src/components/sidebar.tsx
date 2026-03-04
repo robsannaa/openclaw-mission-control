@@ -3,14 +3,9 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState, useCallback, useSyncExternalStore, useRef } from "react";
-import {
-  setAutoRestartOnChanges,
-  subscribeAutoRestartPreference,
-  getAutoRestartSnapshot,
-  getAutoRestartServerSnapshot,
-} from "@/lib/auto-restart-preference";
 import { cn } from "@/lib/utils";
 import {
+  Activity,
   LayoutDashboard,
   ListChecks,
   Clock,
@@ -24,8 +19,6 @@ import {
   MessageCircle,
   Terminal,
   SquareTerminal,
-  RefreshCw,
-  Power,
   Cpu,
   Volume2,
   Database,
@@ -49,11 +42,6 @@ import {
   HelpCircle,
 } from "lucide-react";
 import { getChatUnreadCount, subscribeChatStore } from "@/lib/chat-store";
-import {
-  notifyGatewayRestarting,
-  useGatewayStatusStore,
-  type GatewayStatus,
-} from "@/lib/gateway-status-store";
 
 type NavItem = {
   section: string;
@@ -90,7 +78,7 @@ const navItems: NavItem[] = [
   { group: "Integrations", section: "skills", label: "Skills", icon: Wrench, href: "/skills" },
   { section: "skills", label: "ClawHub", icon: Package, href: "/skills?tab=clawhub", tab: "clawhub", isSubItem: true },
   { section: "audio", label: "Audio & Voice", icon: Volume2, href: "/audio" },
-  { section: "browser", label: "Browser Relay", icon: Globe, href: "/browser" },
+  ...(!isAgentbayHosting ? [{ section: "browser", label: "Browser Relay", icon: Globe, href: "/browser" } as NavItem] : []),
   { section: "search", label: "Web Search", icon: Search, href: "/search" },
   // ── Configuration ──
   { group: "Configuration", section: "models", label: "Models", icon: Cpu, href: "/models" },
@@ -102,13 +90,22 @@ const navItems: NavItem[] = [
   { section: "config", label: "Config", icon: Settings, href: "/config" },
   ...(isAgentbayHosting ? [{ section: "help" as const, label: "Help & support", icon: HelpCircle, href: "/help" } as NavItem] : []),
   // ── Monitoring ──
-  { group: "Monitoring", section: "doctor", label: "Doctor", icon: Stethoscope, href: "/doctor" },
+  { group: "Monitoring", section: "activity", label: "Activity", icon: Activity, href: "/activity" },
+  { section: "doctor", label: "Doctor", icon: Stethoscope, href: "/doctor" },
   { section: "usage", label: "Usage", icon: BarChart3, href: "/usage" },
   { section: "terminal", label: "Terminal", icon: SquareTerminal, href: "/terminal" },
   { section: "logs", label: "Logs", icon: Terminal, href: "/logs" },
 ];
 
 const SIDEBAR_COLLAPSED_KEY = "sidebar_collapsed";
+const SIDEBAR_WIDTH_KEY = "sidebar_width";
+const SIDEBAR_DEFAULT_WIDTH = 288;
+const SIDEBAR_MIN_WIDTH = 260;
+const SIDEBAR_MAX_WIDTH = 420;
+
+function clampSidebarWidth(width: number) {
+  return Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
+}
 
 function deriveSectionFromPath(pathname: string): string | null {
   if (!pathname || pathname === "/") return null;
@@ -151,6 +148,7 @@ function deriveSectionFromPath(pathname: string): string | null {
     "logs",
     "config",
     "settings",
+    "activity",
     "help",
   ]);
   return known.has(first) ? first : null;
@@ -196,7 +194,7 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
   );
 
   return (
-    <nav className={cn("flex flex-1 flex-col gap-0.5 overflow-y-auto pt-3", collapsed ? "px-1.5" : "px-2.5")}>
+    <nav className={cn("flex flex-1 flex-col gap-0.5 overflow-y-auto pt-2", collapsed ? "px-2" : "px-3")}>
       {navItems.map((item, index) => {
         const isSkillsParent = item.section === "skills" && item.label === "Skills";
         const isAgentsParent = item.section === "agents" && item.label === "Agents";
@@ -220,24 +218,24 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
         const showBadge = item.section === "chat" && chatUnread > 0;
         const isDisabled = item.comingSoon;
         const linkClass = cn(
-          "group relative flex items-center gap-2.5 rounded-lg py-1.5 text-xs font-medium transition-all duration-200",
+          "group relative flex items-center gap-2.5 rounded-md py-1.5 text-sm font-medium transition-colors duration-150",
           collapsed ? "justify-center px-2" : "px-2.5",
           item.isSubItem && !collapsed && "ml-6 py-1 text-xs",
           isDisabled
-            ? "cursor-not-allowed opacity-50 text-muted-foreground"
+            ? "cursor-not-allowed opacity-50 text-stone-400 dark:text-stone-500"
             : isActive
-              ? "bg-accent text-foreground font-medium"
-              : "text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground/80"
+              ? "bg-stone-100 text-stone-900 font-semibold dark:bg-[#171b1f] dark:text-[#f5f7fa]"
+              : "text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-[#a8b0ba] dark:hover:bg-[#171b1f] dark:hover:text-[#f5f7fa]"
         );
         return (
           <div key={`${item.section}:${item.label}`}>
             {showGroupHeader && !collapsed && (
-              <div className="mb-1.5 mt-4 first:mt-0 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+              <div className="mb-1.5 mt-4 first:mt-0 px-2.5 text-[10px] font-semibold uppercase tracking-[0.22em] text-stone-400 dark:text-stone-500">
                 {item.group}
               </div>
             )}
             {showGroupHeader && collapsed && (
-              <div className="my-2 mx-1 border-t border-foreground/[0.06]" />
+              <div className="my-2 mx-1 border-t border-stone-200 dark:border-[#23282e]" />
             )}
             {isDisabled ? (
               <span className={linkClass} aria-disabled>
@@ -306,12 +304,12 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
                   <span className="relative inline-flex shrink-0">
                     <Icon className="h-3.5 w-3.5" />
                     {collapsed && showBadge && (
-                      <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-primary ring-2 ring-sidebar" title={`${chatUnread} unread`} aria-hidden />
-                    )}
-                  </span>
-                  {!collapsed && <span className="flex-1">{item.label}</span>}
-                  {!collapsed && showBadge && (
-                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground shadow-sm">
+                    <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-stone-900 ring-2 ring-sidebar dark:bg-stone-100" title={`${chatUnread} unread`} aria-hidden />
+                  )}
+                </span>
+                {!collapsed && <span className="flex-1">{item.label}</span>}
+                {!collapsed && showBadge && (
+                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-stone-900 px-1.5 text-xs font-bold text-white shadow-sm dark:bg-stone-100 dark:text-stone-900">
                       {chatUnread > 9 ? "9+" : chatUnread}
                     </span>
                   )}
@@ -325,213 +323,18 @@ function SidebarNav({ onNavigate, collapsed }: { onNavigate?: () => void; collap
   );
 }
 
-/* ── Gateway status + restart badge ─────────────── */
-
-const STATUS_COLORS: Record<GatewayStatus, string> = {
-  online: "bg-emerald-400",
-  degraded: "bg-amber-400",
-  offline: "bg-red-500",
-  loading: "bg-zinc-500 animate-pulse",
-};
-
-const STATUS_RING: Record<GatewayStatus, string> = {
-  online: "ring-emerald-400/30",
-  degraded: "ring-amber-400/30",
-  offline: "ring-red-500/30",
-  loading: "ring-muted-foreground/30",
-};
-
-const STATUS_LABELS: Record<GatewayStatus, string> = {
-  online: "Online",
-  degraded: "Degraded",
-  offline: "Offline",
-  loading: "Checking...",
-};
-
-function GatewayBadge({ collapsed }: { collapsed?: boolean }) {
-  const { status, restarting } = useGatewayStatusStore();
-  const [showMenu, setShowMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  const autoRestartOnChanges = useSyncExternalStore(
-    subscribeAutoRestartPreference,
-    getAutoRestartSnapshot,
-    getAutoRestartServerSnapshot,
-  );
-
-  useEffect(() => {
-    if (!showMenu) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setShowMenu(false);
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    window.addEventListener("keydown", handleEscape);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, [showMenu]);
-
-  const handleRestart = useCallback(async () => {
-    setShowMenu(false);
-    notifyGatewayRestarting();
-    try {
-      await fetch("/api/gateway", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "restart" }),
-      });
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  const handleStop = useCallback(async () => {
-    setShowMenu(false);
-    notifyGatewayRestarting();
-    try {
-      await fetch("/api/gateway", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "stop" }),
-      });
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  return (
-    <div className="relative" ref={menuRef}>
-      <button
-        type="button"
-        onClick={() => setShowMenu(!showMenu)}
-        className={cn(
-          "flex w-full items-center gap-2.5 rounded-lg transition-all duration-200",
-          "hover:bg-foreground/[0.06]",
-          collapsed ? "justify-center px-2 py-2.5" : "px-3 py-2.5"
-        )}
-      >
-        <div className="relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-foreground/[0.06] text-sm shadow-sm">
-          🦞
-          {collapsed && (
-            <div
-              className={cn(
-                "absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full ring-2 ring-sidebar",
-                STATUS_COLORS[status],
-                STATUS_RING[status]
-              )}
-            />
-          )}
-        </div>
-        {!collapsed && (
-          <div className="flex-1 text-left">
-            <div className="flex items-center gap-1.5">
-              <div
-                className={cn(
-                  "h-2 w-2 rounded-full ring-2",
-                  STATUS_COLORS[status],
-                  STATUS_RING[status]
-                )}
-              />
-              <span className="text-xs font-medium text-muted-foreground">
-                Gateway
-              </span>
-            </div>
-            <span className="text-xs text-muted-foreground/60">
-              {restarting ? "Restarting..." : STATUS_LABELS[status]}
-            </span>
-          </div>
-        )}
-      </button>
-
-      {showMenu && (
-        <div className="absolute bottom-full left-0 z-50 mb-1.5 w-56 min-w-56 overflow-hidden rounded-lg glass-strong py-1">
-          <button
-            type="button"
-            onClick={handleRestart}
-            disabled={restarting}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-foreground/70 transition-colors hover:bg-foreground/[0.06] hover:text-foreground disabled:opacity-50"
-          >
-            {restarting ? (
-              <span className="inline-flex items-center gap-0.5">
-                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
-              </span>
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
-            )}
-            Restart Gateway
-          </button>
-          <button
-            type="button"
-            onClick={handleStop}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-red-400 transition-colors hover:bg-red-500/10 hover:text-red-300"
-          >
-            <Power className="h-3.5 w-3.5" />
-            Stop Gateway
-          </button>
-          <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
-          <label className="flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-left text-xs text-muted-foreground hover:text-foreground/80">
-            <span>Auto-restart on changes</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={autoRestartOnChanges}
-              onClick={(e) => {
-                e.preventDefault();
-                setAutoRestartOnChanges(!autoRestartOnChanges);
-              }}
-              className={cn(
-                "relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200",
-                autoRestartOnChanges ? "bg-primary" : "bg-foreground/10"
-              )}
-            >
-              <span
-                className={cn(
-                  "absolute top-0.5 block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200",
-                  autoRestartOnChanges ? "left-4" : "left-0.5"
-                )}
-              />
-            </button>
-          </label>
-          <div className="mx-2 my-1 h-px bg-foreground/[0.06]" />
-          <div className="px-3 py-1.5">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1.5 text-xs",
-                status === "online" ? "text-emerald-400" : status === "degraded" ? "text-amber-400" : "text-red-400"
-              )}
-            >
-              <span
-                className={cn(
-                  "h-1.5 w-1.5 rounded-full",
-                  STATUS_COLORS[status]
-                )}
-              />
-              {STATUS_LABELS[status]}
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function Sidebar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
   });
+  const [sidebarWidth, setSidebarWidth] = useState(() => {
+    if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH;
+    const raw = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    return Number.isFinite(raw) && raw > 0 ? clampSidebarWidth(raw) : SIDEBAR_DEFAULT_WIDTH;
+  });
+  const resizeStateRef = useRef<{ startX: number; startWidth: number } | null>(null);
 
   const closeMobile = useCallback(() => setMobileOpen(false), []);
 
@@ -546,6 +349,11 @@ export function Sidebar() {
       return next;
     });
   }, []);
+  const versionLabel = process.env.NEXT_PUBLIC_APP_VERSION
+    ? (process.env.NEXT_PUBLIC_APP_VERSION.startsWith("v")
+        ? process.env.NEXT_PUBLIC_APP_VERSION
+        : `v${process.env.NEXT_PUBLIC_APP_VERSION}`)
+    : "v0";
 
   useEffect(() => {
     if (!mobileOpen) return;
@@ -555,6 +363,58 @@ export function Sidebar() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [mobileOpen]);
+
+  useEffect(() => {
+    if (collapsed) return;
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(sidebarWidth));
+    } catch {
+      /* ignore */
+    }
+  }, [sidebarWidth, collapsed]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      const active = resizeStateRef.current;
+      if (!active) return;
+      const nextWidth = clampSidebarWidth(active.startWidth + (event.clientX - active.startX));
+      setSidebarWidth(nextWidth);
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+    };
+
+    const handlePointerUp = () => {
+      if (!resizeStateRef.current) return;
+      resizeStateRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointercancel", handlePointerUp);
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointercancel", handlePointerUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, []);
+
+  const startResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (collapsed) return;
+    resizeStateRef.current = { startX: event.clientX, startWidth: sidebarWidth };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  }, [collapsed, sidebarWidth]);
+
+  const expandedWidthStyle = collapsed
+    ? undefined
+    : {
+        width: `${sidebarWidth}px`,
+        minWidth: `${sidebarWidth}px`,
+      };
 
   return (
     <>
@@ -578,11 +438,11 @@ export function Sidebar() {
 
       {/* Sidebar — always visible on desktop, slide-in drawer on mobile */}
       <aside
+        style={expandedWidthStyle}
         className={cn(
-          "flex h-full shrink-0 flex-col transition-[width,transform] duration-200 ease-in-out",
-          "border-r border-border",
-          "bg-sidebar",
-          collapsed ? "w-14 md:w-14" : "w-56 md:w-56",
+          "relative flex h-full shrink-0 flex-col transition-[width,transform] duration-200 ease-in-out",
+          "border-r border-stone-200 bg-stone-50 dark:border-[#23282e] dark:bg-[#0d0f12]",
+          collapsed ? "w-14 md:w-14" : "w-72 md:w-72",
           "max-md:fixed max-md:inset-y-0 max-md:left-0 max-md:z-50 max-md:shadow-2xl",
           mobileOpen ? "max-md:translate-x-0" : "max-md:-translate-x-full"
         )}
@@ -597,19 +457,43 @@ export function Sidebar() {
             <X className="h-5 w-5" />
           </button>
         </div>
+        <div className={cn("shrink-0", collapsed ? "px-2 pb-2" : "px-3 pb-3 pt-3")}>
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-base shadow-sm ring-1 ring-stone-200 dark:bg-[#171a1d] dark:ring-[#2c343d]">
+                🦞
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-base shadow-sm ring-1 ring-stone-200 dark:bg-[#171a1d] dark:ring-[#2c343d]">
+                  🦞
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-bold tracking-tight text-stone-900 dark:text-[#f5f7fa]">
+                      Mission Control
+                    </span>
+                    <span className="shrink-0 rounded-full bg-stone-100 px-2 py-0.5 text-[10px] font-medium text-stone-500 dark:bg-[#171a1d] dark:text-[#7a8591]">
+                      {versionLabel}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
         <Suspense fallback={<div className="flex-1" />}>
           <SidebarNav onNavigate={closeMobile} collapsed={collapsed} />
         </Suspense>
-        <div className="border-t border-foreground/[0.06]">
-          <GatewayBadge collapsed={collapsed} />
-        </div>
         {/* Collapse / expand toggle — desktop only */}
-        <div className={cn("hidden border-t border-foreground/[0.06] md:block", collapsed ? "px-2 py-2" : "px-3 py-2")}>
+        <div className={cn("hidden border-t border-stone-200 dark:border-[#23282e] md:block", collapsed ? "px-2 py-2" : "px-3 py-2")}>
           <button
             type="button"
             onClick={toggleCollapsed}
             className={cn(
-              "flex w-full items-center rounded-lg py-1.5 text-muted-foreground/60 transition-all duration-200 hover:bg-foreground/[0.06] hover:text-foreground/80",
+              "flex w-full items-center rounded-md py-1.5 text-stone-400 transition-colors duration-150 hover:bg-stone-100 hover:text-stone-700 dark:text-[#7a8591] dark:hover:bg-[#171b1f] dark:hover:text-[#d6dce3]",
               collapsed ? "justify-center px-0" : "gap-2 px-2"
             )}
             title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -625,6 +509,17 @@ export function Sidebar() {
             )}
           </button>
         </div>
+        {!collapsed && (
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            onPointerDown={startResize}
+            className="absolute inset-y-0 right-0 hidden w-2 -translate-x-1/2 cursor-col-resize md:block"
+          >
+            <div className="mx-auto h-full w-px bg-transparent transition-colors hover:bg-stone-300 dark:hover:bg-[#3d4752]" />
+          </div>
+        )}
       </aside>
     </>
   );

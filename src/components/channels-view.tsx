@@ -458,7 +458,11 @@ export function ChannelsView() {
   };
 
   if (channelsLoading) {
-    return <LoadingState label="Loading channels..." />;
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading channels..." />
+      </SectionLayout>
+    );
   }
 
   return (

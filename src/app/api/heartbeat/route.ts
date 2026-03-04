@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gatewayCall, runCli } from "@/lib/openclaw";
+import { gatewayCall } from "@/lib/openclaw";
+import { gatewayWakeAgent } from "@/lib/gateway-tools";
+import { patchConfig } from "@/lib/gateway-config";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -67,26 +69,8 @@ async function gatewayConfigGet(): Promise<Record<string, unknown>> {
 
 async function applyConfigPatchWithRetry(
   rawPatch: Record<string, unknown>,
-  maxAttempts = 8
 ): Promise<void> {
-  const raw = JSON.stringify(rawPatch);
-  let lastError: unknown = null;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      const configData = await gatewayConfigGet();
-      const hash = String(configData.hash || "");
-      if (!hash) throw new Error("Missing config hash");
-      await gatewayCall("config.patch", { raw, baseHash: hash }, 15000);
-      return;
-    } catch (err) {
-      lastError = err;
-      if (attempt === maxAttempts) throw err;
-      await sleep(Math.min(400 * attempt, 2200));
-    }
-  }
-
-  throw lastError || new Error("Unknown config.patch error");
+  return patchConfig(rawPatch);
 }
 
 type AgentHeartbeatRow = {
@@ -295,10 +279,7 @@ export async function POST(request: NextRequest) {
         typeof body?.text === "string" && body.text.trim()
           ? body.text.trim()
           : "Check for urgent follow-ups";
-      const output = await runCli(
-        ["system", "event", "--text", text, "--mode", mode],
-        20000
-      );
+      const output = await gatewayWakeAgent({ text, mode });
       return jsonNoStore({ ok: true, action, mode, text, output: output.trim() });
     }
 

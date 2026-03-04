@@ -12,7 +12,9 @@ import { join, extname, basename } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { getDefaultWorkspaceSync } from "@/lib/paths";
-import { runCli, runCliJson } from "@/lib/openclaw";
+import { runCliJson } from "@/lib/openclaw";
+import { gatewayMemoryIndex } from "@/lib/gateway-tools";
+import { fetchConfig, extractAgentsList } from "@/lib/gateway-config";
 
 const WORKSPACE = getDefaultWorkspaceSync();
 const exec = promisify(execFile);
@@ -71,8 +73,20 @@ function safeAgentName(agent: CliAgentRow): string {
 
 async function getCliAgents(): Promise<CliAgentRow[]> {
   try {
-    const rows = await runCliJson<CliAgentRow[]>(["agents", "list"], 12000);
-    return Array.isArray(rows) ? rows : [];
+    const configData = await fetchConfig(12000);
+    const agents = extractAgentsList(configData);
+    return agents.map((a) => ({
+      id: a.id,
+      name: typeof a.name === "string" ? a.name : undefined,
+      identityName:
+        a.identity &&
+        typeof a.identity === "object" &&
+        typeof (a.identity as Record<string, unknown>).name === "string"
+          ? ((a.identity as Record<string, unknown>).name as string)
+          : undefined,
+      workspace: typeof a.workspace === "string" ? a.workspace : undefined,
+      isDefault: a.default === true,
+    }));
   } catch {
     return [];
   }
@@ -372,10 +386,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const args = ["memory", "index"];
-    if (agentId) args.push("--agent", agentId);
-    if (force) args.push("--force");
-    await runCli(args, force ? 60000 : 30000);
+    await gatewayMemoryIndex({
+      agent: agentId || undefined,
+      force: force || undefined,
+    });
 
     let vectorState: VectorState | undefined;
     if (file) {

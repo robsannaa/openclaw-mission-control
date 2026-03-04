@@ -4,6 +4,8 @@ import { constants as FS_CONSTANTS } from "fs";
 import { join } from "path";
 import { getDefaultWorkspaceSync, getOpenClawHome, getSystemSkillsDir } from "@/lib/paths";
 import { gatewayCall, runCliJson } from "@/lib/openclaw";
+import { buildModelsSummary } from "@/lib/models-summary";
+import { PROVIDER_ENV_KEYS } from "@/lib/provider-auth";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -28,57 +30,6 @@ type AgentListEntry = {
   agentDir?: string;
   model?: string;
   isDefault?: boolean;
-};
-
-type ModelsStatusProvider = {
-  provider?: string;
-  effective?: { kind?: string; detail?: string } | null;
-  profiles?: {
-    count?: number;
-    oauth?: number;
-    token?: number;
-    apiKey?: number;
-    labels?: string[];
-  };
-  env?: { value?: string; source?: string };
-  modelsJson?: { source?: string };
-};
-
-type ModelsStatusOauthProfile = {
-  profileId?: string;
-  provider?: string;
-  type?: string;
-  status?: string;
-  source?: string;
-  label?: string;
-  expiresAt?: number;
-  remainingMs?: number;
-};
-
-type ModelsStatusData = {
-  auth?: {
-    storePath?: string;
-    shellEnvFallback?: { enabled?: boolean; appliedKeys?: string[] };
-    providers?: ModelsStatusProvider[];
-    oauth?: { profiles?: ModelsStatusOauthProfile[] };
-    unusableProfiles?: Array<{
-      profileId?: string;
-      provider?: string;
-      kind?: string;
-      until?: number;
-      remainingMs?: number;
-    }>;
-  };
-};
-
-type ChannelsListData = {
-  chat?: Record<string, string[]>;
-  auth?: Array<{
-    id?: string;
-    provider?: string;
-    type?: string;
-    isExternal?: boolean;
-  }>;
 };
 
 type ChannelAccountStatus = {
@@ -190,10 +141,6 @@ function toStringValue(v: unknown): string {
 
 function toNumberValue(v: unknown): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
-
-function toBoolValue(v: unknown): boolean {
-  return Boolean(v);
 }
 
 function looksCredentialKey(key: string): boolean {
@@ -802,25 +749,6 @@ function collectConfigSecrets(
   }
 }
 
-async function getAgentModelStatuses(
-  agents: Array<{ id: string }>
-): Promise<Record<string, ModelsStatusData | null>> {
-  const rows = await Promise.all(
-    agents.map(async (agent) => {
-      try {
-        const data = await runCliJson<ModelsStatusData>(
-          ["models", "status", "--agent", agent.id],
-          12000
-        );
-        return [agent.id, data] as const;
-      } catch {
-        return [agent.id, null] as const;
-      }
-    })
-  );
-  return Object.fromEntries(rows);
-}
-
 function normalizeAgentRow(raw: AgentListEntry): {
   id: string;
   name: string;
@@ -847,33 +775,28 @@ function normalizeAgentRow(raw: AgentListEntry): {
 export async function GET() {
   const warnings: string[] = [];
 
-  const [agentsRaw, channelsListRaw, channelsStatusRaw, configGetRaw] =
+  const [modelsSummary, channelsStatusRaw, configGetRaw] =
     await Promise.all([
-      runCliJson<AgentListEntry[]>(["agents", "list"], 10000).catch((err) => {
-        warnings.push(`agents.list failed: ${String(err)}`);
-        return [] as AgentListEntry[];
+      buildModelsSummary().catch((err) => {
+        warnings.push(`models.summary failed: ${String(err)}`);
+        return null;
       }),
-      runCliJson<ChannelsListData>(["channels", "list"], 10000).catch((err) => {
-        warnings.push(`channels.list failed: ${String(err)}`);
-        return {} as ChannelsListData;
+      gatewayCall<ChannelsStatusData>("channels.status", {}, 15000).catch((err) => {
+        warnings.push(`channels.status failed: ${String(err)}`);
+        return {} as ChannelsStatusData;
       }),
-      runCliJson<ChannelsStatusData>(["channels", "status", "--probe"], 20000).catch(
-        (err) => {
-          warnings.push(`channels.status failed: ${String(err)}`);
-          return {} as ChannelsStatusData;
-        }
-      ),
       gatewayCall<GatewayConfigGet>("config.get", undefined, 15000).catch((err) => {
         warnings.push(`gateway config.get failed: ${String(err)}`);
         return null;
       }),
     ]);
 
-  const agents = asArray<AgentListEntry>(agentsRaw)
+  const parsedConfig = asRecord(configGetRaw?.parsed);
+  const parsedAgents = asRecord(parsedConfig.agents);
+  const parsedAgentRows = asArray<AgentListEntry>(parsedAgents.list);
+  const agents = parsedAgentRows
     .map(normalizeAgentRow)
     .filter((v): v is NonNullable<typeof v> => Boolean(v));
-
-  const modelStatusByAgent = await getAgentModelStatuses(agents);
 
   const agentAuthProfiles = await Promise.all(
     agents.map(async (agent) => {
@@ -944,69 +867,99 @@ export async function GET() {
     })
   );
 
-  const modelAuthByAgent = agents.map((agent) => {
-    const status = modelStatusByAgent[agent.id];
-    const auth = asRecord(status?.auth);
-    const providers = asArray<ModelsStatusProvider>(auth.providers)
+  const summaryProviderMap = new Map(
+    (modelsSummary?.status.auth?.providers || [])
       .map((provider) => {
-        const p = asRecord(provider);
-        const effective = asRecord(p.effective);
-        const profiles = asRecord(p.profiles);
-        const env = asRecord(p.env);
-        const modelsJson = asRecord(p.modelsJson);
-        return {
-          provider: toStringValue(p.provider) || "unknown",
-          connected: Boolean(p.effective),
-          effectiveKind: toStringValue(effective.kind) || null,
-          effectiveDetail: toStringValue(effective.detail) || null,
-          profileCount: Number(profiles.count || 0),
-          oauthCount: Number(profiles.oauth || 0),
-          tokenCount: Number(profiles.token || 0),
-          apiKeyCount: Number(profiles.apiKey || 0),
-          labels: asArray<string>(profiles.labels).map((v) => String(v)),
-          envSource: toStringValue(env.source) || null,
-          envValue: toStringValue(env.value) || null,
-          modelsJsonSource: toStringValue(modelsJson.source) || null,
-        };
+        const providerId = toStringValue(provider.provider).trim();
+        if (!providerId) return null;
+        return [
+          providerId,
+          {
+            connected: Boolean(provider.effective),
+            effectiveKind: toStringValue(provider.effective?.kind) || null,
+            effectiveDetail: toStringValue(provider.effective?.detail) || null,
+          },
+        ] as const;
       })
-      .sort((a, b) => a.provider.localeCompare(b.provider));
+      .filter((row): row is readonly [string, { connected: boolean; effectiveKind: string | null; effectiveDetail: string | null }] => Boolean(row))
+  );
 
-    const oauthProfiles = asArray<ModelsStatusOauthProfile>(asRecord(auth.oauth).profiles)
-      .map((row) => ({
-        profileId: toStringValue(row.profileId),
-        provider: toStringValue(row.provider),
-        type: toStringValue(row.type),
-        status: toStringValue(row.status),
-        source: toStringValue(row.source),
-        label: toStringValue(row.label),
-        expiresAt: toNumberValue(row.expiresAt),
-        remainingMs: toNumberValue(row.remainingMs),
+  const modelAuthByAgent = agents.map((agent) => {
+    const authStore = agentAuthProfiles.find((row) => row.agentId === agent.id);
+    const providerSet = new Set<string>(modelsSummary?.configuredProviders || []);
+    for (const profile of authStore?.profiles || []) {
+      if (profile.provider) providerSet.add(profile.provider);
+    }
+
+    const providers = [...providerSet]
+      .sort((a, b) => a.localeCompare(b))
+      .map((provider) => {
+        const providerProfiles = (authStore?.profiles || []).filter((profile) => profile.provider === provider);
+        const envKey = PROVIDER_ENV_KEYS[provider];
+        const configEnvValue =
+          envKey && typeof parsedConfig.env === "object" && typeof asRecord(parsedConfig.env)[envKey] === "string"
+            ? String(asRecord(parsedConfig.env)[envKey])
+            : "";
+        const processEnvValue = envKey && typeof process.env[envKey] === "string" ? String(process.env[envKey]) : "";
+        const summaryProvider = summaryProviderMap.get(provider);
+        const providerIsLocal = provider === "ollama" || provider === "vllm" || provider === "lmstudio";
+        const envValue = configEnvValue || processEnvValue || null;
+        const envSource = configEnvValue ? "config.env" : processEnvValue ? "process.env" : null;
+        const profileLabels = providerProfiles
+          .map((profile) => profile.accountId || profile.id)
+          .filter(Boolean);
+        const oauthProfiles = providerProfiles.filter((profile) => profile.type === "oauth").length;
+        const tokenProfiles = providerProfiles.filter((profile) => profile.type === "token").length;
+        const apiKeyProfiles = providerProfiles.filter((profile) => profile.type === "api_key").length;
+        const connected =
+          Boolean(summaryProvider?.connected) ||
+          providerProfiles.length > 0 ||
+          Boolean(envValue) ||
+          providerIsLocal;
+        return {
+          provider,
+          connected,
+          effectiveKind:
+            summaryProvider?.effectiveKind ||
+            (providerIsLocal ? "local" : providerProfiles[0]?.type || (envValue ? "env" : null)),
+          effectiveDetail:
+            summaryProvider?.effectiveDetail ||
+            (providerProfiles[0]?.accountId ? `profile ${providerProfiles[0].accountId}` : null),
+          profileCount: providerProfiles.length,
+          oauthCount: oauthProfiles,
+          tokenCount: tokenProfiles,
+          apiKeyCount: apiKeyProfiles + (envValue ? 1 : 0),
+          labels: profileLabels,
+          envSource,
+          envValue,
+          modelsJsonSource: null,
+        };
+      });
+
+    const oauthProfiles = (authStore?.profiles || [])
+      .filter((profile) => profile.type === "oauth")
+      .map((profile) => ({
+        profileId: profile.id,
+        provider: profile.provider,
+        type: profile.type,
+        status: profile.expiresAt && profile.expiresAt > Date.now() ? "ok" : "static",
+        source: authStore?.path || "",
+        label: profile.accountId || profile.id,
+        expiresAt: profile.expiresAt,
+        remainingMs: profile.remainingMs,
       }))
       .sort((a, b) => a.profileId.localeCompare(b.profileId));
 
-    const unusableProfiles = asArray(auth.unusableProfiles).map((row) => {
-      const r = asRecord(row);
-      return {
-        profileId: toStringValue(r.profileId),
-        provider: toStringValue(r.provider),
-        kind: toStringValue(r.kind),
-        until: toNumberValue(r.until),
-        remainingMs: toNumberValue(r.remainingMs),
-      };
-    });
-
-    const shellEnvFallback = asRecord(auth.shellEnvFallback);
-
     return {
       agentId: agent.id,
-      storePath: toStringValue(auth.storePath) || null,
+      storePath: authStore?.exists ? authStore.path : null,
       shellEnvFallback: {
-        enabled: toBoolValue(shellEnvFallback.enabled),
-        appliedKeys: asArray<string>(shellEnvFallback.appliedKeys).map((v) => String(v)),
+        enabled: false,
+        appliedKeys: [],
       },
       providers,
       oauthProfiles,
-      unusableProfiles,
+      unusableProfiles: [],
     };
   });
 
@@ -1035,7 +988,6 @@ export async function GET() {
       return a.accountId.localeCompare(b.accountId);
     });
 
-  const parsedConfig = asRecord(configGetRaw?.parsed);
   const configEnv = asRecord(parsedConfig.env);
   const skillCredentials = await getSkillCredentialMatrix(configEnv, warnings);
   const discoveredCredentials = await getDiscoveredCredentials(parsedConfig, warnings);
@@ -1082,7 +1034,7 @@ export async function GET() {
     sourceOfTruth: {
       gatewayConfig: Boolean(configGetRaw),
       channelsStatus: Object.keys(asRecord(channelsStatusRaw.channelAccounts)).length > 0,
-      modelsStatus: modelAuthByAgent.some((row) => row.providers.length > 0),
+      modelsStatus: false,
     },
     summary: {
       agents: agents.length,
@@ -1104,16 +1056,30 @@ export async function GET() {
     modelAuthByAgent,
     agentAuthProfiles,
     channels: {
-      chat: asRecord(channelsListRaw.chat),
-      auth: asArray(channelsListRaw.auth).map((row) => {
-        const r = asRecord(row);
-        return {
-          id: toStringValue(r.id),
-          provider: toStringValue(r.provider),
-          type: toStringValue(r.type),
-          isExternal: Boolean(r.isExternal),
-        };
-      }),
+      chat: Object.fromEntries(
+        Object.entries(asRecord(parsedConfig.channels)).map(([channel, value]) => {
+          const record = asRecord(value);
+          const accounts = asRecord(record.accounts);
+          const accountIds =
+            Object.keys(accounts).length > 0
+              ? Object.keys(accounts)
+              : record.enabled === false
+                ? []
+                : ["default"];
+          return [channel, accountIds];
+        })
+      ),
+      auth: Object.entries(asRecord(asRecord(parsedConfig.auth).profiles))
+        .map(([id, row]) => {
+          const record = asRecord(row);
+          return {
+            id,
+            provider: toStringValue(record.provider),
+            type: toStringValue(record.mode || record.type),
+            isExternal: toStringValue(record.mode) === "oauth",
+          };
+        })
+        .sort((a, b) => a.id.localeCompare(b.id)),
       accounts: channelAccounts,
     },
     envCredentials: {

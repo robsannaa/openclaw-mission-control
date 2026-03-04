@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { gatewayCall, runCli } from "@/lib/openclaw";
+import { runOpenResponsesText } from "@/lib/openresponses";
 import { readFile, stat } from "fs/promises";
 import { extname, join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
+import { fetchConfig, patchConfig } from "@/lib/gateway-config";
 
 /* ── Gather personal context for TTS test phrase generation ── */
 
@@ -75,10 +77,23 @@ async function generateTestPhrase(): Promise<string> {
       context,
     ].join("\n");
 
-    const output = await runCli(
-      ["agent", "--agent", "main", "--message", prompt],
-      15000
-    );
+    let output = "";
+    try {
+      const result = await runOpenResponsesText({
+        input: prompt,
+        agentId: "main",
+        timeoutMs: 15000,
+      });
+      if (!result.ok) {
+        throw new Error(result.text || `Gateway returned ${result.status}`);
+      }
+      output = result.text;
+    } catch {
+      output = await runCli(
+        ["agent", "--agent", "main", "--message", prompt],
+        15000
+      );
+    }
     const phrase = output.trim().replace(/^["']|["']$/g, ""); // strip wrapping quotes
     if (phrase && phrase.length > 10 && phrase.length < 300) {
       return phrase;
@@ -121,6 +136,258 @@ const MIME_TYPES: Record<string, string> = {
   ".m4a": "audio/mp4",
   ".aac": "audio/aac",
 };
+
+type AudioProviderKeyTarget = "openai" | "elevenlabs";
+
+type AudioProviderKeyState = {
+  configured: boolean;
+  authState: "ready" | "missing" | "builtin" | "external";
+  authLabel: string;
+  authSource: string | null;
+  authNote: string | null;
+  authLocation: "config-tts" | "config-env" | "process-env" | "runtime" | "builtin" | "missing";
+  canManageKey: boolean;
+  canRemoveKey: boolean;
+  removeMode?: "config-tts" | "config-env";
+  envKey?: string;
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function getNestedString(obj: Record<string, unknown> | undefined, path: string[]): string | null {
+  let current: unknown = obj;
+  for (const key of path) {
+    if (!isRecord(current)) return null;
+    current = current[key];
+  }
+  return isNonEmptyString(current) ? current.trim() : null;
+}
+
+function getConfigEnv(parsed: Record<string, unknown>): Record<string, string> {
+  const envBlock = isRecord(parsed.env) ? parsed.env : {};
+  const varsBlock = isRecord(envBlock.vars) ? envBlock.vars : {};
+  const entries: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(envBlock)) {
+    if (key === "vars") continue;
+    if (isNonEmptyString(value)) {
+      entries[key] = value.trim();
+    }
+  }
+
+  for (const [key, value] of Object.entries(varsBlock)) {
+    if (isNonEmptyString(value)) {
+      entries[key] = value.trim();
+    }
+  }
+
+  return entries;
+}
+
+function buildProviderKeyState(
+  providerId: string,
+  status: Record<string, unknown>,
+  parsedRoot: Record<string, unknown>,
+  parsedTts: Record<string, unknown> | undefined,
+  resolvedTts: Record<string, unknown>,
+  parsedTalk: Record<string, unknown> | undefined,
+): AudioProviderKeyState {
+  if (providerId === "edge") {
+    return {
+      configured: true,
+      authState: "builtin",
+      authLabel: "Built in",
+      authSource: "Edge TTS does not require an API key.",
+      authNote: null,
+      authLocation: "builtin",
+      canManageKey: false,
+      canRemoveKey: false,
+    };
+  }
+
+  if (providerId !== "openai" && providerId !== "elevenlabs") {
+    return {
+      configured: false,
+      authState: "missing",
+      authLabel: "Unknown auth",
+      authSource: null,
+      authNote: null,
+      authLocation: "missing",
+      canManageKey: false,
+      canRemoveKey: false,
+    };
+  }
+
+  const envKeys = providerId === "openai"
+    ? ["OPENAI_API_KEY"]
+    : ["ELEVENLABS_API_KEY", "XI_API_KEY"];
+  const parsedApiKey = getNestedString(parsedTts, [providerId, "apiKey"]);
+  const resolvedApiKey = getNestedString(resolvedTts, [providerId, "apiKey"]);
+  const configEnv = getConfigEnv(parsedRoot);
+  const envKey = envKeys.find((key) => isNonEmptyString(configEnv[key]));
+  const processEnvKey = envKeys.find((key) => isNonEmptyString(process.env[key]));
+  const talkApiKey = providerId === "elevenlabs"
+    ? getNestedString(parsedTalk, ["apiKey"])
+    : null;
+  const runtimeDetected = providerId === "openai"
+    ? status.hasOpenAIKey === true
+    : status.hasElevenLabsKey === true;
+
+  if (parsedApiKey || resolvedApiKey) {
+    return {
+      configured: true,
+      authState: "ready",
+      authLabel: "Ready",
+      authSource: "Using a key saved in TTS config.",
+      authNote: providerId === "elevenlabs" && talkApiKey
+        ? "Talk Mode also has its own ElevenLabs key."
+        : null,
+      authLocation: "config-tts",
+      canManageKey: true,
+      canRemoveKey: true,
+      removeMode: "config-tts",
+    };
+  }
+
+  if (envKey) {
+    return {
+      configured: true,
+      authState: "ready",
+      authLabel: "Ready",
+      authSource: `Using ${envKey} from Mission Control config.`,
+      authNote: providerId === "elevenlabs" && talkApiKey
+        ? "Talk Mode also has its own ElevenLabs key."
+        : null,
+      authLocation: "config-env",
+      canManageKey: true,
+      canRemoveKey: true,
+      removeMode: "config-env",
+      envKey,
+    };
+  }
+
+  if (processEnvKey) {
+    return {
+      configured: true,
+      authState: "external",
+      authLabel: "Runtime key",
+      authSource: `Detected ${processEnvKey} from the server environment.`,
+      authNote: "This key is managed outside Mission Control. Saving a key here will override TTS locally.",
+      authLocation: "process-env",
+      canManageKey: true,
+      canRemoveKey: false,
+      envKey: processEnvKey,
+    };
+  }
+
+  if (runtimeDetected) {
+    return {
+      configured: true,
+      authState: "external",
+      authLabel: "Gateway detected",
+      authSource: "The gateway reports that this provider already has a usable key.",
+      authNote: providerId === "elevenlabs" && talkApiKey
+        ? "Talk Mode also has its own ElevenLabs key."
+        : "The source was not exposed to Mission Control.",
+      authLocation: "runtime",
+      canManageKey: true,
+      canRemoveKey: false,
+    };
+  }
+
+  if (providerId === "elevenlabs" && talkApiKey) {
+    return {
+      configured: false,
+      authState: "missing",
+      authLabel: "Needs TTS key",
+      authSource: "Talk Mode has an ElevenLabs key, but TTS is not using it.",
+      authNote: "Save a TTS key below if you want ElevenLabs available in the TTS provider list.",
+      authLocation: "missing",
+      canManageKey: true,
+      canRemoveKey: false,
+    };
+  }
+
+  return {
+    configured: false,
+    authState: "missing",
+    authLabel: "Needs TTS key",
+    authSource: null,
+    authNote: null,
+    authLocation: "missing",
+    canManageKey: true,
+    canRemoveKey: false,
+  };
+}
+
+function buildAudioProviderPatch(
+  provider: AudioProviderKeyTarget,
+  apiKey: string,
+): Record<string, unknown> {
+  return {
+    messages: {
+      tts: {
+        [provider]: {
+          apiKey,
+        },
+      },
+    },
+  };
+}
+
+function removeEnvKeyFromConfig(
+  parsedRoot: Record<string, unknown>,
+  envKey: string,
+): Record<string, unknown> {
+  const envBlock = isRecord(parsedRoot.env)
+    ? { ...(parsedRoot.env as Record<string, unknown>) }
+    : {};
+  const varsBlock = isRecord(envBlock.vars)
+    ? { ...(envBlock.vars as Record<string, unknown>) }
+    : null;
+
+  delete envBlock[envKey];
+  if (varsBlock) {
+    delete varsBlock[envKey];
+    if (Object.keys(varsBlock).length > 0) {
+      envBlock.vars = varsBlock;
+    } else {
+      delete envBlock.vars;
+    }
+  }
+
+  return { env: envBlock };
+}
+
+function sanitizeRecord(record: Record<string, unknown> | undefined): Record<string, unknown> {
+  return record ? { ...record } : {};
+}
+
+function sanitizeTtsConfig(record: Record<string, unknown> | undefined): Record<string, unknown> {
+  const next = sanitizeRecord(record);
+  for (const provider of ["openai", "elevenlabs"]) {
+    const providerConfig = isRecord(next[provider]) ? { ...next[provider] } : null;
+    if (providerConfig && "apiKey" in providerConfig) {
+      delete providerConfig.apiKey;
+      next[provider] = providerConfig;
+    }
+  }
+  return next;
+}
+
+function sanitizeTalkConfig(record: Record<string, unknown> | undefined): Record<string, unknown> {
+  const next = sanitizeRecord(record);
+  if ("apiKey" in next) {
+    delete next.apiKey;
+  }
+  return next;
+}
 
 function emptyAudioPayload(warning: string) {
   return {
@@ -197,12 +464,12 @@ export async function GET(request: NextRequest) {
     const [status, providers, configData] = await Promise.all([
       gatewayCall<Record<string, unknown>>("tts.status", undefined, 10000),
       gatewayCall<Record<string, unknown>>("tts.providers", undefined, 10000),
-      gatewayCall<Record<string, unknown>>("config.get", undefined, 10000),
+      fetchConfig(10000),
     ]);
 
     // Extract relevant config sections
-    const resolved = (configData.resolved || {}) as Record<string, unknown>;
-    const parsed = (configData.parsed || {}) as Record<string, unknown>;
+    const resolved = configData.resolved || {};
+    const parsed = configData.parsed || {};
 
     const resolvedMessages = (resolved.messages || {}) as Record<string, unknown>;
     const resolvedTts = (resolvedMessages.tts || {}) as Record<string, unknown>;
@@ -217,6 +484,57 @@ export async function GET(request: NextRequest) {
     const parsedMedia = ((parsed.tools || {}) as Record<string, unknown>).media as
       | Record<string, unknown>
       | undefined;
+    const providerList = Array.isArray(providers.providers)
+      ? providers.providers
+      : [];
+    const enrichedProviders = providerList
+      .filter(isRecord)
+      .map((provider) => {
+        const id = String(provider.id || "");
+        const auth = buildProviderKeyState(
+          id,
+          status,
+          parsed,
+          parsedTts,
+          resolvedTts,
+          parsedTalk,
+        );
+        const effectiveAuth = !auth.configured && provider.configured === true
+          ? {
+              ...auth,
+              configured: true,
+              authState: "external" as const,
+              authLabel: "Gateway detected",
+              authSource: "The gateway reports that this provider is ready, but did not expose the key source.",
+              authNote: auth.authNote,
+              authLocation: "runtime" as const,
+            }
+          : auth;
+        const models = Array.isArray(provider.models)
+          ? provider.models.map((entry) => String(entry))
+          : [];
+        const voices = Array.isArray(provider.voices)
+          ? provider.voices.map((entry) => String(entry))
+          : undefined;
+        return {
+          ...provider,
+          id,
+          name: String(provider.name || id),
+          configured: effectiveAuth.configured,
+          models,
+          voices,
+          supportsApiKey: effectiveAuth.canManageKey,
+          authState: effectiveAuth.authState,
+          authLabel: effectiveAuth.authLabel,
+          authSource: effectiveAuth.authSource,
+          authNote: effectiveAuth.authNote,
+          authLocation: effectiveAuth.authLocation,
+          canManageKey: effectiveAuth.canManageKey,
+          canRemoveKey: effectiveAuth.canRemoveKey,
+          removeMode: effectiveAuth.removeMode || null,
+          envKey: effectiveAuth.envKey || null,
+        };
+      });
 
     // Read TTS user preferences if available
     let prefs: Record<string, unknown> | null = null;
@@ -232,15 +550,18 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       status,
-      providers,
+      providers: {
+        ...providers,
+        providers: enrichedProviders,
+      },
       config: {
         tts: {
-          resolved: resolvedTts,
-          parsed: parsedTts || null,
+          resolved: sanitizeTtsConfig(resolvedTts),
+          parsed: parsedTts ? sanitizeTtsConfig(parsedTts) : null,
         },
         talk: {
-          resolved: resolvedTalk,
-          parsed: parsedTalk || null,
+          resolved: sanitizeTalkConfig(resolvedTalk),
+          parsed: parsedTalk ? sanitizeTalkConfig(parsedTalk) : null,
         },
         audioUnderstanding: {
           resolved: resolvedAudio,
@@ -263,6 +584,8 @@ export async function GET(request: NextRequest) {
  *   { action: "enable" }
  *   { action: "disable" }
  *   { action: "set-provider", provider: "openai" | "elevenlabs" | "edge" }
+ *   { action: "set-provider-key", provider: "openai" | "elevenlabs", apiKey: "..." }
+ *   { action: "remove-provider-key", provider: "openai" | "elevenlabs", mode?: "config-tts" | "config-env", envKey?: "..." }
  *   { action: "test", text: "Hello world" }
  *   { action: "update-config", section: "tts" | "talk", config: { ... } }
  */
@@ -374,6 +697,80 @@ export async function POST(request: NextRequest) {
         // Just generate a personalized phrase (no TTS conversion)
         const phrase = await generateTestPhrase();
         return NextResponse.json({ ok: true, phrase });
+      }
+
+      case "set-provider-key": {
+        const provider = String(body.provider || "").trim().toLowerCase() as AudioProviderKeyTarget;
+        const apiKey = String(body.apiKey || "").trim();
+        if (provider !== "openai" && provider !== "elevenlabs") {
+          return NextResponse.json(
+            { error: "provider must be openai or elevenlabs" },
+            { status: 400 }
+          );
+        }
+        if (!apiKey) {
+          return NextResponse.json(
+            { error: "apiKey is required" },
+            { status: 400 }
+          );
+        }
+
+        try {
+          await patchConfig(buildAudioProviderPatch(provider, apiKey));
+          return NextResponse.json({ ok: true, action, provider, location: "config-tts" });
+        } catch {
+          return NextResponse.json(
+            { ok: false, error: `Could not save ${provider} API key. Is the gateway running?` },
+            { status: 502 }
+          );
+        }
+      }
+
+      case "remove-provider-key": {
+        const provider = String(body.provider || "").trim().toLowerCase() as AudioProviderKeyTarget;
+        const mode = String(body.mode || "").trim().toLowerCase();
+        const envKey = String(body.envKey || "").trim();
+        if (provider !== "openai" && provider !== "elevenlabs") {
+          return NextResponse.json(
+            { error: "provider must be openai or elevenlabs" },
+            { status: 400 }
+          );
+        }
+        if (mode !== "config-tts" && mode !== "config-env") {
+          return NextResponse.json(
+            { error: "mode must be config-tts or config-env" },
+            { status: 400 }
+          );
+        }
+
+        try {
+          if (mode === "config-tts") {
+            await patchConfig({
+              messages: {
+                tts: {
+                  [provider]: {
+                    apiKey: null,
+                  },
+                },
+              },
+            });
+          } else {
+            if (!envKey) {
+              return NextResponse.json(
+                { error: "envKey is required when removing a config env key" },
+                { status: 400 }
+              );
+            }
+            const configData = await fetchConfig(10000);
+            await patchConfig(removeEnvKeyFromConfig(configData.parsed, envKey));
+          }
+          return NextResponse.json({ ok: true, action, provider, mode });
+        } catch {
+          return NextResponse.json(
+            { ok: false, error: `Could not remove the saved ${provider} key. Is the gateway running?` },
+            { status: 502 }
+          );
+        }
       }
 
       case "test": {

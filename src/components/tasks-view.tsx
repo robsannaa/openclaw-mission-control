@@ -70,6 +70,8 @@ export function TasksView() {
   const [addingToColumn, setAddingToColumn] = useState<string | null>(null);
   const [editingTask, setEditingTask] = useState<number | null>(null);
   const saveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevDataRef = useRef<KanbanData | null>(null);
+  const savingRef = useRef(false);
   const [draggingTaskId, setDraggingTaskId] = useState<number | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [renamingTaskId, setRenamingTaskId] = useState<number | null>(null);
@@ -88,6 +90,7 @@ export function TasksView() {
   }, []);
 
   // Live updates: when kanban is written (dashboard or agent), refetch without polling
+  // Skip SSE refetch while a local save is in-flight to avoid clobbering edits
   useEffect(() => {
     const es = new EventSource("/api/tasks/stream");
     streamRef.current = es;
@@ -95,6 +98,7 @@ export function TasksView() {
       try {
         const payload = JSON.parse(e.data);
         if (payload?.type === "kanban-updated") {
+          if (savingRef.current) return; // don't clobber in-flight edits
           fetch("/api/tasks")
             .then((r) => r.json())
             .then((d) => setData(d))
@@ -113,8 +117,10 @@ export function TasksView() {
   /* ── persist helpers ───────────────────────────── */
 
   const persist = useCallback((newData: KanbanData) => {
+    prevDataRef.current = data;
     setData(newData);
     setSaveStatus("saving");
+    savingRef.current = true;
     if (saveRef.current) clearTimeout(saveRef.current);
     saveRef.current = setTimeout(async () => {
       try {
@@ -124,12 +130,25 @@ export function TasksView() {
           body: JSON.stringify(newData),
         });
         if (res.ok) {
+          prevDataRef.current = null;
           setSaveStatus("saved");
           setTimeout(() => setSaveStatus(null), 2000);
+        } else {
+          // Rollback on server rejection
+          if (prevDataRef.current) setData(prevDataRef.current);
+          prevDataRef.current = null;
+          setSaveStatus(null);
         }
-      } catch { /* retry next save */ }
+      } catch {
+        // Rollback on network failure
+        if (prevDataRef.current) setData(prevDataRef.current);
+        prevDataRef.current = null;
+        setSaveStatus(null);
+      } finally {
+        savingRef.current = false;
+      }
     }, 500);
-  }, []);
+  }, [data]);
 
   /* ── task CRUD ─────────────────────────────────── */
 
@@ -189,7 +208,11 @@ export function TasksView() {
   /* ── rendering ─────────────────────────────────── */
 
   if (loading) {
-    return <LoadingState label="Loading tasks..." />;
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading tasks..." />
+      </SectionLayout>
+    );
   }
   if (!data) {
     return (

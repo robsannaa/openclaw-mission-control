@@ -744,7 +744,7 @@ export function AccountsKeysView() {
       <SectionHeader
         title={
           <span className="inline-flex items-center gap-2">
-            <KeyRound className="h-5 w-5" />
+            <KeyRound className="h-5 w-5 text-stone-700 dark:text-stone-200" />
             Keys & Access
           </span>
         }
@@ -772,7 +772,7 @@ export function AccountsKeysView() {
             <button
               type="button"
               onClick={() => setRevealSecrets((prev) => !prev)}
-              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
               disabled={!data}
             >
               {revealSecrets ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
@@ -781,7 +781,7 @@ export function AccountsKeysView() {
             <button
               type="button"
               onClick={() => void load()}
-              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
               disabled={busy}
             >
               {busy ? (

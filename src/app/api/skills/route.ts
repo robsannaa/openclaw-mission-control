@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { runCliJson, gatewayCall } from "@/lib/openclaw";
+import { runCliJson } from "@/lib/openclaw";
+import { fetchConfig, patchConfig } from "@/lib/gateway-config";
 import { readFile } from "fs/promises";
 
 export const dynamic = "force-dynamic";
@@ -111,19 +112,10 @@ export async function GET(request: NextRequest) {
       // Check the config for skill-specific settings
       let skillConfig: Record<string, unknown> | null = null;
       try {
-        const configData = await gatewayCall<Record<string, unknown>>(
-          "config.get",
-          undefined,
-          8000
-        );
-        const resolved = (configData.resolved || {}) as Record<string, unknown>;
-        const tools = (resolved.tools || {}) as Record<string, unknown>;
-        // Check if there's a tools.<skillKey> config
+        const configData = await fetchConfig(8000);
+        const tools = (configData.resolved.tools || {}) as Record<string, unknown>;
         if (tools[data.skillKey || data.name]) {
-          skillConfig = tools[data.skillKey || data.name] as Record<
-            string,
-            unknown
-          >;
+          skillConfig = tools[data.skillKey || data.name] as Record<string, unknown>;
         }
       } catch {
         // config not available
@@ -135,22 +127,16 @@ export async function GET(request: NextRequest) {
     if (action === "config") {
       // Get the full config to see skills/tools section
       try {
-        const configData = await gatewayCall<Record<string, unknown>>(
-          "config.get",
-          undefined,
-          8000
-        );
-        const resolved = (configData.resolved || {}) as Record<string, unknown>;
-        const parsed = (configData.parsed || {}) as Record<string, unknown>;
+        const configData = await fetchConfig(8000);
 
         return NextResponse.json({
           tools: {
-            resolved: resolved.tools || {},
-            parsed: parsed.tools || {},
+            resolved: configData.resolved.tools || {},
+            parsed: configData.parsed.tools || {},
           },
           skills: {
-            resolved: (resolved as Record<string, unknown>).skills || {},
-            parsed: (parsed as Record<string, unknown>).skills || {},
+            resolved: configData.resolved.skills || {},
+            parsed: configData.parsed.skills || {},
           },
           hash: configData.hash,
         });
@@ -254,31 +240,13 @@ export async function POST(request: NextRequest) {
         const enabling = action === "enable-skill";
 
         try {
-          const configData = await gatewayCall<Record<string, unknown>>(
-            "config.get",
-            undefined,
-            8000
-          );
-          const hash = configData.hash as string;
-
-          // Schema requires: skills.entries.<skillKey>.enabled: boolean
-          const patch = {
+          await patchConfig({
             skills: {
               entries: {
                 [name]: { enabled: enabling },
               },
             },
-          };
-
-          await gatewayCall(
-            "config.patch",
-            {
-              raw: JSON.stringify(patch),
-              baseHash: hash,
-              restartDelayMs: 2000,
-            },
-            10000
-          );
+          }, { restartDelayMs: 2000 });
           return NextResponse.json({ ok: true, action, name });
         } catch (err) {
           return NextResponse.json({ error: String(err) }, { status: 500 });
@@ -296,21 +264,7 @@ export async function POST(request: NextRequest) {
           );
 
         try {
-          const configData = await gatewayCall<Record<string, unknown>>(
-            "config.get",
-            undefined,
-            8000
-          );
-          const hash = configData.hash as string;
-
-          await gatewayCall(
-            "config.patch",
-            {
-              raw: JSON.stringify({ tools: { [skillKey]: config } }),
-              baseHash: hash,
-            },
-            10000
-          );
+          await patchConfig({ tools: { [skillKey]: config } });
           return NextResponse.json({ ok: true, action, skillKey });
         } catch (err) {
           return NextResponse.json({ error: String(err) }, { status: 500 });

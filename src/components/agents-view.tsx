@@ -967,17 +967,17 @@ function SummaryBar({ agents }: { agents: Agent[] }) {
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       {[
         { icon: <Users className="h-4 w-4 text-[var(--accent-brand-text)]" />, label: "Agents", value: String(agents.length) },
-        { icon: <Zap className="h-4 w-4 text-emerald-400" />, label: "Active", value: `${activeCount} / ${agents.length}` },
-        { icon: <MessageSquare className="h-4 w-4 text-blue-400" />, label: "Sessions", value: String(totalSessions) },
-        { icon: <Hash className="h-4 w-4 text-amber-400" />, label: "Channels", value: String(channelSet.size) },
+        { icon: <Zap className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />, label: "Active", value: `${activeCount} / ${agents.length}` },
+        { icon: <MessageSquare className="h-4 w-4 text-sky-600 dark:text-sky-300" />, label: "Sessions", value: String(totalSessions) },
+        { icon: <Hash className="h-4 w-4 text-amber-600 dark:text-amber-300" />, label: "Channels", value: String(channelSet.size) },
       ].map((s) => (
-        <div key={s.label} className="flex items-center gap-3 rounded-xl border border-foreground/10 bg-card px-4 py-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-foreground/5">
+        <div key={s.label} className="flex items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-3 shadow-sm dark:border-stone-700 dark:bg-stone-800">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-100 dark:bg-stone-700">
             {s.icon}
           </div>
           <div>
-            <p className="text-xs text-muted-foreground/60">{s.label}</p>
-            <p className="text-sm font-bold text-foreground/90">{s.value}</p>
+            <p className="text-xs text-stone-500 dark:text-stone-400">{s.label}</p>
+            <p className="text-sm font-bold text-stone-900 dark:text-stone-100">{s.value}</p>
           </div>
         </div>
       ))}
@@ -3880,7 +3880,11 @@ export function AgentsView() {
       : "Subagent orchestration, controls, and defaults";
 
   if (loading) {
-    return <LoadingState label="Loading agents..." />;
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading agents..." />
+      </SectionLayout>
+    );
   }
 
   if (error || !data) {
@@ -3922,10 +3926,10 @@ export function AgentsView() {
                   type="button"
                   onClick={() => switchView(key)}
                   className={cn(
-                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
+                    "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all",
                     viewMode === key
-                      ? "bg-card shadow-sm text-foreground animate-segment-slide"
-                      : "text-muted-foreground hover:text-foreground/70"
+                      ? "bg-white text-stone-900 shadow-sm dark:bg-stone-800 dark:text-stone-100"
+                      : "text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
                   )}
                 >
                   <Icon className="h-3 w-3" />
@@ -3938,19 +3942,19 @@ export function AgentsView() {
               <button
                 type="button"
                 onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-1.5 rounded-lg bg-[var(--accent-brand)] px-3 py-1.5 text-xs font-medium text-[var(--accent-brand-on)] transition-colors hover:opacity-90"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-stone-900 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-stone-700 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-300"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Add Agent</span>
               </button>
             )}
 
-            <button type="button" onClick={fetchAgents} className="rounded-lg border border-foreground/10 bg-card p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground/70">
+            <button type="button" onClick={fetchAgents} className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100">
               <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
             </button>
           </div>
         }
-        className="py-3"
       />
 
       {tab === "subagents" && (

@@ -1,10 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { execFile } from "child_process";
-import { promisify } from "util";
-import { getOpenClawBin } from "@/lib/paths";
-import { parseJsonFromCliOutput } from "@/lib/openclaw";
-
-const exec = promisify(execFile);
+import { gatewayMemorySearch } from "@/lib/gateway-tools";
 
 export const dynamic = "force-dynamic";
 
@@ -26,24 +21,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Find the openclaw binary (auto-discovered)
-    const bin = await getOpenClawBin();
-
-    const { stdout } = await exec(bin, ["memory", "search", query.trim(), "--json"], {
-      timeout: 10000,
-      env: {
-        ...process.env,
-        NO_COLOR: "1",
-      },
-    });
-
-    const parsed = parseJsonFromCliOutput<{ results: SearchResult[] }>(
-      stdout,
-      `openclaw memory search ${query.trim()} --json`
-    );
+    const data = await gatewayMemorySearch({ query: query.trim() });
 
     // Sanitize: strip any passwords or sensitive data from snippets
-    const results = (parsed.results || []).map((r) => ({
+    const results = (data.results || []).map((r) => ({
       path: r.path,
       startLine: r.startLine,
       endLine: r.endLine,

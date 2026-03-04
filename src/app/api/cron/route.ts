@@ -1,28 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
-import { readFile } from "fs/promises";
-import { join } from "path";
-import { runCli, runCliJson, runCliCaptureBoth, gatewayCall, parseJsonFromCliOutput } from "@/lib/openclaw";
-import { getOpenClawHome } from "@/lib/paths";
+import { gatewayCall } from "@/lib/openclaw";
 
 export const dynamic = "force-dynamic";
 
 type CronJob = {
   id: string;
-  agentId: string;
+  agentId?: string;
   name: string;
   enabled: boolean;
+  description?: string;
+  createdAtMs?: number;
+  updatedAtMs?: number;
+  deleteAfterRun?: boolean;
   schedule: { kind: string; expr?: string; everyMs?: number; tz?: string };
-  payload: { kind: string; message?: string };
-  delivery: { mode: string; channel?: string; to?: string };
+  payload: {
+    kind: string;
+    message?: string;
+    text?: string;
+    model?: string;
+    thinking?: string;
+    timeoutSeconds?: number;
+    lightContext?: boolean;
+  };
+  delivery: { mode: string; channel?: string; to?: string; accountId?: string; bestEffort?: boolean };
   state: {
     nextRunAtMs?: number;
     lastRunAtMs?: number;
     lastStatus?: string;
+    lastRunStatus?: string;
     lastDurationMs?: number;
     consecutiveErrors?: number;
     lastError?: string;
   };
   sessionTarget?: string;
+  sessionKey?: string | null;
+  wakeMode?: string;
 };
 
 type CronList = { jobs: CronJob[] };
@@ -45,6 +57,16 @@ type GatewayMessage = {
   role?: string;
   content?: Array<{ type?: string; text?: string; [k: string]: unknown }>;
   [k: string]: unknown;
+};
+
+type CronRunsResult = {
+  entries?: CronRunEntry[];
+};
+
+type CronRunResult = {
+  ok?: boolean;
+  ran?: boolean;
+  alreadyRunning?: boolean;
 };
 
 function formatChatHistoryAsText(messages: GatewayMessage[]): string {
@@ -78,7 +100,7 @@ async function collectKnownTargets(): Promise<
 
   // 1. Extract from existing cron jobs
   try {
-    const data = await runCliJson<CronList>(["cron", "list", "--all"]);
+    const data = await listCronJobs();
     for (const job of data.jobs || []) {
       if (job.delivery?.to) {
         const ch = job.delivery.channel || detectChannel(job.delivery.to);
@@ -134,6 +156,70 @@ function detectChannel(to: string): string {
   return "";
 }
 
+function parseEveryInterval(value: string): number {
+  const raw = value.trim().toLowerCase();
+  if (!raw) {
+    throw new Error("interval is required");
+  }
+
+  if (/^\d+$/.test(raw)) {
+    return Number(raw);
+  }
+
+  const match = raw.match(/^(\d+(?:\.\d+)?)(ms|s|m|min|mins|minute|minutes|h|hr|hrs|hour|hours|d|day|days)$/);
+  if (!match) {
+    throw new Error(`Unsupported interval: ${value}`);
+  }
+
+  const amount = Number(match[1]);
+  const unit = match[2];
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error(`Invalid interval: ${value}`);
+  }
+
+  switch (unit) {
+    case "ms":
+      return Math.round(amount);
+    case "s":
+      return Math.round(amount * 1000);
+    case "m":
+    case "min":
+    case "mins":
+    case "minute":
+    case "minutes":
+      return Math.round(amount * 60_000);
+    case "h":
+    case "hr":
+    case "hrs":
+    case "hour":
+    case "hours":
+      return Math.round(amount * 3_600_000);
+    case "d":
+    case "day":
+    case "days":
+      return Math.round(amount * 86_400_000);
+    default:
+      throw new Error(`Unsupported interval: ${value}`);
+  }
+}
+
+function normalizeAtTime(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid time: ${value}`);
+  }
+  return parsed.toISOString();
+}
+
+async function listCronJobs(): Promise<CronList> {
+  return gatewayCall<CronList>("cron.list", {}, 10000);
+}
+
+async function getCronJobById(id: string): Promise<CronJob | null> {
+  const data = await listCronJobs();
+  return (data.jobs || []).find((job) => job.id === id) || null;
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const action = searchParams.get("action");
@@ -143,40 +229,31 @@ export async function GET(request: NextRequest) {
     if (action === "runs" && jobId) {
       // Get run history for a specific job
       const limit = searchParams.get("limit") || "10";
-      const stdout = await runCli(
-        ["cron", "runs", "--id", jobId, "--limit", limit],
-        10000
+      const data = await gatewayCall<CronRunsResult>(
+        "cron.runs",
+        {
+          scope: "job",
+          id: jobId,
+          limit: Number(limit),
+        },
+        10000,
       );
-      // Parse the output - it's JSON with "entries" array
-      try {
-        const data = parseJsonFromCliOutput<{ entries: CronRunEntry[] }>(
-          stdout,
-          `openclaw cron runs --id ${jobId} --limit ${limit}`
-        );
-        return NextResponse.json(data);
-      } catch {
-        // Fallback: return raw text
-        return NextResponse.json({ entries: [], raw: stdout });
-      }
+      return NextResponse.json({ entries: Array.isArray(data.entries) ? data.entries : [] });
     }
 
     // Get the actual session output (agent transcript) for the latest run of a job
     if (action === "runOutput" && jobId) {
       const limit = searchParams.get("limit") || "5";
-      const stdout = await runCli(
-        ["cron", "runs", "--id", jobId, "--limit", limit],
-        10000
+      const data = await gatewayCall<CronRunsResult>(
+        "cron.runs",
+        {
+          scope: "job",
+          id: jobId,
+          limit: Number(limit),
+        },
+        10000,
       );
-      let entries: CronRunEntry[] = [];
-      try {
-        const data = parseJsonFromCliOutput<{ entries?: CronRunEntry[] }>(
-          stdout,
-          `openclaw cron runs --id ${jobId} --limit ${limit}`
-        );
-        entries = data.entries ?? [];
-      } catch {
-        return NextResponse.json({ output: "" });
-      }
+      const entries = Array.isArray(data.entries) ? data.entries : [];
       const latestWithSession = entries.find((e) => e.sessionKey);
       if (!latestWithSession?.sessionKey) {
         return NextResponse.json({ output: "" });
@@ -202,7 +279,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Default: list all jobs
-    const data = await runCliJson<CronList>(["cron", "list", "--all"]);
+    const data = await listCronJobs();
     return NextResponse.json(data);
   } catch (err) {
     console.error("Cron GET error:", err);
@@ -226,44 +303,27 @@ export async function POST(request: NextRequest) {
     switch (action) {
       case "enable": {
         if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-        await runCli(["cron", "enable", id]);
+        await gatewayCall("cron.update", { id, patch: { enabled: true } }, 15000);
         return NextResponse.json({ ok: true, action: "enabled", id });
       }
 
       case "disable": {
         if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-        await runCli(["cron", "disable", id]);
+        await gatewayCall("cron.update", { id, patch: { enabled: false } }, 15000);
         return NextResponse.json({ ok: true, action: "disabled", id });
       }
 
       case "run": {
         if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-        const result = await runCliCaptureBoth(["cron", "run", id], 30000);
-        const { stdout, stderr, code } = result;
-        const ok = code === 0;
-        const outputParts: string[] = [];
-        if (!ok) {
-          outputParts.push(`Command failed (exit ${code ?? "unknown"}).`);
-          if (stderr.trim()) outputParts.push("\nStderr:", stderr.trim());
-          if (stdout.trim()) outputParts.push("\nStdout:", stdout.trim());
-          // When CLI gives no output, try to show recent gateway log so the user can see what went wrong
-          if (!stderr.trim() && !stdout.trim()) {
-            try {
-              const logPath = join(getOpenClawHome(), "logs", "gateway.log");
-              const content = await readFile(logPath, "utf-8").catch(() => "");
-              const lines = content.trim().split("\n").filter(Boolean).slice(-25);
-              if (lines.length > 0) {
-                outputParts.push("\n\nRecent gateway log (last 25 lines):");
-                outputParts.push(lines.join("\n"));
-              }
-            } catch { /* ignore */ }
-            outputParts.push("\n\nRun in terminal for full output:");
-            outputParts.push(`  openclaw cron run ${id}`);
-          }
-        }
+        const result = await gatewayCall<CronRunResult>(
+          "cron.run",
+          { id, mode: "force" },
+          30000,
+        );
+        const ok = result.ok !== false;
         const output = ok
-          ? (stdout?.trim() || stderr?.trim() || "(no output)")
-          : outputParts.join("\n");
+          ? "Run requested. Waiting for transcript..."
+          : "Cron run request failed.";
         return NextResponse.json({
           ok,
           action: ok ? "triggered" : "failed",
@@ -275,119 +335,157 @@ export async function POST(request: NextRequest) {
 
       case "delete": {
         if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-        await runCli(["cron", "rm", id]);
+        await gatewayCall("cron.remove", { id }, 15000);
         return NextResponse.json({ ok: true, action: "deleted", id });
       }
 
       case "edit": {
         if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-        const args = ["cron", "edit", id];
-        if (params.name) args.push("--name", String(params.name));
-        if (params.message) args.push("--message", String(params.message));
-        if (params.cron) args.push("--cron", String(params.cron));
-        if (params.every) args.push("--every", String(params.every));
-        if (params.tz) args.push("--tz", String(params.tz));
-        if (params.channel) args.push("--channel", String(params.channel));
-        if (params.to) args.push("--to", String(params.to));
-        if (params.model) args.push("--model", String(params.model));
-        if (params.announce === true) args.push("--announce");
-        if (params.announce === false) args.push("--no-deliver");
-        await runCli(args, 10000);
+        const current = await getCronJobById(id);
+        if (!current) {
+          return NextResponse.json({ error: `job not found: ${id}` }, { status: 404 });
+        }
+
+        const patch: Record<string, unknown> = {};
+
+        if (params.name !== undefined) patch.name = String(params.name);
+
+        let nextPayload: CronJob["payload"] | null = null;
+        if (params.message !== undefined || params.model !== undefined) {
+          nextPayload = { ...current.payload };
+          if (params.message !== undefined) {
+            if (nextPayload.kind === "systemEvent") nextPayload.text = String(params.message);
+            else nextPayload.message = String(params.message);
+          }
+          if (params.model !== undefined) nextPayload.model = String(params.model);
+        }
+        if (nextPayload) patch.payload = nextPayload;
+
+        if (params.cron !== undefined) {
+          patch.schedule = {
+            kind: "cron",
+            expr: String(params.cron),
+            ...(params.tz !== undefined
+              ? { tz: String(params.tz) }
+              : current.schedule.tz
+                ? { tz: current.schedule.tz }
+                : {}),
+          };
+        } else if (params.every !== undefined) {
+          patch.schedule = {
+            kind: "every",
+            everyMs: parseEveryInterval(String(params.every)),
+          };
+        } else if (params.tz !== undefined && current.schedule.kind === "cron" && current.schedule.expr) {
+          patch.schedule = {
+            kind: "cron",
+            expr: current.schedule.expr,
+            tz: String(params.tz),
+          };
+        }
+
+        if (params.announce === true) {
+          patch.delivery = {
+            mode: "announce",
+            channel:
+              params.channel !== undefined
+                ? String(params.channel)
+                : current.delivery.channel || "last",
+            ...(params.to !== undefined
+              ? { to: String(params.to) }
+              : current.delivery.to
+                ? { to: current.delivery.to }
+                : {}),
+          };
+        } else if (params.announce === false) {
+          patch.delivery = { mode: "none" };
+        }
+
+        await gatewayCall("cron.update", { id, patch }, 10000);
         return NextResponse.json({ ok: true, action: "edited", id });
       }
 
       case "create": {
-        // Build `openclaw cron add` command with all provided params
-        const args = ["cron", "add"];
-
-        // Required: name
         if (!params.name) return NextResponse.json({ error: "name is required" }, { status: 400 });
-        args.push("--name", String(params.name));
 
-        // Optional description
-        if (params.description) args.push("--description", String(params.description));
-
-        // Agent
-        if (params.agent) args.push("--agent", String(params.agent));
-
-        // Schedule (exactly one of: --cron, --every, --at)
+        let schedule: Record<string, unknown>;
         if (params.scheduleKind === "cron") {
-          if (!params.cronExpr) return NextResponse.json({ error: "cron expression is required" }, { status: 400 });
-          args.push("--cron", String(params.cronExpr));
+          if (!params.cronExpr) {
+            return NextResponse.json({ error: "cron expression is required" }, { status: 400 });
+          }
+          schedule = {
+            kind: "cron",
+            expr: String(params.cronExpr),
+            ...(params.tz ? { tz: String(params.tz) } : {}),
+          };
         } else if (params.scheduleKind === "every") {
-          if (!params.everyInterval) return NextResponse.json({ error: "interval is required" }, { status: 400 });
-          args.push("--every", String(params.everyInterval));
+          if (!params.everyInterval) {
+            return NextResponse.json({ error: "interval is required" }, { status: 400 });
+          }
+          schedule = {
+            kind: "every",
+            everyMs: parseEveryInterval(String(params.everyInterval)),
+          };
         } else if (params.scheduleKind === "at") {
-          if (!params.atTime) return NextResponse.json({ error: "time is required" }, { status: 400 });
-          args.push("--at", String(params.atTime));
+          if (!params.atTime) {
+            return NextResponse.json({ error: "time is required" }, { status: 400 });
+          }
+          schedule = {
+            kind: "at",
+            at: normalizeAtTime(String(params.atTime)),
+          };
         } else {
           return NextResponse.json({ error: "scheduleKind must be cron, every, or at" }, { status: 400 });
         }
 
-        // Timezone
-        if (params.tz) args.push("--tz", String(params.tz));
-
-        // Session target
-        if (params.sessionTarget === "isolated") {
-          args.push("--session", "isolated");
-        } else {
-          args.push("--session", "main");
-        }
-
-        // Wake mode
-        if (params.wakeMode) args.push("--wake", String(params.wakeMode));
-
-        // Payload kind
+        let payload: Record<string, unknown>;
         if (params.payloadKind === "systemEvent") {
-          if (params.message) args.push("--system-event", String(params.message));
+          payload = {
+            kind: "systemEvent",
+            text: String(params.message || ""),
+          };
         } else {
-          // Default: agentTurn
-          if (params.message) args.push("--message", String(params.message));
+          payload = {
+            kind: "agentTurn",
+            message: String(params.message || ""),
+            ...(params.model ? { model: String(params.model) } : {}),
+            ...(params.thinking ? { thinking: String(params.thinking) } : {}),
+          };
         }
 
-        // Model override
-        if (params.model) args.push("--model", String(params.model));
+        const delivery =
+          params.deliveryMode === "announce"
+            ? {
+                mode: "announce",
+                channel: String(params.channel || "last"),
+                ...(params.to ? { to: String(params.to) } : {}),
+                ...(params.bestEffort ? { bestEffort: true } : {}),
+              }
+            : { mode: "none" };
 
-        // Thinking level
-        if (params.thinking) args.push("--thinking", String(params.thinking));
+        const created = await gatewayCall<Record<string, unknown>>(
+          "cron.add",
+          {
+            name: String(params.name),
+            ...(params.description ? { description: String(params.description) } : {}),
+            ...(params.agent ? { agentId: String(params.agent) } : {}),
+            schedule,
+            sessionTarget: params.sessionTarget === "isolated" ? "isolated" : "main",
+            ...(params.wakeMode ? { wakeMode: String(params.wakeMode) } : {}),
+            payload,
+            delivery,
+            ...(params.scheduleKind === "at" ? { deleteAfterRun: params.deleteAfterRun !== false } : {}),
+            enabled: params.disabled === true ? false : true,
+          },
+          15000,
+        );
 
-        // Delivery
-        if (params.deliveryMode === "announce") {
-          args.push("--announce");
-          if (params.channel) args.push("--channel", String(params.channel));
-          if (params.to) args.push("--to", String(params.to));
-          if (params.bestEffort) args.push("--best-effort-deliver");
-        } else {
-          args.push("--no-deliver");
-        }
+        const createdId =
+          (typeof created.id === "string" && created.id) ||
+          (typeof created.jobId === "string" && created.jobId) ||
+          null;
 
-        // Delete after run (for one-shot "at" jobs)
-        if (params.deleteAfterRun === true) args.push("--delete-after-run");
-        if (params.deleteAfterRun === false) args.push("--keep-after-run");
-
-        // Start disabled
-        if (params.disabled === true) args.push("--disabled");
-
-        const stdout = await runCli(args, 15000);
-
-        // Try to extract the created job ID from CLI output
-        let createdId: string | null = null;
-        try {
-          const parsed = parseJsonFromCliOutput<Record<string, unknown>>(
-            stdout,
-            "openclaw cron add"
-          );
-          createdId =
-            (typeof parsed.id === "string" && parsed.id) ||
-            (typeof parsed.jobId === "string" && parsed.jobId) ||
-            null;
-        } catch {
-          // Try to extract UUID from raw output
-          const match = stdout.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
-          if (match) createdId = match[0];
-        }
-
-        return NextResponse.json({ ok: true, action: "created", id: createdId, raw: stdout });
+        return NextResponse.json({ ok: true, action: "created", id: createdId, raw: created });
       }
 
       default:

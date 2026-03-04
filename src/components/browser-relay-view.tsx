@@ -557,19 +557,18 @@ export function BrowserRelayView() {
     <SectionLayout>
       <SectionHeader
         title={
-          <span className="inline-flex items-center gap-2 text-sm">
-            <Globe className="h-4 w-4" />
+          <span className="inline-flex items-center gap-2">
+            <Globe className="h-5 w-5 text-stone-700 dark:text-stone-200" />
             Browser Relay
           </span>
         }
         description="Guided setup for extension relay, managed profiles, and remote CDP."
-        descriptionClassName="text-sm text-muted-foreground"
         actions={
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => setShowAdvanced((prev) => !prev)}
-              className="inline-flex items-center gap-1 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
             >
               {showAdvanced ? (
                 <>
@@ -586,7 +585,7 @@ export function BrowserRelayView() {
             <button
               type="button"
               onClick={() => void load()}
-              className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-60 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
               disabled={loading || actionBusy !== null}
             >
               {loading ? (

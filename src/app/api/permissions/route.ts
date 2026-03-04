@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFileSync, unlinkSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
-import { runCli, runCliJson } from "@/lib/openclaw";
+import { gatewayCall, runCli, runCliJson } from "@/lib/openclaw";
 
 export const dynamic = "force-dynamic";
 
@@ -473,14 +473,18 @@ export async function POST(request: NextRequest) {
 
     if (action === "set-elevated") {
       const enabled = Boolean(body.enabled);
-      await runCli(
-        [
-          "config",
-          "set",
-          "tools.elevated.enabled",
-          enabled ? "true" : "false",
-          "--json",
-        ],
+      const cfg = await gatewayCall<{ hash?: string }>("config.get", undefined, 12000);
+      const baseHash = String(cfg.hash || "");
+      if (!baseHash) {
+        throw new Error("Missing config hash from gateway.");
+      }
+      await gatewayCall(
+        "config.patch",
+        {
+          raw: JSON.stringify({ tools: { elevated: { enabled } } }),
+          baseHash,
+          restartDelayMs: 2000,
+        },
         12000
       );
       const snapshot = await readSnapshot();

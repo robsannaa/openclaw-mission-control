@@ -15,7 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { SectionLayout } from "@/components/section-layout";
+import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
 import {
   getTimeFormatServerSnapshot,
@@ -60,30 +60,30 @@ const LEVEL_STYLES: Record<
   },
   info: {
     icon: Info,
-    iconClass: "text-slate-600 dark:text-muted-foreground",
+    iconClass: "text-stone-500 dark:text-stone-400",
     rowClass: "border-l-2 border-transparent",
-    messageClass: "text-foreground/90 dark:text-muted-foreground",
+    messageClass: "text-stone-800 dark:text-stone-200",
   },
 };
 
 function sourceClass(source: string): string {
   switch (source) {
     case "ws":
-      return "text-blue-700 dark:text-blue-300/70";
+      return "text-sky-700 dark:text-sky-300";
     case "cron":
-      return "text-amber-700 dark:text-amber-300/70";
+      return "text-amber-700 dark:text-amber-300";
     case "telegram":
-      return "text-cyan-700 dark:text-cyan-300/70";
+      return "text-sky-700 dark:text-sky-300";
     case "tools":
-      return "text-violet-700 dark:text-violet-300/70";
+      return "text-teal-700 dark:text-teal-300";
     case "skills-remote":
-      return "text-orange-700 dark:text-orange-300/75";
+      return "text-orange-700 dark:text-orange-300";
     case "agent":
-      return "text-emerald-700 dark:text-emerald-300/70";
+      return "text-emerald-700 dark:text-emerald-300";
     case "system":
-      return "text-rose-700 dark:text-rose-300/75";
+      return "text-rose-700 dark:text-rose-300";
     default:
-      return "text-foreground/70 dark:text-muted-foreground";
+      return "text-stone-600 dark:text-stone-300";
   }
 }
 
@@ -196,106 +196,121 @@ export function LogsView() {
 
   return (
     <SectionLayout>
-      {/* ── Toolbar ──────────────────────────────── */}
-      <div className="shrink-0 border-b border-foreground/10 bg-card/60">
-        <div className="flex items-center gap-3 px-4 py-2.5">
-          <Terminal className="h-4 w-4 text-muted-foreground" />
-          <h2 className="text-sm font-semibold text-foreground/90">Live Logs</h2>
-
-          {/* Stats badges */}
-          <div className="flex items-center gap-1.5">
-            <span className="rounded bg-muted/80 px-2 py-0.5 text-xs text-muted-foreground">
+      <SectionHeader
+        title={
+          <span className="inline-flex items-center gap-2">
+            <Terminal className="h-5 w-5 text-stone-700 dark:text-stone-200" />
+            Logs
+          </span>
+        }
+        description="Live gateway and agent logs with filtering, tailing, and quick source inspection."
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-semibold text-stone-600 dark:bg-stone-800 dark:text-stone-300">
               {stats.info} info
-            </span>
-            {stats.warn > 0 && (
-              <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs text-amber-400">
-                {stats.warn} warn
               </span>
+            {stats.warn > 0 && (
+                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-500/10 dark:text-amber-300">
+                {stats.warn} warn
+                </span>
             )}
             {stats.error > 0 && (
-              <span className="rounded bg-red-500/10 px-2 py-0.5 text-xs text-red-400">
+                <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700 dark:bg-red-500/10 dark:text-red-300">
                 {stats.error} err
-              </span>
+                </span>
             )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+                autoRefresh
+                  ? "border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300"
+                  : "border-stone-200 bg-white text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
+              )}
+            >
+              {autoRefresh ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+              {autoRefresh ? "Live" : "Paused"}
+            </button>
+            <button
+              type="button"
+              onClick={fetchLogs}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
+              title="Refresh now"
+            >
+              {loading ? (
+                <span className="inline-flex items-center gap-0.5">
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
+                  <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
+                </span>
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFilters(!showFilters)}
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors",
+                showFilters || hasFilters
+                  ? "border-stone-900 bg-stone-900 text-white dark:border-stone-200 dark:bg-stone-100 dark:text-stone-900"
+                  : "border-stone-200 bg-white text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
+              )}
+            >
+              <Filter className="h-3.5 w-3.5" />
+              Filters
+              {hasFilters && (
+                <span className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                  showFilters || hasFilters
+                    ? "bg-white/20 text-white dark:bg-stone-900/15 dark:text-stone-900"
+                    : "bg-stone-100 text-stone-600"
+                )}>
+                  Active
+                </span>
+              )}
+            </button>
           </div>
+        }
+      />
 
-          <div className="flex-1" />
-
-          {/* Auto-refresh toggle */}
-          <button
-            type="button"
-            onClick={() => setAutoRefresh(!autoRefresh)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition-colors",
-              autoRefresh
-                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-400"
-                : "border-foreground/10 bg-muted/60 text-muted-foreground"
-            )}
-          >
-            {autoRefresh ? (
-              <Pause className="h-3 w-3" />
-            ) : (
-              <Play className="h-3 w-3" />
-            )}
-            {autoRefresh ? "Live" : "Paused"}
-          </button>
-
-          {/* Refresh button */}
-          <button
-            type="button"
-            onClick={fetchLogs}
-            className="rounded-md border border-foreground/10 bg-muted/60 p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground/70"
-            title="Refresh now"
-          >
-            {loading ? (
-              <span className="inline-flex items-center gap-0.5">
-                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:0ms]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:150ms]" />
-                <span className="h-1 w-1 animate-bounce rounded-full bg-current [animation-delay:300ms]" />
-              </span>
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" />
-            )}
-          </button>
-
-          {/* Filter toggle */}
-          <button
-            type="button"
-            onClick={() => setShowFilters(!showFilters)}
-            className={cn(
-              "flex items-center gap-1 rounded-md border px-2 py-1 text-xs transition-colors",
-              showFilters || hasFilters
-                ? "border-violet-500/20 bg-violet-500/10 text-violet-400"
-                : "border-foreground/10 bg-muted/60 text-muted-foreground hover:text-foreground/70"
-            )}
-          >
-            <Filter className="h-3 w-3" />
-            Filters
-            {hasFilters && (
-              <span className="ml-0.5 rounded-full bg-violet-500/30 px-1 text-xs">
-                !
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* ── Filter bar ──────────────────────────── */}
+      <SectionBody width="wide" padding="regular" innerClassName="space-y-4">
         {showFilters && (
-          <div className="flex flex-wrap items-center gap-2 border-t border-foreground/5 px-4 py-2">
+          <div className="rounded-xl border border-stone-200 bg-white p-4 dark:border-stone-700 dark:bg-stone-800">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">Filters</p>
+                <p className="text-xs text-stone-500 dark:text-stone-400">Narrow logs by search, source, level, or history depth.</p>
+              </div>
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-xs font-medium text-stone-500 hover:text-stone-900 dark:text-stone-400 dark:hover:text-stone-100"
+                >
+                  Clear all
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
             {/* Search */}
-            <div className="flex items-center gap-1.5 rounded-md border border-foreground/10 bg-card px-2 py-1">
-              <Search className="h-3 w-3 text-muted-foreground/60" />
+            <div className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-50 px-2.5 py-2 dark:border-stone-700 dark:bg-stone-900/70">
+              <Search className="h-3.5 w-3.5 text-stone-400 dark:text-stone-500" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search logs..."
-                className="w-40 bg-transparent text-xs text-foreground/70 outline-none placeholder:text-muted-foreground/60"
+                className="w-44 bg-transparent text-sm text-stone-700 outline-none placeholder:text-stone-400 dark:text-stone-200 dark:placeholder:text-stone-500"
               />
               {search && (
                 <button
                   type="button"
                   onClick={() => setSearch("")}
-                  className="text-muted-foreground/60 hover:text-muted-foreground"
+                  className="text-stone-400 hover:text-stone-700 dark:text-stone-500 dark:hover:text-stone-200"
                 >
                   <X className="h-3 w-3" />
                 </button>
@@ -306,7 +321,7 @@ export function LogsView() {
             <select
               value={sourceFilter}
               onChange={(e) => setSourceFilter(e.target.value)}
-              className="rounded-md border border-foreground/10 bg-card px-2 py-1 text-xs text-foreground/70 outline-none"
+              className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
             >
               <option value="">All sources</option>
               {sources.map((s) => (
@@ -327,13 +342,14 @@ export function LogsView() {
                   }
                   className={cn(
                     "rounded-md border px-2 py-0.5 text-xs font-medium transition-colors",
+                    "rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors",
                     levelFilter === level
                       ? level === "error"
-                        ? "border-red-500/30 bg-red-500/15 text-red-400"
-                        : level === "warn"
-                          ? "border-amber-500/30 bg-amber-500/15 text-amber-400"
-                          : "border-blue-500/30 bg-blue-500/15 text-blue-300"
-                      : "border-foreground/10 bg-muted/60 text-muted-foreground hover:text-muted-foreground"
+                        ? "border-red-200 bg-red-100 text-red-700 dark:border-red-500/25 dark:bg-red-500/10 dark:text-red-300"
+                      : level === "warn"
+                          ? "border-amber-200 bg-amber-100 text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300"
+                          : "border-sky-200 bg-sky-100 text-sky-700 dark:border-sky-500/25 dark:bg-sky-500/10 dark:text-sky-300"
+                      : "border-stone-200 bg-stone-50 text-stone-500 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-900/70 dark:text-stone-400 dark:hover:text-stone-100"
                   )}
                 >
                   {level}
@@ -345,51 +361,41 @@ export function LogsView() {
             <select
               value={limit}
               onChange={(e) => setLimit(parseInt(e.target.value, 10))}
-              className="rounded-md border border-foreground/10 bg-card px-2 py-1 text-xs text-foreground/70 outline-none"
+              className="rounded-lg border border-stone-200 bg-white px-3 py-2 text-sm text-stone-700 outline-none dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200"
             >
               <option value="100">100 lines</option>
               <option value="200">200 lines</option>
               <option value="500">500 lines</option>
               <option value="1000">1000 lines</option>
             </select>
-
-            {hasFilters && (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="text-xs text-muted-foreground hover:text-foreground/70"
-              >
-                Clear all
-              </button>
-            )}
+          </div>
           </div>
         )}
-      </div>
 
-      {/* ── Terminal output ────────────────────── */}
-      <div
-        ref={scrollRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto bg-background font-mono text-xs leading-relaxed"
-      >
+        <div className="overflow-hidden rounded-xl border border-stone-200 bg-white shadow-sm dark:border-stone-700 dark:bg-stone-800">
+          <div
+            ref={scrollRef}
+            onScroll={handleScroll}
+            className="max-h-[calc(100vh-18rem)] overflow-y-auto bg-white font-mono text-xs leading-relaxed dark:bg-stone-900"
+          >
         {loading && entries.length === 0 ? (
           <LoadingState label="Loading logs..." className="py-12" />
         ) : displayEntries.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground/60">
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-stone-400 dark:text-stone-500">
             <Terminal className="h-6 w-6" />
-            <span className="text-sm">No log entries found</span>
+            <span className="text-sm font-medium">No log entries found</span>
             {hasFilters && (
               <button
                 type="button"
                 onClick={clearFilters}
-                className="text-xs text-violet-400 hover:text-violet-300"
+                className="text-xs font-medium text-emerald-700 hover:text-emerald-600 dark:text-emerald-300 dark:hover:text-emerald-200"
               >
                 Clear filters
               </button>
             )}
           </div>
         ) : (
-          <div className="px-2 py-1">
+          <div className="px-2 py-2">
             {displayEntries.map((entry, i) => {
               const style = LEVEL_STYLES[entry.level] || LEVEL_STYLES.info;
               const LevelIcon = style.icon;
@@ -405,20 +411,20 @@ export function LogsView() {
                 <div key={`${entry.time}-${entry.line}-${i}`}>
                   {showDate && entry.time && (
                     <div className="my-1 flex items-center gap-2 px-2 py-0.5">
-                      <div className="h-px flex-1 bg-foreground/5" />
-                      <span className="text-xs text-muted-foreground/60">
+                      <div className="h-px flex-1 bg-stone-200 dark:bg-stone-700" />
+                      <span className="text-xs font-medium text-stone-400 dark:text-stone-500">
                         {formatLogDate(entry.time)}
                       </span>
-                      <div className="h-px flex-1 bg-foreground/5" />
+                      <div className="h-px flex-1 bg-stone-200 dark:bg-stone-700" />
                     </div>
                   )}
                     <div
                       className={cn(
-                        "group flex items-start gap-2 rounded px-2 py-0.5 transition-colors hover:bg-muted/50",
+                        "group flex items-start gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-stone-50 dark:hover:bg-stone-800/70",
                         style.rowClass
                       )}
                     >
-                    <span className="w-16 shrink-0 text-foreground/45 dark:text-muted-foreground/60">
+                    <span className="w-16 shrink-0 text-stone-400 dark:text-stone-500">
                       {formatLogTime(entry.time, timeFormat)}
                     </span>
                     <LevelIcon
@@ -446,11 +452,10 @@ export function LogsView() {
             })}
           </div>
         )}
-      </div>
+          </div>
 
-      {/* ── Bottom bar ─────────────────────────── */}
-      <div className="flex shrink-0 items-center justify-between border-t border-foreground/10 bg-card/60 px-4 py-1.5">
-        <span className="text-xs text-muted-foreground/60">
+          <div className="flex shrink-0 items-center justify-between border-t border-stone-200 bg-stone-50 px-4 py-2 dark:border-stone-700 dark:bg-stone-800">
+        <span className="text-xs text-stone-500 dark:text-stone-400">
           {displayEntries.length} entries
           {hasFilters && " (filtered)"}
         </span>
@@ -465,7 +470,7 @@ export function LogsView() {
                   behavior: "smooth",
                 });
               }}
-              className="flex items-center gap-1 rounded bg-violet-500/10 px-2 py-0.5 text-xs text-violet-400 transition-colors hover:bg-violet-500/20"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-stone-600 dark:bg-stone-900 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
             >
               <ArrowDown className="h-3 w-3" />
               Scroll to bottom
@@ -478,7 +483,9 @@ export function LogsView() {
             </span>
           )}
         </div>
-      </div>
+          </div>
+        </div>
+      </SectionBody>
     </SectionLayout>
   );
 }
@@ -491,7 +498,7 @@ function highlightMessage(message: string, search: string): React.ReactNode {
   return (
     <>
       {message.slice(0, idx)}
-      <mark className="rounded bg-violet-500/20 px-0.5 text-violet-900 dark:bg-violet-500/30 dark:text-violet-200">
+      <mark className="rounded bg-amber-100 px-0.5 text-amber-900 dark:bg-amber-500/25 dark:text-amber-200">
         {message.slice(idx, idx + search.length)}
       </mark>
       {message.slice(idx + search.length)}

@@ -529,7 +529,11 @@ export function HooksView() {
   }, [data]);
 
   if (loading) {
-    return <LoadingState label="Loading hooks..." size="lg" className="h-full" />;
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading hooks..." size="lg" />
+      </SectionLayout>
+    );
   }
 
   if (error || !data) {
@@ -553,7 +557,7 @@ export function HooksView() {
   return (
     <SectionLayout>
       <SectionHeader
-        title={<span className="font-serif font-bold text-base">Hooks</span>}
+        title="Hooks"
         description="Event-driven automations for commands, agents, gateway, and messages."
         actions={
           <button
@@ -562,7 +566,7 @@ export function HooksView() {
               setLoading(true);
               void fetchData();
             }}
-            className="rounded-lg border border-foreground/10 bg-card px-3 py-1.5 text-xs font-medium text-foreground/80 hover:bg-muted/80"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
           >
             Refresh
           </button>

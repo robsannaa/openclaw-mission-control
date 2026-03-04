@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import { Trash2, RefreshCw, MessageSquare, Clock, Zap } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Trash2, RefreshCw, MessageSquare, Clock, Zap, DollarSign } from "lucide-react";
+import { estimateCostUsd } from "@/lib/model-metadata";
 import { cn } from "@/lib/utils";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
+import { useSmartPoll } from "@/hooks/use-smart-poll";
 
 type Session = {
   key: string;
@@ -48,14 +50,14 @@ function getAgeMs(session: Session): number | null {
 
 function sessionLabel(key: string): { type: string; badge: string } {
   if (key.includes(":cron:") && key.includes(":run:"))
-    return { type: "Cron Run", badge: "bg-amber-500/15 text-amber-400" };
+    return { type: "Cron Run", badge: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" };
   if (key.includes(":cron:"))
-    return { type: "Cron", badge: "bg-amber-500/15 text-amber-400" };
+    return { type: "Cron", badge: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" };
   if (key.includes(":main"))
-    return { type: "Main", badge: "bg-violet-500/15 text-violet-400" };
+    return { type: "Main", badge: "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300" };
   if (key.includes(":hook:"))
-    return { type: "Hook", badge: "bg-cyan-500/15 text-cyan-400" };
-  return { type: "Session", badge: "bg-zinc-500/15 text-muted-foreground" };
+    return { type: "Hook", badge: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300" };
+  return { type: "Session", badge: "bg-stone-100 text-stone-600 dark:bg-stone-700/60 dark:text-stone-300" };
 }
 
 export function SessionsView() {
@@ -67,30 +69,17 @@ export function SessionsView() {
   const fetchSessions = useCallback(async () => {
     try {
       const res = await fetch("/api/sessions", { cache: "no-store" });
+      if (!res.ok) {
+        setLoading(false);
+        return;
+      }
       const data = await res.json();
       setSessions(data.sessions || []);
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
 
-  useEffect(() => {
-    queueMicrotask(() => fetchSessions());
-  }, [fetchSessions]);
-
-  useEffect(() => {
-    const pollId = window.setInterval(() => {
-      if (document.visibilityState === "visible") void fetchSessions();
-    }, 5000);
-
-    const onFocus = () => {
-      void fetchSessions();
-    };
-    window.addEventListener("focus", onFocus);
-    return () => {
-      window.clearInterval(pollId);
-      window.removeEventListener("focus", onFocus);
-    };
-  }, [fetchSessions]);
+  useSmartPoll(fetchSessions, { intervalMs: 5000 });
 
   const killSession = useCallback(
     async (key: string) => {
@@ -112,7 +101,11 @@ export function SessionsView() {
   );
 
   if (loading) {
-    return <LoadingState label="Loading sessions..." />;
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading sessions..." />
+      </SectionLayout>
+    );
   }
 
   return (
@@ -127,7 +120,7 @@ export function SessionsView() {
               setLoading(true);
               fetchSessions();
             }}
-            className="flex items-center gap-1.5 rounded-lg border border-foreground/10 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/80"
+            className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-50 hover:text-stone-900 dark:border-[#2c343d] dark:bg-[#171a1d] dark:text-[#c7d0d9] dark:hover:bg-[#20252a] dark:hover:text-[#f5f7fa]"
           >
             <RefreshCw className="h-3 w-3" /> Refresh
           </button>
@@ -144,20 +137,20 @@ export function SessionsView() {
           return (
             <div
               key={s.key}
-              className="rounded-xl border border-foreground/10 bg-card/90 p-4"
+              className="rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-[#2c343d] dark:bg-[#171a1d]"
             >
               <div className="flex flex-col sm:flex-row sm:items-start gap-3">
-                <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/60" />
+                <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-stone-400 dark:text-[#7a8591]" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", badge)}>
+                    <span className={cn("rounded-full px-2 py-0.5 text-xs font-semibold", badge)}>
                       {type}
                     </span>
-                    <span className="truncate text-xs font-mono text-muted-foreground">
+                    <span className="truncate text-xs font-mono text-stone-500 dark:text-[#8d98a5]">
                       {s.key}
                     </span>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                  <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-stone-500 dark:text-[#8d98a5]">
                     <span className="flex items-center gap-1">
                       <Clock className="h-3 w-3" /> {ageLabel}
                     </span>
@@ -167,7 +160,17 @@ export function SessionsView() {
                     <span>
                       In: {formatTokens(s.inputTokens)} / Out: {formatTokens(s.outputTokens)}
                     </span>
-                    <span className="rounded bg-muted/80 px-1.5 py-0.5 text-xs font-mono">
+                    {(() => {
+                      const cost = estimateCostUsd(s.model, s.inputTokens, s.outputTokens);
+                      if (cost === null) return null;
+                      return (
+                        <span className="flex items-center gap-1">
+                          <DollarSign className="h-3 w-3" />
+                          {cost < 0.01 ? "<$0.01" : `$${cost.toFixed(2)}`}
+                        </span>
+                      );
+                    })()}
+                    <span className="rounded-md border border-stone-200 bg-stone-50 px-1.5 py-0.5 text-xs font-mono text-stone-600 dark:border-[#2c343d] dark:bg-[#15191d] dark:text-[#c7d0d9]">
                       {s.model}
                     </span>
                   </div>
@@ -181,14 +184,14 @@ export function SessionsView() {
                         type="button"
                         onClick={() => killSession(s.key)}
                         disabled={isDeleting}
-                        className="rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-red-500 disabled:opacity-50"
+                        className="rounded-lg bg-red-500 px-2.5 py-1.5 text-xs font-medium text-white transition-colors hover:bg-red-600 disabled:opacity-50"
                       >
                         {isDeleting ? "Killing..." : "Confirm Kill"}
                       </button>
                       <button
                         type="button"
                         onClick={() => setConfirmDelete(null)}
-                        className="rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground/70"
+                        className="rounded-lg border border-stone-200 bg-white px-2.5 py-1.5 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-50 hover:text-stone-900 dark:border-[#2c343d] dark:bg-[#171a1d] dark:text-[#c7d0d9] dark:hover:bg-[#20252a] dark:hover:text-[#f5f7fa]"
                       >
                         Cancel
                       </button>
@@ -197,7 +200,7 @@ export function SessionsView() {
                     <button
                       type="button"
                       onClick={() => setConfirmDelete(s.key)}
-                      className="rounded p-1.5 text-muted-foreground/60 transition-colors hover:bg-red-500/15 hover:text-red-400"
+                      className="rounded-lg p-1.5 text-stone-400 transition-colors hover:bg-red-50 hover:text-red-500 dark:text-[#7a8591] dark:hover:bg-red-500/10 dark:hover:text-red-300"
                       title="Kill session"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
@@ -209,7 +212,7 @@ export function SessionsView() {
           );
         })}
         {sessions.length === 0 && (
-          <div className="flex items-center justify-center py-12 text-sm text-muted-foreground/60">
+          <div className="flex items-center justify-center py-12 text-sm text-stone-500 dark:text-[#8d98a5]">
             No active sessions
           </div>
         )}

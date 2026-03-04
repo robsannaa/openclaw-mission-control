@@ -15,8 +15,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { access, readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
-import { runCli } from "@/lib/openclaw";
+import { gatewayCall, runCli } from "@/lib/openclaw";
 import { getOpenClawBin, getOpenClawHome, getGatewayUrl } from "@/lib/paths";
+import {
+  buildProviderCredentialPatch,
+  fetchModelsFromProvider,
+  MINIMAX_PROVIDER_CONFIG,
+  PROVIDER_ENV_KEYS,
+  validateProviderToken,
+} from "@/lib/provider-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +50,24 @@ async function readJsonSafe<T>(p: string): Promise<T | null> {
 async function writeJsonAtomic(p: string, data: unknown): Promise<void> {
   await mkdir(dirname(p), { recursive: true });
   await writeFile(p, JSON.stringify(data, null, 2) + "\n", "utf-8");
+}
+
+async function applyGatewayConfigPatch(rawPatch: Record<string, unknown>): Promise<void> {
+  const cfg = await gatewayCall<Record<string, unknown>>("config.get", undefined, 15000);
+  const baseHash = String(cfg.hash || "");
+  if (!baseHash) {
+    throw new Error("Missing config hash from gateway.");
+  }
+
+  await gatewayCall(
+    "config.patch",
+    {
+      raw: JSON.stringify(rawPatch),
+      baseHash,
+      restartDelayMs: 2000,
+    },
+    20000,
+  );
 }
 
 async function checkGatewayHealth(
@@ -205,140 +230,6 @@ async function probeCustomEndpoint(
   }
 }
 
-/* ── Provider probe endpoints ─────────────────────── */
-
-const PROVIDER_PROBES: Record<
-  string,
-  { url: string; method: string; buildHeaders: (token: string) => Record<string, string>; buildBody?: (token: string) => string }
-> = {
-  openai: {
-    url: "https://api.openai.com/v1/models",
-    method: "GET",
-    buildHeaders: (token) => ({ Authorization: `Bearer ${token}` }),
-  },
-  anthropic: {
-    url: "https://api.anthropic.com/v1/messages",
-    method: "POST",
-    buildHeaders: (token) => ({
-      "x-api-key": token,
-      "anthropic-version": "2023-06-01",
-      "Content-Type": "application/json",
-    }),
-    buildBody: () =>
-      JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 1,
-        messages: [{ role: "user", content: "hi" }],
-      }),
-  },
-  google: {
-    url: "https://generativelanguage.googleapis.com/v1beta/models",
-    method: "GET",
-    buildHeaders: () => ({}),
-  },
-  openrouter: {
-    url: "https://openrouter.ai/api/v1/models",
-    method: "GET",
-    buildHeaders: (token) => ({ Authorization: `Bearer ${token}` }),
-  },
-  groq: {
-    url: "https://api.groq.com/openai/v1/models",
-    method: "GET",
-    buildHeaders: (token) => ({ Authorization: `Bearer ${token}` }),
-  },
-  xai: {
-    url: "https://api.x.ai/v1/models",
-    method: "GET",
-    buildHeaders: (token) => ({ Authorization: `Bearer ${token}` }),
-  },
-  mistral: {
-    url: "https://api.mistral.ai/v1/models",
-    method: "GET",
-    buildHeaders: (token) => ({ Authorization: `Bearer ${token}` }),
-  },
-};
-
-/* ── Model list endpoints & parsers ────────────────── */
-
-type ModelItem = { id: string; name: string };
-
-async function fetchModelsFromProvider(
-  provider: string,
-  token: string,
-): Promise<ModelItem[]> {
-  const probe = PROVIDER_PROBES[provider];
-  if (!probe) throw new Error(`Unknown provider: ${provider}`);
-
-  let url = probe.url;
-
-  // Google needs key as query param; model list is a different endpoint
-  if (provider === "google") {
-    url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(token)}`;
-  }
-
-  const headers = probe.buildHeaders(token);
-  const res = await fetch(url, {
-    method: "GET",
-    headers,
-    signal: AbortSignal.timeout(15000),
-  });
-
-  if (!res.ok) {
-    throw new Error(`Provider returned ${res.status}`);
-  }
-
-  const data = await res.json();
-
-  switch (provider) {
-    case "google": {
-      // { models: [{ name: "models/gemini-2.0-flash", displayName: "Gemini 2.0 Flash", supportedGenerationMethods: [...] }] }
-      const models = (data.models || [])
-        .filter(
-          (m: { supportedGenerationMethods?: string[] }) =>
-            m.supportedGenerationMethods?.includes("generateContent"),
-        )
-        .map((m: { name: string; displayName?: string }) => ({
-          id: `google/${m.name.replace("models/", "")}`,
-          name: m.displayName || m.name.replace("models/", ""),
-        }));
-      return models;
-    }
-
-    case "anthropic": {
-      // { data: [{ id, display_name }] }
-      const models = (data.data || []).map(
-        (m: { id: string; display_name?: string }) => ({
-          id: `anthropic/${m.id}`,
-          name: m.display_name || m.id,
-        }),
-      );
-      return models;
-    }
-
-    case "openrouter": {
-      // { data: [{ id, name }] }
-      const models = (data.data || []).map(
-        (m: { id: string; name?: string }) => ({
-          id: `openrouter/${m.id}`,
-          name: m.name || m.id,
-        }),
-      );
-      return models;
-    }
-
-    // OpenAI, Groq, xAI, Mistral all use { data: [{ id }] }
-    default: {
-      const models = (data.data || []).map(
-        (m: { id: string; name?: string }) => ({
-          id: `${provider}/${m.id}`,
-          name: m.name || m.id,
-        }),
-      );
-      return models;
-    }
-  }
-}
-
 /* ── GET /api/onboard ──────────────────────────────── */
 
 export async function GET() {
@@ -383,6 +274,14 @@ export async function GET() {
           hasModel = Boolean(
             typeof model === "string" ? model : (model as Record<string, unknown>)?.primary,
           );
+
+          const env = getDotPath(config, "env");
+          if (env && typeof env === "object") {
+            hasApiKey = Object.values(PROVIDER_ENV_KEYS).some((key) => {
+              const value = (env as Record<string, unknown>)[key];
+              return typeof value === "string" && value.trim().length > 0;
+            });
+          }
         }
       } catch {
         // config unreadable
@@ -453,52 +352,8 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        const probe = PROVIDER_PROBES[provider];
-        if (!probe) {
-          return NextResponse.json(
-            { ok: false, error: `Unknown provider: ${provider}` },
-            { status: 400 },
-          );
-        }
-
-        try {
-          let url = probe.url;
-          const headers = probe.buildHeaders(token);
-
-          // Google uses key as query param
-          if (provider === "google") {
-            url = `${probe.url}?key=${encodeURIComponent(token)}`;
-          }
-
-          const fetchOpts: RequestInit = {
-            method: probe.method,
-            headers,
-            signal: AbortSignal.timeout(15000),
-          };
-
-          if (probe.buildBody && probe.method === "POST") {
-            fetchOpts.body = probe.buildBody(token);
-          }
-
-          const res = await fetch(url, fetchOpts);
-
-          if (res.ok || (provider === "anthropic" && res.status < 500)) {
-            // Anthropic returns 200 for valid keys even with minimal request
-            // Other providers return 200 for /models
-            return NextResponse.json({ ok: true });
-          }
-
-          const errBody = await res.text().catch(() => "");
-          return NextResponse.json({
-            ok: false,
-            error: `Invalid API key — ${provider} returned ${res.status}${errBody ? `: ${errBody.slice(0, 200)}` : ""}`,
-          });
-        } catch (err) {
-          return NextResponse.json({
-            ok: false,
-            error: `Key validation failed: ${err}`,
-          });
-        }
+        const result = await validateProviderToken(provider, token);
+        return NextResponse.json(result);
       }
 
       /* ── save-credentials: write auth + model to disk ── */
@@ -518,28 +373,38 @@ export async function POST(request: NextRequest) {
         const home = getOpenClawHome();
 
         try {
-          // For custom providers, save baseUrl config and auth profile
+          const envKey = PROVIDER_ENV_KEYS[provider];
+          const gatewayPatch = buildProviderCredentialPatch(provider, apiKey);
+
           if (provider === "custom" && baseUrl) {
-            const normalizedUrl = normalizeBaseUrl(baseUrl);
-            // Write custom provider config: models.providers.custom = { baseUrl, api: "openai-completions" }
-            await ensureConfigValue(home, "models.providers.custom", {
-              baseUrl: normalizedUrl,
-              api: "openai-completions",
-              models: [],
-            });
-            // Save API key if provided
-            if (apiKey) {
-              await ensureAuthProfile(home, "custom", apiKey);
-            } else {
-              // For auth-free local endpoints, write a minimal auth profile so hasApiKey check passes
-              await ensureAuthProfile(home, "custom", "local-no-auth");
-            }
-          } else {
-            await ensureAuthProfile(home, provider, apiKey);
+            gatewayPatch.models = {
+              providers: {
+                custom: {
+                  baseUrl: normalizeBaseUrl(baseUrl),
+                  api: "openai-completions",
+                  models: [],
+                },
+              },
+            };
           }
 
           if (model) {
-            await ensureConfigValue(home, "agents.defaults.model.primary", model);
+            gatewayPatch.agents = {
+              defaults: {
+                model: {
+                  primary: model,
+                },
+              },
+            };
+          }
+
+          if (Object.keys(gatewayPatch).length > 0) {
+            await applyGatewayConfigPatch(gatewayPatch);
+          }
+
+          // Custom/open-ended providers still need the local auth profile file for bearer tokens.
+          if ((provider === "custom" && apiKey) || !envKey) {
+            await ensureAuthProfile(home, provider, apiKey || "local-no-auth");
           }
           return NextResponse.json({ ok: true });
         } catch (err) {
@@ -638,7 +503,20 @@ export async function POST(request: NextRequest) {
             }
             steps.push(`Custom endpoint configured: ${normalizedUrl}`);
           } else {
-            await ensureAuthProfile(home, provider, apiKey);
+            const envKey = PROVIDER_ENV_KEYS[provider];
+            if (envKey) {
+              await ensureConfigValue(home, `env.${envKey}`, apiKey);
+              await ensureConfigValue(home, `auth.profiles.${provider}:default`, {
+                provider,
+                mode: "api_key",
+              });
+            }
+            if (provider === "minimax") {
+              await ensureConfigValue(home, "models.providers.minimax", MINIMAX_PROVIDER_CONFIG);
+            }
+            if (!envKey) {
+              await ensureAuthProfile(home, provider, apiKey);
+            }
           }
           steps.push(`Authenticated ${provider}`);
         } catch (err) {

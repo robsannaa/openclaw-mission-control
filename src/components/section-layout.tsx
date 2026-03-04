@@ -15,9 +15,9 @@ const SECTION_WIDTH_CLASS: Record<SectionWidth, string> = {
 
 const SECTION_PADDING_CLASS: Record<SectionPadding, string> = {
   none: "",
-  compact: "px-4 py-4 md:px-6",
-  regular: "px-4 py-5 md:px-6",
-  roomy: "px-4 py-6 md:px-6",
+  compact: "px-6 py-5 md:px-8",
+  regular: "px-6 py-6 md:px-8",
+  roomy: "px-6 py-7 md:px-8",
 };
 
 type SectionLayoutProps = {
@@ -26,7 +26,7 @@ type SectionLayoutProps = {
 };
 
 export function SectionLayout({ children, className }: SectionLayoutProps) {
-  return <div className={cn("flex flex-1 flex-col overflow-hidden", className)}>{children}</div>;
+  return <div className={cn("flex flex-1 flex-col overflow-hidden bg-stone-50 dark:bg-[#101214]", className)}>{children}</div>;
 }
 
 type SectionHeaderProps = {
@@ -52,23 +52,23 @@ export function SectionHeader({
   descriptionClassName,
   metaClassName,
   actionsClassName,
-  bordered = true,
+  bordered = false,
 }: SectionHeaderProps) {
   return (
     <div
       className={cn(
-        "shrink-0 px-4 py-4 md:px-6",
-        bordered && "border-b border-border/60",
+        "shrink-0 px-6 py-6 md:px-8",
+        bordered && "border-b border-stone-200 dark:border-[#23282e]",
         className
       )}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className={cn("text-base font-semibold tracking-tight text-foreground", titleClassName)}>{title}</h1>
+          <h1 className={cn("text-2xl font-bold tracking-tight text-stone-900 dark:text-[#f5f7fa]", titleClassName)}>{title}</h1>
           {description ? (
-            <p className={cn("mt-0.5 text-[13px] text-muted-foreground/70", descriptionClassName)}>{description}</p>
+            <p className={cn("mt-1 text-sm text-stone-500 dark:text-[#a8b0ba]", descriptionClassName)}>{description}</p>
           ) : null}
-          {meta ? <p className={cn("mt-1 text-xs text-muted-foreground/80", metaClassName)}>{meta}</p> : null}
+          {meta ? <p className={cn("mt-2 text-xs font-medium text-stone-400 dark:text-[#7a8591]", metaClassName)}>{meta}</p> : null}
         </div>
         {actions ? <div className={cn("flex shrink-0 items-center gap-2", actionsClassName)}>{actions}</div> : null}
       </div>

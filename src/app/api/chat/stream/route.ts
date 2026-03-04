@@ -1,4 +1,5 @@
 import { getGatewayUrl, getGatewayToken } from "@/lib/paths";
+import { logRequest, logError } from "@/lib/request-log";
 
 /**
  * Streaming chat endpoint — proxies SSE from the Gateway's OpenResponses API.
@@ -11,6 +12,7 @@ import { getGatewayUrl, getGatewayToken } from "@/lib/paths";
  * status so the client can fall back to the non-streaming /api/chat endpoint.
  */
 export async function POST(req: Request) {
+  const start = Date.now();
   try {
     const body = await req.json();
     const messages: {
@@ -112,7 +114,7 @@ export async function POST(req: Request) {
       });
     } catch (err) {
       clearTimeout(timeout);
-      // Gateway unreachable — client should fall back to CLI
+      logError("/api/chat/stream", err, { agentId, phase: "gateway_fetch" });
       return new Response(
         JSON.stringify({ error: "gateway_unreachable", message: String(err) }),
         { status: 502, headers: { "Content-Type": "application/json" } },
@@ -122,7 +124,7 @@ export async function POST(req: Request) {
     if (!gwRes.ok) {
       clearTimeout(timeout);
       const text = await gwRes.text().catch(() => "");
-      // 404 = endpoint not enabled, 401 = auth issue, etc.
+      logRequest("/api/chat/stream", gwRes.status, Date.now() - start, { agentId, error: gwRes.status === 404 ? "endpoint_not_enabled" : "gateway_error" });
       return new Response(
         JSON.stringify({
           error: gwRes.status === 404 ? "endpoint_not_enabled" : "gateway_error",
@@ -162,6 +164,7 @@ export async function POST(req: Request) {
       }
     })();
 
+    logRequest("/api/chat/stream", 200, Date.now() - start, { agentId, model: model || "openclaw" });
     return new Response(readable, {
       status: 200,
       headers: {
@@ -171,7 +174,7 @@ export async function POST(req: Request) {
       },
     });
   } catch (err) {
-    console.error("Chat stream API error:", err);
+    logError("/api/chat/stream", err);
     return new Response(
       JSON.stringify({
         error: "internal",

@@ -45,6 +45,8 @@ import {
 } from "@/lib/time-format-preference";
 import { chatStore } from "@/lib/chat-store";
 
+const isAgentbayHosted = process.env.NEXT_PUBLIC_AGENTBAY_HOSTED === "true";
+
 /* ── Types ────────────────────────────────────────── */
 
 type OnboardData = {
@@ -327,7 +329,7 @@ export function SettingsView() {
   return (
     <SectionLayout>
       <SectionHeader
-        title={<span className="font-serif font-bold text-base">Settings</span>}
+        title="Settings"
         description="Manage preferences, gateway configuration, and diagnostics."
       />
       <SectionBody width="content" padding="regular" innerClassName="space-y-4 pb-8">
@@ -625,23 +627,25 @@ export function SettingsView() {
             />
           </SettingRow>
 
-          <SettingRow
-            label="Tailscale"
-            description="Whether Tailscale connections are allowed."
-          >
-            <div className="flex items-center gap-2">
-              <Badge
-                label={gw?.allowTailscale === false ? "Disabled" : "Allowed"}
-                color={gw?.allowTailscale === false ? "zinc" : "emerald"}
-              />
-              <Link
-                href="/tailscale"
-                className="text-xs text-foreground underline-offset-4 hover:underline"
-              >
-                Manage
-              </Link>
-            </div>
-          </SettingRow>
+          {!isAgentbayHosted && (
+            <SettingRow
+              label="Tailscale"
+              description="Whether Tailscale connections are allowed."
+            >
+              <div className="flex items-center gap-2">
+                <Badge
+                  label={gw?.allowTailscale === false ? "Disabled" : "Allowed"}
+                  color={gw?.allowTailscale === false ? "zinc" : "emerald"}
+                />
+                <Link
+                  href="/tailscale"
+                  className="text-xs text-foreground underline-offset-4 hover:underline"
+                >
+                  Manage
+                </Link>
+              </div>
+            </SettingRow>
+          )}
 
           <SettingRow
             label="Transport mode"

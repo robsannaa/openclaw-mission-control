@@ -258,8 +258,16 @@ const PROVIDER_CONFIG_TEMPLATES: Record<string, Record<string, unknown>> = {
     api: "anthropic-messages",
   },
   minimax: {
-    baseUrl: "https://api.minimax.io/v1",
-    api: "openai-completions",
+    baseUrl: "https://api.minimax.io/anthropic",
+    api: "anthropic-messages",
+    apiKey: "${MINIMAX_API_KEY}",
+    models: [
+      { id: "MiniMax-M2.5", name: "MiniMax M2.5" },
+      { id: "MiniMax-M2.5-highspeed", name: "MiniMax M2.5 High-Speed" },
+      { id: "MiniMax-M2.1", name: "MiniMax M2.1" },
+      { id: "MiniMax-M2.1-highspeed", name: "MiniMax M2.1 High-Speed" },
+      { id: "MiniMax-M2", name: "MiniMax M2" },
+    ],
   },
   moonshot: {
     baseUrl: "https://api.moonshot.cn/v1",
@@ -291,6 +299,7 @@ const PROVIDER_DEFAULT_MODEL: Record<string, string> = {
   openai: "openai/gpt-4o",
   google: "google/gemini-2.0-flash",
   openrouter: "openrouter/anthropic/claude-sonnet-4",
+  minimax: "minimax/MiniMax-M2.1",
   groq: "groq/llama-4-scout-17b-16e-instruct",
   xai: "xai/grok-3-mini",
   mistral: "mistral/mistral-medium-latest",
@@ -369,11 +378,17 @@ export function ModelsView() {
   const [apiDegraded, setApiDegraded] = useState(false);
 
   // ── UI state ──
-  const [loading, setLoading] = useState(true);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditRequested, setAuditRequested] = useState(false);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsRequested, setDetailsRequested] = useState(false);
+  const [allModelsRequested, setAllModelsRequested] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [advancedTab, setAdvancedTab] = useState<AdvancedTab>("agents");
+  const [authAuditOpen, setAuthAuditOpen] = useState(false);
   const [pickerTarget, setPickerTarget] = useState<PickerTarget | null>(null);
 
   // Alias form state
@@ -431,10 +446,163 @@ export function ModelsView() {
     return data as Record<string, unknown>;
   }, []);
 
-  const fetchAllModels = useCallback(async () => {
+  const applyModelPayload = useCallback(
+    (payload: Record<string, unknown>, options?: { mergeStatus?: boolean }) => {
+      setApiWarning(
+        typeof payload.warning === "string" && payload.warning.trim()
+          ? payload.warning.trim()
+          : null,
+      );
+      setApiDegraded(Boolean(payload.degraded));
+      if (payload.error) {
+        console.warn("Models API partial error:", payload.error);
+      }
+
+      if (payload.status && typeof payload.status === "object") {
+        const nextStatus = payload.status as ModelStatus;
+        setStatus((prev) =>
+          options?.mergeStatus && prev
+            ? {
+                ...prev,
+                ...nextStatus,
+                auth: nextStatus.auth ?? prev.auth,
+              }
+            : nextStatus,
+        );
+      }
+
+      if ("defaults" in payload) {
+        if (payload.defaults && typeof payload.defaults === "object") {
+          const nextDefaults = payload.defaults as {
+            primary?: unknown;
+            fallbacks?: unknown;
+          };
+          if (typeof nextDefaults.primary === "string") {
+            setDefaults({
+              primary: nextDefaults.primary,
+              fallbacks: Array.isArray(nextDefaults.fallbacks)
+                ? nextDefaults.fallbacks.map((value) => String(value)).filter(Boolean)
+                : [],
+            });
+          } else {
+            setDefaults(null);
+          }
+        } else {
+          setDefaults(null);
+        }
+      }
+
+      if (Array.isArray(payload.models)) {
+        setModels(payload.models as ModelInfo[]);
+      }
+
+      if ("allowedConfigured" in payload) {
+        setConfiguredAllowed(
+          Array.isArray(payload.allowedConfigured)
+            ? payload.allowedConfigured.map((entry) => String(entry)).filter(Boolean)
+            : [],
+        );
+      }
+
+      if (Array.isArray(payload.agents)) {
+        setAgents(payload.agents as AgentModelInfo[]);
+      }
+
+      if (payload.agentStatuses && typeof payload.agentStatuses === "object") {
+        setAgentStatuses(payload.agentStatuses as Record<string, AgentRuntimeStatus>);
+      }
+
+      if (payload.liveModels && typeof payload.liveModels === "object") {
+        setLiveModels(payload.liveModels as Record<string, LiveModelInfo>);
+      }
+
+      if ("configuredProviders" in payload) {
+        setConfiguredProviders(
+          Array.isArray(payload.configuredProviders)
+            ? payload.configuredProviders.map((entry) => String(entry)).filter(Boolean)
+            : [],
+        );
+      }
+
+      if ("heartbeat" in payload) {
+        if (payload.heartbeat && typeof payload.heartbeat === "object") {
+          const nextHeartbeat = payload.heartbeat as {
+            every?: unknown;
+            model?: unknown;
+          };
+          setHeartbeat({
+            every: typeof nextHeartbeat.every === "string" ? nextHeartbeat.every : "",
+            model: typeof nextHeartbeat.model === "string" ? nextHeartbeat.model : "",
+          });
+        } else {
+          setHeartbeat(null);
+        }
+      }
+
+      if ("modelsCatalogConfig" in payload) {
+        if (payload.modelsCatalogConfig && typeof payload.modelsCatalogConfig === "object") {
+          const next = payload.modelsCatalogConfig as {
+            mode?: unknown;
+            providers?: unknown;
+          };
+          const providers = Array.isArray(next.providers)
+            ? next.providers
+                .map((entry) => {
+                  if (!entry || typeof entry !== "object") return null;
+                  const row = entry as { provider?: unknown; config?: unknown };
+                  const provider = String(row.provider || "").trim();
+                  if (!provider) return null;
+                  const config =
+                    row.config && typeof row.config === "object" && !Array.isArray(row.config)
+                      ? (row.config as Record<string, unknown>)
+                      : {};
+                  return { provider, config };
+                })
+                .filter((entry): entry is ModelsCatalogProvider => Boolean(entry))
+            : [];
+          setModelsCatalogConfig({
+            mode:
+              typeof next.mode === "string" && next.mode.trim().toLowerCase() === "replace"
+                ? "replace"
+                : "merge",
+            providers,
+          });
+        } else {
+          setModelsCatalogConfig({ mode: "merge", providers: [] });
+        }
+      }
+    },
+    [],
+  );
+
+  const fetchSummary = useCallback(async () => {
+    setSummaryLoading(true);
+    try {
+      const res = await fetch("/api/models/summary", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(30000),
+      });
+      const data = (await res.json()) as Record<string, unknown>;
+      applyModelPayload(data);
+    } catch (err) {
+      console.warn("Failed to fetch models summary:", err);
+      setApiWarning(err instanceof Error ? err.message : String(err));
+      setApiDegraded(true);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [applyModelPayload]);
+
+  const fetchAllModels = useCallback(async (force = false) => {
+    if (!force && (allModelsRequested || allModelsLoading)) return;
+    setAllModelsRequested(true);
     setAllModelsLoading(true);
     try {
-      const res = await fetch("/api/models?scope=all", { cache: "no-store" });
+      const url = force ? "/api/models?scope=all&refresh=1" : "/api/models?scope=all";
+      const res = await fetch(url, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(30000),
+      });
       const data = await res.json();
       const nextModels = Array.isArray(data.models) ? (data.models as ModelInfo[]) : [];
       setAllModels(nextModels);
@@ -446,135 +614,88 @@ export function ModelsView() {
     } finally {
       setAllModelsLoading(false);
     }
-  }, []);
+  }, [allModelsLoading, allModelsRequested]);
 
-  const fetchModels = useCallback(async () => {
+  const fetchAdvancedDetails = useCallback(async (force = false) => {
+    if (!force && (detailsRequested || detailsLoading)) return;
+    setDetailsRequested(true);
+    setDetailsLoading(true);
     try {
-      const res = await fetch("/api/models?scope=status", {
+      const res = await fetch("/api/models?scope=details", {
         cache: "no-store",
         signal: AbortSignal.timeout(30000),
       });
-      const data = await res.json();
-      setApiWarning(
-        typeof data.warning === "string" && data.warning.trim() ? data.warning.trim() : null,
-      );
-      setApiDegraded(Boolean(data.degraded));
-      if (data.error) console.warn("Models API partial error:", data.error);
-      if (data.status) setStatus(data.status as ModelStatus);
-      if (data.defaults && typeof data.defaults.primary === "string") {
-        setDefaults({
-          primary: data.defaults.primary,
-          fallbacks: Array.isArray(data.defaults.fallbacks)
-            ? data.defaults.fallbacks.map((f: unknown) => String(f))
-            : [],
-        });
-      } else {
-        setDefaults(null);
-      }
-      setModels(Array.isArray(data.models) ? (data.models as ModelInfo[]) : []);
-      const configuredAllowedRaw = Array.isArray(data.allowedConfigured)
-        ? data.allowedConfigured.map((entry: unknown) => String(entry)).filter(Boolean)
-        : null;
-      setConfiguredAllowed(
-        configuredAllowedRaw ??
-          (Array.isArray(data.status?.allowed)
-            ? data.status.allowed.map((entry: unknown) => String(entry)).filter(Boolean)
-            : []),
-      );
-      setAgents(Array.isArray(data.agents) ? (data.agents as AgentModelInfo[]) : []);
-      setAgentStatuses((data.agentStatuses || {}) as Record<string, AgentRuntimeStatus>);
-      setLiveModels((data.liveModels || {}) as Record<string, LiveModelInfo>);
-      setConfiguredProviders(
-        Array.isArray(data.configuredProviders)
-          ? data.configuredProviders.map((entry: unknown) => String(entry)).filter(Boolean)
-          : [],
-      );
-      if (data.heartbeat && typeof data.heartbeat === "object" && "model" in data.heartbeat) {
-        setHeartbeat({
-          every: typeof data.heartbeat.every === "string" ? data.heartbeat.every : "",
-          model: typeof data.heartbeat.model === "string" ? data.heartbeat.model : "",
-        });
-      } else {
-        setHeartbeat(null);
-      }
-      if (data.modelsCatalogConfig && typeof data.modelsCatalogConfig === "object") {
-        const next = data.modelsCatalogConfig as {
-          mode?: unknown;
-          providers?: unknown;
-        };
-        const providers = Array.isArray(next.providers)
-          ? next.providers
-              .map((entry) => {
-                if (!entry || typeof entry !== "object") return null;
-                const row = entry as { provider?: unknown; config?: unknown };
-                const provider = String(row.provider || "").trim();
-                if (!provider) return null;
-                const config =
-                  row.config && typeof row.config === "object" && !Array.isArray(row.config)
-                    ? (row.config as Record<string, unknown>)
-                    : {};
-                return { provider, config };
-              })
-              .filter((entry): entry is ModelsCatalogProvider => Boolean(entry))
-          : [];
-        setModelsCatalogConfig({
-          mode:
-            typeof next.mode === "string" && next.mode.trim().toLowerCase() === "replace"
-              ? "replace"
-              : "merge",
-          providers,
-        });
-      } else {
-        setModelsCatalogConfig({ mode: "merge", providers: [] });
-      }
-
-      try {
-        const accountsRes = await fetch("/api/accounts", {
-          cache: "no-store",
-          signal: AbortSignal.timeout(15000),
-        });
-        const accountsData = (await accountsRes.json()) as
-          | (ModelsCredentialSnapshot & { error?: string })
-          | { error?: string };
-        if (!accountsRes.ok) {
-          throw new Error(
-            (accountsData as { error?: string })?.error || `HTTP ${accountsRes.status}`,
-          );
-        }
-        const snapshot = accountsData as ModelsCredentialSnapshot;
-        setModelCredentialSummary({
-          connected: Number(snapshot.summary?.modelProvidersConnected || 0),
-          total: Number(snapshot.summary?.modelProvidersTotal || 0),
-          profiles: Number(snapshot.summary?.authProfiles || 0),
-          sourceOfTruth: Boolean(snapshot.sourceOfTruth?.modelsStatus),
-        });
-        setModelAuthByAgent(
-          Array.isArray(snapshot.modelAuthByAgent) ? snapshot.modelAuthByAgent : [],
-        );
-        setAgentAuthProfiles(
-          Array.isArray(snapshot.agentAuthProfiles) ? snapshot.agentAuthProfiles : [],
-        );
-        setModelCredsError(null);
-      } catch (err) {
-        setModelCredsError(err instanceof Error ? err.message : String(err));
-      }
+      const data = (await res.json()) as Record<string, unknown>;
+      applyModelPayload(data, { mergeStatus: true });
     } catch (err) {
-      console.warn("Failed to fetch models:", err);
-      setApiWarning(err instanceof Error ? err.message : String(err));
-      setApiDegraded(true);
-      flash("Failed to load models", "error");
+      console.warn("Failed to fetch model details:", err);
     } finally {
-      setLoading(false);
+      setDetailsLoading(false);
     }
-  }, [flash]);
+  }, [applyModelPayload, detailsLoading, detailsRequested]);
+
+  const fetchAudit = useCallback(async (force = false) => {
+    if (!force && (auditRequested || auditLoading)) return;
+    setAuditRequested(true);
+    setAuditLoading(true);
+    try {
+      const accountsRes = await fetch("/api/accounts", {
+        cache: "no-store",
+        signal: AbortSignal.timeout(15000),
+      });
+      const accountsData = (await accountsRes.json()) as
+        | (ModelsCredentialSnapshot & { error?: string })
+        | { error?: string };
+      if (!accountsRes.ok) {
+        throw new Error(
+          (accountsData as { error?: string })?.error || `HTTP ${accountsRes.status}`,
+        );
+      }
+      const snapshot = accountsData as ModelsCredentialSnapshot;
+      setModelCredentialSummary({
+        connected: Number(snapshot.summary?.modelProvidersConnected || 0),
+        total: Number(snapshot.summary?.modelProvidersTotal || 0),
+        profiles: Number(snapshot.summary?.authProfiles || 0),
+        sourceOfTruth: Boolean(snapshot.sourceOfTruth?.modelsStatus),
+      });
+      setModelAuthByAgent(
+        Array.isArray(snapshot.modelAuthByAgent) ? snapshot.modelAuthByAgent : [],
+      );
+      setAgentAuthProfiles(
+        Array.isArray(snapshot.agentAuthProfiles) ? snapshot.agentAuthProfiles : [],
+      );
+      setModelCredsError(null);
+    } catch (err) {
+      setModelCredsError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAuditLoading(false);
+    }
+  }, [auditLoading, auditRequested]);
 
   useEffect(() => {
-    fetchModels();
-  }, [fetchModels]);
+    void fetchSummary();
+  }, [fetchSummary]);
 
   useEffect(() => {
-    fetchAllModels();
-  }, [fetchAllModels]);
+    const needsCatalog =
+      Boolean(pickerTarget) ||
+      (advancedOpen &&
+        (advancedTab === "allowlist" || advancedTab === "routing" || advancedTab === "aliases"));
+    if (!needsCatalog) return;
+    void fetchAllModels();
+  }, [advancedOpen, advancedTab, fetchAllModels, pickerTarget]);
+
+  useEffect(() => {
+    const needsDetails =
+      advancedOpen && (advancedTab === "routing" || advancedTab === "aliases");
+    if (!needsDetails) return;
+    void fetchAdvancedDetails();
+  }, [advancedOpen, advancedTab, fetchAdvancedDetails]);
+
+  useEffect(() => {
+    if (!advancedOpen || advancedTab !== "aliases") return;
+    void fetchAudit();
+  }, [advancedOpen, advancedTab, fetchAudit]);
 
   // Re-fetch models when gateway comes back online after a restart
   const gwStatus = useSyncExternalStore(
@@ -589,13 +710,23 @@ export function ModelsView() {
     if (gwStatus.status === "online" && prev !== "online") {
       // Gateway just came back — refetch after a short delay for it to settle
       const t = setTimeout(() => {
-        setLoading(true);
-        fetchModels();
-        fetchAllModels();
+        void fetchSummary();
+        if (allModelsRequested) void fetchAllModels(true);
+        if (detailsRequested) void fetchAdvancedDetails(true);
+        if (auditRequested) void fetchAudit(true);
       }, 1500);
       return () => clearTimeout(t);
     }
-  }, [gwStatus.status, fetchModels, fetchAllModels]);
+  }, [
+    allModelsRequested,
+    auditRequested,
+    detailsRequested,
+    fetchAdvancedDetails,
+    fetchAllModels,
+    fetchAudit,
+    fetchSummary,
+    gwStatus.status,
+  ]);
 
   const handleConnectProvider = useCallback(async () => {
     if (!connectProvider) return;
@@ -641,9 +772,10 @@ export function ModelsView() {
           setConnectProvider(null);
           setConnectShowKey(false);
           flash("Custom endpoint connected!", "success");
-          setLoading(true);
-          fetchModels();
-          fetchAllModels();
+          await fetchSummary();
+          if (allModelsRequested) await fetchAllModels(true);
+          if (detailsRequested) await fetchAdvancedDetails(true);
+          if (auditRequested) await fetchAudit(true);
           setTimeout(() => setConnectSuccess(null), 3000);
         } else {
           flash(data.error || "Failed to connect custom endpoint", "error");
@@ -677,9 +809,10 @@ export function ModelsView() {
           }
 
           flash(successMessage, "success");
-          setLoading(true);
-          await fetchModels();
-          await fetchAllModels();
+          await fetchSummary();
+          if (allModelsRequested) await fetchAllModels(true);
+          if (detailsRequested) await fetchAdvancedDetails(true);
+          if (auditRequested) await fetchAudit(true);
           setTimeout(() => setConnectSuccess(null), 3000);
         } catch (err) {
           flash(err instanceof Error ? err.message : "Failed to connect provider", "error");
@@ -690,11 +823,16 @@ export function ModelsView() {
     }
     setConnectSaving(false);
   }, [
+    allModelsRequested,
+    auditRequested,
     connectBaseUrl,
     connectKey,
     connectProvider,
+    detailsRequested,
+    fetchAdvancedDetails,
     fetchAllModels,
-    fetchModels,
+    fetchAudit,
+    fetchSummary,
     flash,
     postModelAction,
   ]);
@@ -737,9 +875,15 @@ export function ModelsView() {
             if (options?.restart !== false) {
               requestRestart("Model configuration was updated.");
             }
-            await fetchModels();
-            if (options?.refreshCatalog) {
-              await fetchAllModels();
+            await fetchSummary();
+            if (detailsRequested) {
+              await fetchAdvancedDetails(true);
+            }
+            if (options?.refreshCatalog || allModelsRequested) {
+              await fetchAllModels(true);
+            }
+            if (auditRequested) {
+              await fetchAudit(true);
             }
             return;
           } catch (err) {
@@ -756,7 +900,17 @@ export function ModelsView() {
         setBusyKey(null);
       }
     },
-    [fetchAllModels, fetchModels, flash, postModelAction],
+    [
+      allModelsRequested,
+      auditRequested,
+      detailsRequested,
+      fetchAdvancedDetails,
+      fetchAllModels,
+      fetchAudit,
+      fetchSummary,
+      flash,
+      postModelAction,
+    ],
   );
 
   // ── Derived data ──
@@ -1644,8 +1798,12 @@ export function ModelsView() {
 
   // ── Loading / error states ──
 
-  if (loading) {
-    return <LoadingState label="Loading models..." />;
+  if (summaryLoading && !status) {
+    return (
+      <SectionLayout>
+        <LoadingState label="Loading models..." />
+      </SectionLayout>
+    );
   }
 
   if (!status) {
@@ -1691,14 +1849,15 @@ export function ModelsView() {
             <button
               type="button"
               onClick={() => {
-                setLoading(true);
-                fetchModels();
-                fetchAllModels();
+                void fetchSummary();
+                if (detailsRequested) void fetchAdvancedDetails(true);
+                if (allModelsRequested) void fetchAllModels(true);
+                if (auditRequested) void fetchAudit(true);
               }}
               disabled={Boolean(busyKey)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-3 py-1.5 text-sm font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 disabled:opacity-40 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
             >
-              {busyKey ? <BusyDots /> : <RefreshCw className="h-3.5 w-3.5" />}
+              {busyKey || summaryLoading ? <BusyDots /> : <RefreshCw className="h-3.5 w-3.5" />}
               Refresh
             </button>
           </div>
@@ -1746,7 +1905,7 @@ export function ModelsView() {
           )}
 
           {/* Hero card */}
-          <div className="rounded-xl border border-[var(--accent-brand-border)] bg-gradient-to-br from-[var(--accent-brand-subtle)] to-transparent p-5">
+          <div className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-700 dark:bg-stone-800">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-lg font-semibold text-foreground">
@@ -1796,7 +1955,7 @@ export function ModelsView() {
                 type="button"
                 onClick={() => setPickerTarget({ kind: "default" })}
                 disabled={Boolean(busyKey)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-40"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-stone-200 bg-stone-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-stone-700 disabled:opacity-40 dark:border-stone-600 dark:bg-stone-100 dark:text-stone-900 dark:hover:bg-stone-300"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
                 Change Model
@@ -2317,7 +2476,7 @@ export function ModelsView() {
                         <div className="flex gap-1.5">
                           <button
                             type="button"
-                            onClick={() => fetchAllModels()}
+                            onClick={() => void fetchAllModels(true)}
                             disabled={allModelsLoading || Boolean(busyKey)}
                             className="inline-flex items-center gap-1 rounded-md border border-border bg-muted/30 px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/50 disabled:opacity-40"
                           >
@@ -2404,6 +2563,11 @@ export function ModelsView() {
                       Configure failover and catalog behavior. These controls map directly to
                       OpenClaw model routing settings.
                     </p>
+                    {detailsLoading && (
+                      <p className="text-xs text-muted-foreground">
+                        <BusyDots /> Loading runtime routing details...
+                      </p>
+                    )}
 
                     <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
                       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2714,6 +2878,12 @@ export function ModelsView() {
                 {/* ── Tab 4: Aliases & Auth ── */}
                 {advancedTab === "aliases" && (
                   <div className="space-y-6">
+                    {detailsLoading && (
+                      <p className="text-xs text-muted-foreground">
+                        <BusyDots /> Loading runtime alias and auth details...
+                      </p>
+                    )}
+
                     {/* Model Aliases */}
                     <div>
                       <h3 className="text-xs font-semibold text-foreground mb-2">
@@ -2945,82 +3115,125 @@ export function ModelsView() {
 
                     {/* Model Credentials summary */}
                     <div>
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <h3 className="text-xs font-semibold text-foreground">
-                          Model Credentials
-                        </h3>
-                        <button
-                          type="button"
-                          onClick={() => setRevealModelSecrets((prev) => !prev)}
-                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/40"
-                        >
-                          {revealModelSecrets ? (
-                            <EyeOff className="h-3.5 w-3.5" />
-                          ) : (
-                            <Eye className="h-3.5 w-3.5" />
-                          )}
-                          {revealModelSecrets ? "Hide" : "Reveal"}
-                        </button>
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAuthAuditOpen((prev) => !prev)}
+                        className="flex w-full items-center justify-between rounded-lg border border-border/60 bg-muted/10 px-3 py-2 text-left transition-colors hover:bg-muted/20"
+                      >
+                        <div>
+                          <h3 className="text-xs font-semibold text-foreground">
+                            Model Auth Audit
+                          </h3>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Deferred credential scan for providers, profiles, and per-agent auth.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <StatusPill
+                            tone="good"
+                            label={`${modelCredentialSummary.connected}/${modelCredentialSummary.total} providers`}
+                          />
+                          <StatusPill
+                            tone="info"
+                            label={`${modelCredentialSummary.profiles} profiles`}
+                          />
+                          <ChevronDown
+                            className={cn(
+                              "h-4 w-4 text-muted-foreground transition-transform",
+                              authAuditOpen && "rotate-180",
+                            )}
+                          />
+                        </div>
+                      </button>
 
-                      <div className="flex flex-wrap items-center gap-2 mb-3 text-xs">
-                        <StatusPill
-                          tone="good"
-                          label={`${modelCredentialSummary.connected}/${modelCredentialSummary.total} providers`}
-                        />
-                        <StatusPill
-                          tone="info"
-                          label={`${modelCredentialSummary.profiles} profiles`}
-                        />
-                      </div>
-
-                      {modelCredsError && (
-                        <p className="mb-3 text-xs text-amber-400">
-                          <AlertTriangle className="mr-1 inline h-3 w-3" />
-                          {modelCredsError}
-                        </p>
-                      )}
-
-                      <div className="space-y-2">
-                        {modelAuthByAgent.map((row) => (
-                          <div
-                            key={row.agentId}
-                            className="rounded-lg border border-border/50 bg-muted/10 p-2.5"
-                          >
-                            <p className="text-xs font-medium text-foreground mb-1.5">
-                              {agentNameById.get(row.agentId) || row.agentId}
-                            </p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {row.providers.map((provider) => (
-                                <div
-                                  key={`${row.agentId}:${provider.provider}`}
-                                  className="rounded-md border border-border/40 bg-muted/20 px-2 py-1 text-xs"
-                                >
-                                  <span className="font-medium text-foreground">
-                                    {provider.provider}
-                                  </span>
-                                  <span className="ml-1.5">
-                                    {provider.connected ? (
-                                      <span className="text-emerald-400">
-                                        {provider.effectiveKind || "connected"}
-                                      </span>
-                                    ) : (
-                                      <span className="text-muted-foreground/50">missing</span>
-                                    )}
-                                  </span>
-                                  {provider.envValue && revealModelSecrets && (
-                                    <p className="mt-0.5 break-all text-muted-foreground/50">
-                                      <code>
-                                        {provider.envSource}: {provider.envValue}
-                                      </code>
-                                    </p>
-                                  )}
-                                </div>
-                              ))}
+                      {authAuditOpen && (
+                        <div className="mt-3 rounded-lg border border-border/50 bg-muted/10 p-3">
+                          <div className="mb-3 flex items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                              <StatusPill
+                                tone="good"
+                                label={`${modelCredentialSummary.connected}/${modelCredentialSummary.total} providers`}
+                              />
+                              <StatusPill
+                                tone="info"
+                                label={`${modelCredentialSummary.profiles} profiles`}
+                              />
                             </div>
+                            <button
+                              type="button"
+                              onClick={() => setRevealModelSecrets((prev) => !prev)}
+                              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted/40"
+                            >
+                              {revealModelSecrets ? (
+                                <EyeOff className="h-3.5 w-3.5" />
+                              ) : (
+                                <Eye className="h-3.5 w-3.5" />
+                              )}
+                              {revealModelSecrets ? "Hide" : "Reveal"}
+                            </button>
                           </div>
-                        ))}
-                      </div>
+
+                          {auditLoading && (
+                            <p className="mb-3 text-xs text-muted-foreground">
+                              <BusyDots /> Loading credential audit...
+                            </p>
+                          )}
+
+                          {modelCredsError && (
+                            <p className="mb-3 text-xs text-amber-400">
+                              <AlertTriangle className="mr-1 inline h-3 w-3" />
+                              {modelCredsError}
+                            </p>
+                          )}
+
+                          <div className="space-y-2">
+                            {modelAuthByAgent.length === 0 && !auditLoading ? (
+                              <p className="text-xs text-muted-foreground/60">
+                                No credential audit data available yet.
+                              </p>
+                            ) : (
+                              modelAuthByAgent.map((row) => (
+                                <div
+                                  key={row.agentId}
+                                  className="rounded-lg border border-border/50 bg-muted/10 p-2.5"
+                                >
+                                  <p className="text-xs font-medium text-foreground mb-1.5">
+                                    {agentNameById.get(row.agentId) || row.agentId}
+                                  </p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {row.providers.map((provider) => (
+                                      <div
+                                        key={`${row.agentId}:${provider.provider}`}
+                                        className="rounded-md border border-border/40 bg-muted/20 px-2 py-1 text-xs"
+                                      >
+                                        <span className="font-medium text-foreground">
+                                          {provider.provider}
+                                        </span>
+                                        <span className="ml-1.5">
+                                          {provider.connected ? (
+                                            <span className="text-emerald-400">
+                                              {provider.effectiveKind || "connected"}
+                                            </span>
+                                          ) : (
+                                            <span className="text-muted-foreground/50">missing</span>
+                                          )}
+                                        </span>
+                                        {provider.envValue && revealModelSecrets && (
+                                          <p className="mt-0.5 break-all text-muted-foreground/50">
+                                            <code>
+                                              {provider.envSource}: {provider.envValue}
+                                            </code>
+                                          </p>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

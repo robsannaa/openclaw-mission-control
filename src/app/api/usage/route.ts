@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { readFile, readdir, stat } from "fs/promises";
 import { join } from "path";
 import { getOpenClawHome } from "@/lib/paths";
-import { runCliJson } from "@/lib/openclaw";
+import { buildModelsSummary } from "@/lib/models-summary";
 import { fetchGatewaySessions } from "@/lib/gateway-sessions";
 import type { NormalizedGatewaySession } from "@/lib/gateway-sessions";
 import { estimateCostUsd } from "@/lib/model-metadata";
@@ -450,7 +450,8 @@ export async function GET() {
     // 5. Model config (primary/fallbacks/aliases/auth)
     let modelStatus: ModelStatusData | null = null;
     try {
-      modelStatus = await runCliJson<ModelStatusData>(["models", "status"], 10000);
+      const summary = await buildModelsSummary();
+      modelStatus = summary.status as ModelStatusData;
     } catch (err) {
       diagnostics.sources.modelStatus.ok = false;
       diagnostics.sources.modelStatus.error = errorMessage(err);
