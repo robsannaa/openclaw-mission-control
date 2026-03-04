@@ -65,7 +65,7 @@ const navItems: NavItem[] = [
   { section: "agents", label: "Subagents", icon: Users2, href: "/agents?tab=subagents", tab: "subagents", isSubItem: true },
   // ── Work ──
   { group: "Work", section: "calendar", label: "Calendar", icon: CalendarDays, href: "/calendar" },
-  { section: "calendar", label: "Providers", icon: Settings2, href: "/calendar?tab=providers", tab: "providers", isSubItem: true },
+  { section: "calendar", label: "Providers", icon: Settings2, href: "/calendar/providers", tab: "providers", isSubItem: true },
   { section: "tasks", label: "Tasks", icon: ListChecks, href: "/tasks" },
   { section: "sessions", label: "Sessions", icon: MessageSquare, href: "/sessions" },
   { section: "cron", label: "Cron Jobs", icon: Clock, href: "/cron" },
@@ -156,8 +156,10 @@ function deriveSectionFromPath(pathname: string): string | null {
 
 function deriveTabFromPath(pathname: string): string | null {
   if (!pathname || pathname === "/") return null;
-  const first = pathname.split("/").filter(Boolean)[0] || "";
+  const parts = pathname.split("/").filter(Boolean);
+  const first = parts[0] || "";
   if (first === "heartbeat") return "heartbeat";
+  if (first === "calendar" && parts[1] === "providers") return "providers";
   return null;
 }
 

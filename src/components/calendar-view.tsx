@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   CalendarDays,
   ChevronLeft,
@@ -210,7 +209,7 @@ function badgeForItem(
     const accountVendor = item.providerAccountId ? accountVendorById?.[item.providerAccountId] : undefined;
     const providerClassName = accountVendor === "google"
       ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-200"
-      : "border-pink-500/30 bg-pink-500/15 text-pink-200";
+      : "border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-200";
     return {
       label: accountLabel || (item.provider === "caldav" ? "CalDAV" : "Imported"),
       className: providerClassName,
@@ -227,9 +226,6 @@ const PROVIDER_INPUT_CLASS =
   "h-10 w-full rounded-lg border border-foreground/15 bg-muted/70 px-3 py-2 text-sm text-foreground/90 shadow-inner outline-none transition-colors placeholder:text-muted-foreground/70 focus:border-sky-500/35 focus:bg-background/90";
 
 export function CalendarView() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [payload, setPayload] = useState<ApiPayload | null>(null);
   const [viewDate, setViewDate] = useState(() => new Date());
@@ -295,16 +291,8 @@ export function CalendarView() {
 
   const googleCallbackUri = "http://127.0.0.1:3333/api/calendar/google/callback";
 
-  const tab = (searchParams.get("tab") || "").toLowerCase();
-  const providerTabActive = tab === "providers";
-  const googleOAuthQuery = (searchParams.get("google") || "").toLowerCase();
-
-  useEffect(() => {
-    if (!providerTabActive) return;
-    if (googleOAuthQuery === "connected" || googleOAuthQuery === "oauth-error") {
-      setProviderPreset("google");
-    }
-  }, [googleOAuthQuery, providerTabActive]);
+  const providerTabActive = false;
+  const googleOAuthQuery: string = "";
 
   const accountLabelById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -525,14 +513,6 @@ export function CalendarView() {
       setRefreshing(false);
     }
   }, [refresh, runDispatch]);
-
-  const setCalendarTab = useCallback((nextTab: "events" | "providers") => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (nextTab === "events") params.delete("tab");
-    else params.set("tab", "providers");
-    const query = params.toString();
-    router.replace(query ? `${pathname}?${query}` : pathname);
-  }, [pathname, router, searchParams]);
 
   const testProvider = useCallback(async () => {
     setProviderTesting(true);
@@ -1032,28 +1012,7 @@ export function CalendarView() {
           <div>
             <h2 className="text-xs font-semibold text-foreground">Calendar</h2>
             <p className="text-sm text-muted-foreground">Tasks, reminders, and events in one timeline.</p>
-            <div className="mt-2 inline-flex items-center rounded-md border border-foreground/10 bg-background/70 p-0.5">
-              <button
-                type="button"
-                onClick={() => setCalendarTab("events")}
-                className={cn(
-                  "rounded px-2 py-1 text-xs transition-colors",
-                  !providerTabActive ? "bg-sky-300/20 text-sky-100" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Events
-              </button>
-              <button
-                type="button"
-                onClick={() => setCalendarTab("providers")}
-                className={cn(
-                  "rounded px-2 py-1 text-xs transition-colors",
-                  providerTabActive ? "bg-sky-300/20 text-sky-100" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Providers
-              </button>
-            </div>
+            <p className="mt-2 text-xs text-muted-foreground/70">Manage integrations in <a className="text-emerald-300 hover:text-emerald-200" href="/calendar/providers">Calendar Providers</a>.</p>
           </div>
           <div className="inline-flex items-center gap-2">
             {!providerTabActive && (
@@ -1064,7 +1023,7 @@ export function CalendarView() {
                 className={cn(
                   "rounded px-2 py-1 text-xs transition-colors",
                   viewMode === "month"
-                    ? "bg-sky-300/20 text-sky-100"
+                    ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -1076,7 +1035,7 @@ export function CalendarView() {
                 className={cn(
                   "rounded px-2 py-1 text-xs transition-colors",
                   viewMode === "week"
-                    ? "bg-sky-300/20 text-sky-100"
+                    ? "bg-card text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -1139,7 +1098,7 @@ export function CalendarView() {
             const hidden = hiddenProviderAccountIds.has(provider.id);
             const providerClassName = provider.vendor === "google"
               ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-200"
-              : "border-pink-500/30 bg-pink-500/15 text-pink-200";
+              : "border-rose-500/30 bg-rose-500/15 text-rose-700 dark:text-rose-200";
             return (
               <button
                 key={provider.id}
@@ -1167,7 +1126,7 @@ export function CalendarView() {
           <button
             type="button"
             onClick={() => setCreateOpen(true)}
-            className="inline-flex items-center gap-1 rounded-md border border-sky-500/30 bg-sky-500/10 px-2.5 py-1.5 text-xs font-medium text-sky-200 hover:bg-sky-500/20"
+            className="inline-flex items-center gap-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-300 hover:bg-emerald-500/20"
           >
             <Plus className="h-3.5 w-3.5" />
             Create
