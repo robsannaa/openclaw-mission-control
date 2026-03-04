@@ -20,7 +20,6 @@ import {
 import { SectionLayout } from "@/components/section-layout";
 import { LoadingState } from "@/components/ui/loading-state";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
-import { ThemedSelect } from "@/components/ui/themed-select";
 import { cn } from "@/lib/utils";
 
 type CalendarEntry = {
@@ -255,8 +254,7 @@ export function CalendarView() {
   const [createDueAt, setCreateDueAt] = useState("");
   const [createEndAt, setCreateEndAt] = useState("");
   const [createAllDay, setCreateAllDay] = useState(false);
-  const [createKind, setCreateKind] = useState<"reminder" | "event">("reminder");
-  const [createSaveToProvider, setCreateSaveToProvider] = useState(false);
+  const [createKind, setCreateKind] = useState<"reminder" | "event">("event");
   const [createProviderId, setCreateProviderId] = useState("");
   const [createError, setCreateError] = useState<string | null>(null);
   const [calendarError, setCalendarError] = useState<string | null>(null);
@@ -344,11 +342,23 @@ export function CalendarView() {
     setCreateDueAt("");
     setCreateEndAt("");
     setCreateAllDay(false);
-    setCreateKind("reminder");
-    setCreateSaveToProvider(false);
+    setCreateKind("event");
     setCreateProviderId("");
     setCreateError(null);
   }, []);
+
+  useEffect(() => {
+    if (!createProviderId) return;
+    if (!enabledProviders.some((provider) => provider.id === createProviderId)) {
+      setCreateProviderId("");
+    }
+  }, [createProviderId, enabledProviders]);
+
+  useEffect(() => {
+    if (createKind === "reminder" && createProviderId) {
+      setCreateProviderId("");
+    }
+  }, [createKind, createProviderId]);
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/calendar", { cache: "no-store" });
@@ -489,19 +499,13 @@ export function CalendarView() {
         return;
       }
     }
-    if (createSaveToProvider && !createProviderId) {
-      setCreateError("Select a provider account before creating.");
+    if (createKind === "reminder" && createProviderId) {
+      setCreateError("Saving reminders to provider is not supported yet.");
       return;
-    }
-    if (createSaveToProvider && createKind === "reminder") {
-      const target = (payload?.providers || []).find((p) => p.id === createProviderId);
-      if (target?.vendor === "google") {
-        setCreateError("Google CalDAV does not support reminders (VTODO). Choose iCloud or create as local-only.");
-        return;
-      }
     }
     setSaving(true);
     setCreateError(null);
+    const selectedProviderId = createKind === "event" ? createProviderId : "";
     try {
       const res = await fetch("/api/calendar", {
         method: "POST",
@@ -513,8 +517,8 @@ export function CalendarView() {
           notes: createNotes.trim() || undefined,
           dueAt: normalizedStart,
           endAt: createKind === "event" ? normalizedEnd : undefined,
-          saveToProvider: createSaveToProvider,
-          providerAccountId: createSaveToProvider ? createProviderId : undefined,
+          saveToProvider: Boolean(selectedProviderId),
+          providerAccountId: selectedProviderId || undefined,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -529,7 +533,7 @@ export function CalendarView() {
     } finally {
       setSaving(false);
     }
-  }, [createAllDay, createDueAt, createEndAt, createKind, createNotes, createProviderId, createSaveToProvider, createTitle, payload?.providers, refresh, resetCreateForm]);
+  }, [createAllDay, createDueAt, createEndAt, createKind, createNotes, createProviderId, createTitle, refresh, resetCreateForm]);
 
   const patchEntry = useCallback(async (id: string, patch: Record<string, unknown>) => {
     const res = await fetch("/api/calendar", {
@@ -1892,7 +1896,7 @@ export function CalendarView() {
                 />
               </label>
 
-              <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="grid gap-3 sm:grid-cols-2">
                 <div className="block text-xs text-muted-foreground">
                   <p>Type</p>
                   <div className="mt-1 inline-flex items-center rounded-md border border-foreground/10 bg-background/70 p-0.5">
@@ -1915,6 +1919,7 @@ export function CalendarView() {
                         setCreateKind("reminder");
                         setCreateEndAt("");
                         setCreateAllDay(false);
+                        setCreateProviderId("");
                       }}
                       className={cn(
                         "rounded px-2 py-1 text-xs transition-colors",
@@ -2018,65 +2023,58 @@ export function CalendarView() {
               )}
               </div>
 
-              <div className="flex flex-wrap items-end justify-between gap-3">
-                <div className="block text-xs text-muted-foreground">
-                  <p>Save to provider</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCreateSaveToProvider((prev) => {
-                        const next = !prev;
-                        if (!next) setCreateProviderId("");
-                        return next;
-                      });
-                    }}
-                    className="mt-1 inline-flex rounded-md border border-foreground/10 bg-background/70 p-0.5 text-xs"
-                    aria-pressed={createSaveToProvider}
+              <div className="space-y-2 rounded-xl border border-foreground/10 bg-background/40 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium text-foreground/90">Save to provider</p>
+                  <a
+                    href="/calendar/providers"
+                    className="text-xs text-emerald-300 hover:text-emerald-200"
                   >
-                    <span
-                      className={cn(
-                        "rounded px-2 py-1",
-                        createSaveToProvider ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-                      )}
-                    >
-                      On
-                    </span>
-                    <span
-                      className={cn(
-                        "rounded px-2 py-1",
-                        !createSaveToProvider ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
-                      )}
-                    >
-                      Off
-                    </span>
-                  </button>
+                    Configure providers
+                  </a>
                 </div>
-                <a
-                  href="/calendar/providers"
-                  className="text-xs text-emerald-300 hover:text-emerald-200"
-                >
-                  Configure providers
-                </a>
+
+                {enabledProviders.length === 0 ? (
+                  <p className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-xs text-amber-300">
+                    No providers configured. Configure at least one provider to save externally.
+                  </p>
+                ) : createKind === "reminder" ? (
+                  <p className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-xs text-amber-300">
+                    Saving reminders to provider is not supported yet.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {enabledProviders.map((provider) => {
+                      const selected = createProviderId === provider.id;
+                      const vendor = provider.vendor === "google" ? "Google" : "iCloud";
+                      return (
+                        <button
+                          key={provider.id}
+                          type="button"
+                          onClick={() => setCreateProviderId((prev) => (prev === provider.id ? "" : provider.id))}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-xs transition-colors",
+                            selected
+                              ? "border-emerald-500/30 bg-emerald-500/10 text-foreground"
+                              : "border-foreground/10 bg-card/50 text-muted-foreground hover:text-foreground"
+                          )}
+                          aria-pressed={selected}
+                        >
+                          <span className="truncate">
+                            {provider.label}
+                            <span className="ml-2 text-[10px] uppercase tracking-wide text-muted-foreground">{vendor}</span>
+                          </span>
+                          <span className={cn("rounded px-2 py-0.5", selected ? "bg-card text-foreground" : "text-muted-foreground")}>
+                            {selected ? "On" : "Off"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
-              {createSaveToProvider && (
-                <div className="block text-xs text-muted-foreground">
-                  <p>Provider account</p>
-                  <ThemedSelect
-                    value={createProviderId}
-                    onChange={(value) => setCreateProviderId(value)}
-                    options={enabledProviders.map((provider) => ({ value: provider.id, label: provider.label }))}
-                    className="mt-1 w-full"
-                  />
-                  {createError && (
-                    <p className="mt-1 rounded-md border border-red-500/20 bg-red-500/10 px-2 py-1 text-xs text-red-400">
-                      {createError}
-                    </p>
-                  )}
-                </div>
-              )}
-
-              {!createSaveToProvider && createError && (
+              {createError && (
                 <p className="rounded-md border border-red-500/20 bg-red-500/10 px-2 py-1 text-xs text-red-400">
                   {createError}
                 </p>

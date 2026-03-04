@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarDays, CheckCircle2, CircleAlert, Link2, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { CheckCircle2, CircleAlert, Link2, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { SectionBody, SectionHeader, SectionLayout } from "@/components/section-layout";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { Switch } from "@/components/ui/switch";
@@ -26,6 +26,7 @@ type ProviderAccount = {
 
 type ApiPayload = {
   providers?: ProviderAccount[];
+  entries?: Array<{ source?: string; providerAccountId?: string }>;
   upcoming?: Array<{ type?: string; source?: string }>;
   googleOAuth?: {
     configured: boolean;
@@ -76,6 +77,7 @@ export function CalendarProvidersView() {
   const [refreshing, setRefreshing] = useState(false);
   const [payload, setPayload] = useState<ApiPayload | null>(null);
   const [message, setMessage] = useState<{ type: "ok" | "err"; text: string } | null>(null);
+  const [latestImportedByProvider, setLatestImportedByProvider] = useState<Record<string, number>>({});
 
   const [vendorTab, setVendorTab] = useState<"icloud" | "google" | "zoho">("icloud");
   const [form, setForm] = useState({
@@ -156,12 +158,19 @@ export function CalendarProvidersView() {
   const providers = payload?.providers || [];
   const accountsCount = providers.filter((p) => p.enabled).length;
   const healthyCount = providers.filter((p) => p.enabled && !p.lastError).length;
-  const upcomingCount = useMemo(() => (payload?.upcoming || []).filter((item) => item.type === "event").length, [payload?.upcoming]);
   const latestSyncProvider = useMemo(() => {
     const withSync = providers.filter((p) => p.lastSyncAt);
     withSync.sort((a, b) => new Date(b.lastSyncAt || 0).getTime() - new Date(a.lastSyncAt || 0).getTime());
     return withSync[0];
   }, [providers]);
+  const importedCountByProvider = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const entry of payload?.entries || []) {
+      if (entry.source !== "provider" || !entry.providerAccountId) continue;
+      counts[entry.providerAccountId] = (counts[entry.providerAccountId] || 0) + 1;
+    }
+    return counts;
+  }, [payload?.entries]);
 
   const testProvider = useCallback(async () => {
     if (vendorTab === "zoho") {
@@ -290,6 +299,10 @@ export function CalendarProvidersView() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data?.ok === false) throw new Error(data?.error || `Sync failed (${res.status})`);
+      setLatestImportedByProvider((prev) => ({
+        ...prev,
+        [id]: Number.isFinite(Number(data?.imported)) ? Number(data.imported) : 0,
+      }));
       setMessage({ type: "ok", text: data?.message || "Sync complete." });
       await refresh();
     } catch (err) {
@@ -470,12 +483,12 @@ export function CalendarProvidersView() {
           <div className="rounded-2xl border border-foreground/10 bg-card/40">
             <div className="flex items-center justify-between px-5 py-4">
               <div>
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Upcoming events</p>
-                <p className="mt-2 text-3xl font-semibold text-foreground">{upcomingCount}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Current timeline window</p>
+                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Accounts</p>
+                <p className="mt-2 text-3xl font-semibold text-foreground">{accountsCount}</p>
+                <p className="mt-1 text-xs text-muted-foreground">Enabled sync accounts</p>
               </div>
               <div className="rounded-2xl border border-foreground/10 bg-background/70 p-3">
-                <CalendarDays className="h-5 w-5 text-muted-foreground" />
+                <Link2 className="h-5 w-5 text-muted-foreground" />
               </div>
             </div>
           </div>
@@ -496,25 +509,36 @@ export function CalendarProvidersView() {
           <div className="rounded-2xl border border-foreground/10 bg-card/40">
             <div className="flex items-center justify-between px-5 py-4">
               <div>
-                <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Accounts</p>
-                <p className="mt-2 text-3xl font-semibold text-foreground">{accountsCount}</p>
-                <p className="mt-1 text-xs text-muted-foreground">Enabled sync accounts</p>
-              </div>
-              <div className="rounded-2xl border border-foreground/10 bg-background/70 p-3">
-                <Link2 className="h-5 w-5 text-muted-foreground" />
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-foreground/10 bg-card/40">
-            <div className="flex items-center justify-between px-5 py-4">
-              <div>
                 <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Last Sync</p>
                 <p className="mt-2 text-sm font-semibold text-foreground">{latestSyncProvider?.label || "No recent sync"}</p>
                 <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(latestSyncProvider?.lastSyncAt)}</p>
               </div>
               <div className="rounded-2xl border border-foreground/10 bg-background/70 p-3">
                 <RefreshCw className="h-5 w-5 text-muted-foreground" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-foreground/10 bg-card/40">
+            <div className="px-5 py-4">
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Sync Activity</p>
+              <div className="mt-2 space-y-1.5">
+                {providers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No configured providers.</p>
+                ) : (
+                  providers.map((provider) => {
+                    const runCount = latestImportedByProvider[provider.id];
+                    const totalCount = importedCountByProvider[provider.id] || 0;
+                    return (
+                      <div key={provider.id} className="flex items-center justify-between gap-2 text-xs">
+                        <span className="truncate text-foreground/90">{provider.label}</span>
+                        <span className="shrink-0 text-muted-foreground">
+                          {runCount != null ? `${runCount} this sync` : `${totalCount} total`}
+                        </span>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
           </div>
