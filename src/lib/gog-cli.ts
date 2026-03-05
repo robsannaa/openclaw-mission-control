@@ -5,7 +5,7 @@
 
 import { execFile, spawn } from "child_process";
 import { promisify } from "util";
-import { getGogBin } from "./paths";
+import { getGogBin, getGogKeyringEnv } from "./paths";
 
 const exec = promisify(execFile);
 
@@ -22,7 +22,7 @@ export type RunGogOptions = {
 };
 
 function gogEnv(overrides?: Record<string, string>): NodeJS.ProcessEnv {
-  const env = { ...process.env };
+  const env = { ...process.env, ...getGogKeyringEnv() };
   if (process.env.GOG_ACCOUNT) env.GOG_ACCOUNT = process.env.GOG_ACCOUNT;
   if (overrides) Object.assign(env, overrides);
   return env;

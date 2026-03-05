@@ -127,6 +127,67 @@ function modelProvider(fullModel: string): string {
   return provider || "unknown";
 }
 
+function emptyLedgerSnapshot(): Awaited<ReturnType<typeof readLedgerUsageSnapshot>> {
+  const emptyBucket = {
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    sessions: 0,
+  };
+  const emptyUsdWindow = {
+    usd: null,
+    coveragePct: 0,
+  };
+  return {
+    windows: {
+      last1h: { ...emptyBucket },
+      last24h: { ...emptyBucket },
+      last7d: { ...emptyBucket },
+      allTime: { ...emptyBucket },
+    },
+    activitySeries: {
+      last1h: [],
+      last24h: [],
+      last7d: [],
+      allTime: [],
+    },
+    activitySeriesByModel: {},
+    historical: {
+      byModel: {},
+      byAgent: {},
+      costTimeSeries: [],
+      totalEstimatedUsd: 0,
+      totalTokens: 0,
+      rowCount: 0,
+    },
+    estimatedSpend: {
+      totalUsd: null,
+      windows: {
+        last1h: { ...emptyUsdWindow },
+        last24h: { ...emptyUsdWindow },
+        last7d: { ...emptyUsdWindow },
+        allTime: { ...emptyUsdWindow },
+      },
+      byModel: [],
+    },
+    localTelemetryMs: null,
+  };
+}
+
+function emptyReconciliationSnapshot(): Awaited<ReturnType<typeof readReconciliationSnapshot>> {
+  return {
+    summary: {
+      reconciledBuckets: 0,
+      mismatchBuckets: 0,
+      estimatedOnlyBuckets: 0,
+      providerOnlyBuckets: 0,
+      staleBuckets: 0,
+    },
+    rows: [],
+    lastRunMs: null,
+  };
+}
+
 export async function GET(request: NextRequest) {
   try {
     const configPath = join(OPENCLAW_HOME, "openclaw.json");
@@ -437,9 +498,37 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const ledger = await readLedgerUsageSnapshot();
-    const providerBilling = await getAllProviderSnapshots();
-    const reconciliation = await readReconciliationSnapshot();
+    let ledger: Awaited<ReturnType<typeof readLedgerUsageSnapshot>> = emptyLedgerSnapshot();
+    try {
+      ledger = await readLedgerUsageSnapshot();
+    } catch (err) {
+      diagnostics.sources.historical.ok = false;
+      diagnostics.sources.historical.error = errorMessage(err);
+      diagnostics.warnings.push("Usage ledger storage is unavailable; showing live usage only.");
+    }
+
+    let providerBilling: Awaited<ReturnType<typeof getAllProviderSnapshots>> = [];
+    try {
+      providerBilling = await getAllProviderSnapshots();
+    } catch (err) {
+      diagnostics.sources.providerBilling.ok = false;
+      if (!diagnostics.sources.providerBilling.error) {
+        diagnostics.sources.providerBilling.error = errorMessage(err);
+      }
+      diagnostics.warnings.push("Provider billing snapshots are unavailable right now.");
+    }
+
+    let reconciliation: Awaited<ReturnType<typeof readReconciliationSnapshot>> =
+      emptyReconciliationSnapshot();
+    try {
+      reconciliation = await readReconciliationSnapshot();
+    } catch (err) {
+      diagnostics.sources.reconciliation.ok = false;
+      if (!diagnostics.sources.reconciliation.error) {
+        diagnostics.sources.reconciliation.error = errorMessage(err);
+      }
+      diagnostics.warnings.push("Reconciliation data is temporarily unavailable.");
+    }
 
     const uncoveredModels = Array.from(missingPricingModels.values()).sort((a, b) => b.sessions - a.sessions);
     const coveredSessions = allSessions.length - missingPricingSessions;

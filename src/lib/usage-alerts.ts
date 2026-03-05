@@ -70,6 +70,18 @@ const PROVIDER_CAPABILITIES: Record<string, UsageAlertProviderCapability> = {
     docsUrl: "https://platform.openai.com/docs/api-reference/usage/costs",
     note: "OpenAI org billing should come from organization usage/cost endpoints.",
   },
+  synthetic: {
+    provider: "synthetic",
+    providerUsageApiKnown: false,
+    docsUrl: "https://synthetic.new/",
+    note: "Synthetic usage is currently treated as local telemetry estimate only in Mission Control.",
+  },
+  requesty: {
+    provider: "requesty",
+    providerUsageApiKnown: false,
+    docsUrl: "https://synthetic.new/",
+    note: "Requesty/Synthetic billing is currently treated as local telemetry estimate only in Mission Control.",
+  },
   minimax: {
     provider: "minimax",
     providerUsageApiKnown: false,

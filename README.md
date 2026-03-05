@@ -129,6 +129,23 @@ PORT=8080 ./setup.sh
 npm install && npm run dev
 ```
 
+### Run in Docker (no host Node setup)
+
+```bash
+cd ~/.openclaw/openclaw-mission-control
+OPENCLAW_HOME_HOST="$HOME/.openclaw" docker compose up -d --build
+```
+
+Then open `http://localhost:3333`.
+
+Stop it anytime:
+
+```bash
+docker compose down
+```
+
+Full Docker guide: [`docs/docker.md`](docs/docker.md)
+
 > **Zero configuration.** Mission Control automatically finds your `~/.openclaw` directory and the `openclaw` binary. Nothing to set up.
 
 ### Let Your Agent Install It
@@ -167,6 +184,7 @@ Everything is auto-detected, but you can override if needed:
 | `OPENCLAW_WORKSPACE` | Auto-detected | Your default workspace folder |
 | `OPENCLAW_TRANSPORT` | `auto` | How to reach the gateway: `auto`, `http`, or `cli` |
 | `OPENCLAW_GATEWAY_URL` | `http://127.0.0.1:18789` | Gateway address (for remote setups) |
+| `OPENCLAW_GATEWAY_TOKEN` | _(empty)_ | Bearer token for authenticated gateway HTTP access |
 
 ---
 

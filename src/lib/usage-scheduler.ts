@@ -2,6 +2,7 @@ import { mkdir, rm, stat } from "fs/promises";
 import { dirname, join } from "path";
 import { getGatewayToken, getOpenClawHome } from "@/lib/paths";
 import { gatewayCall } from "@/lib/openclaw";
+import { resolveBillingCredential } from "@/lib/provider-billing/shared";
 import { usageDbGetMeta, usageDbSetMeta } from "@/lib/usage-db";
 
 type CronJob = {
@@ -25,15 +26,57 @@ type SchedulerJob = {
 const ENSURE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const ENSURE_LOCK_TTL_MS = 2 * 60 * 1000;
 const ENSURE_LOCK_PATH = join(getOpenClawHome(), "mission-control", "locks", "usage-scheduler.ensure.lock");
+const ENABLE_USAGE_CRON = process.env.MISSION_CONTROL_ENABLE_USAGE_CRON === "true";
 
-const JOBS: SchedulerJob[] = [
+const BASE_JOBS: SchedulerJob[] = [
   { name: "mc-usage-ingest", everyMs: 60_000, task: "ingest" },
-  { name: "mc-billing-openrouter", everyMs: 15 * 60_000, task: "collect-provider&provider=openrouter" },
-  { name: "mc-billing-openai", everyMs: 5 * 60_000, task: "collect-provider&provider=openai" },
-  { name: "mc-billing-anthropic", everyMs: 2 * 60_000, task: "collect-provider&provider=anthropic" },
   { name: "mc-reconcile-usage", everyMs: 5 * 60_000, task: "reconcile" },
   { name: "mc-alert-evaluator", everyMs: 60_000, task: "alerts" },
 ];
+
+const PROVIDER_JOBS: Array<
+  SchedulerJob & {
+    credentials: string[];
+  }
+> = [
+  {
+    name: "mc-billing-openrouter",
+    everyMs: 15 * 60_000,
+    task: "collect-provider&provider=openrouter",
+    credentials: ["OPENROUTER_MANAGEMENT_KEY"],
+  },
+  {
+    name: "mc-billing-openai",
+    everyMs: 5 * 60_000,
+    task: "collect-provider&provider=openai",
+    credentials: ["OPENAI_ADMIN_API_KEY", "OPENAI_API_KEY"],
+  },
+  {
+    name: "mc-billing-anthropic",
+    everyMs: 2 * 60_000,
+    task: "collect-provider&provider=anthropic",
+    credentials: ["ANTHROPIC_ADMIN_API_KEY", "ANTHROPIC_API_KEY"],
+  },
+];
+
+const ALL_MANAGED_JOB_NAMES = new Set<string>([
+  ...BASE_JOBS.map((job) => job.name),
+  ...PROVIDER_JOBS.map((job) => job.name),
+]);
+
+async function resolveManagedJobs(): Promise<SchedulerJob[]> {
+  const jobs: SchedulerJob[] = [...BASE_JOBS];
+  for (const providerJob of PROVIDER_JOBS) {
+    const credential = await resolveBillingCredential(providerJob.credentials);
+    if (!credential.value) continue;
+    jobs.push({
+      name: providerJob.name,
+      everyMs: providerJob.everyMs,
+      task: providerJob.task,
+    });
+  }
+  return jobs;
+}
 
 function buildWebhookUrl(origin: string, task: string): string | null {
   const gatewayToken = getGatewayToken();
@@ -106,6 +149,10 @@ async function releaseEnsureLock(): Promise<void> {
 }
 
 export async function ensureUsageScheduler(origin: string): Promise<{ ensured: boolean; reason?: string }> {
+  if (!ENABLE_USAGE_CRON) {
+    return { ensured: false, reason: "disabled-by-default" };
+  }
+
   const lastEnsureRaw = await usageDbGetMeta("scheduler.last_ensure_ms");
   const lastEnsure = lastEnsureRaw ? Number(lastEnsureRaw) || 0 : 0;
   if (lastEnsure > 0 && Date.now() - lastEnsure < ENSURE_INTERVAL_MS) {
@@ -123,10 +170,20 @@ export async function ensureUsageScheduler(origin: string): Promise<{ ensured: b
   }
 
   try {
+    const managedJobs = await resolveManagedJobs();
     const existing = await gatewayCall<CronList>("cron.list", {}, 15000);
     const jobs = Array.isArray(existing.jobs) ? existing.jobs : [];
+    const desiredNames = new Set(managedJobs.map((job) => job.name));
 
-    for (const desired of JOBS) {
+    // Remove stale Mission Control jobs that are no longer desired (e.g. provider key removed).
+    for (const stale of jobs) {
+      if (!stale.id || !stale.name) continue;
+      if (!ALL_MANAGED_JOB_NAMES.has(stale.name)) continue;
+      if (desiredNames.has(stale.name)) continue;
+      await gatewayCall("cron.remove", { id: stale.id }, 15000);
+    }
+
+    for (const desired of managedJobs) {
       const webhookUrl = buildWebhookUrl(origin, desired.task);
       if (!webhookUrl) continue;
 

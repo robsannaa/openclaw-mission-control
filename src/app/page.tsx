@@ -32,6 +32,7 @@ const SECTION_TO_PATH: Record<string, string> = {
   tailscale: "/tailscale",
   browser: "/browser",
   calendar: "/calendar",
+  integrations: "/integrations",
   search: "/search",
   help: "/help",
 };

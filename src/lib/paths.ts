@@ -200,22 +200,20 @@ export async function getGogBin(): Promise<string> {
   return _gogBin;
 }
 
-// ── gog keyring directory (so app and CLI use the same tokens) ──
+// ── gog keyring env ──
 
 /**
- * Resolve gog keyring directory. Override with GOG_KEYRING_DIR.
- * Pass this as env when running gog from the app so it sees the same keyring as the CLI.
+ * Environment variables for gog keyring access.
+ * Uses file-based keyring to avoid macOS Keychain lock issues on headless machines.
+ * Note: gog always stores tokens in ~/Library/Application Support/gogcli/keyring/
+ * regardless of env vars. The config file controls the backend (already set to "file").
+ * GOG_KEYRING_PASSWORD is required for the file backend encryption.
  */
-export function getGogKeyringDir(): string {
-  if (process.env.GOG_KEYRING_DIR) return process.env.GOG_KEYRING_DIR;
-  const home = homedir();
-  if (process.platform === "darwin") {
-    return join(home, "Library", "Application Support", "gogcli", "keyring");
-  }
-  if (process.platform === "win32") {
-    return join(process.env.APPDATA || home, "gogcli", "keyring");
-  }
-  return join(home, ".config", "gogcli", "keyring");
+export function getGogKeyringEnv(): Record<string, string> {
+  return {
+    GOG_KEYRING_PASSWORD:
+      process.env.GOG_KEYRING_PASSWORD || "openclaw:file-keyring",
+  };
 }
 
 // ── Gateway URL ─────────────────────────────────

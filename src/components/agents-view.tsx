@@ -1004,6 +1004,8 @@ function AgentDetail({
         </div>
       </div>
 
+      <AgentIntegrationsPanel agentId={agent.id} agentName={agent.name} />
+
       {/* Identity */}
       {agent.identitySnippet && (
         <div className="rounded-lg border border-foreground/10 bg-card/80">
@@ -1029,6 +1031,153 @@ function AgentDetail({
               </pre>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AgentIntegrationsPanel({
+  agentId,
+  agentName,
+}: {
+  agentId: string;
+  agentName: string;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<
+    Array<{
+      id: string;
+      email: string;
+      label: string;
+      status: string;
+      accessLevel: string;
+      capabilityMatrix: Array<{
+        key: string;
+        label: string;
+        category: "read" | "draft" | "write";
+        enabled: boolean;
+        policy: "deny" | "ask" | "allow" | null;
+      }>;
+    }>
+  >([]);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/integrations?agentId=${encodeURIComponent(agentId)}`, {
+        cache: "no-store",
+      });
+      const json = (await response.json()) as {
+        error?: string;
+        store?: {
+          accounts?: Array<{
+            id: string;
+            email: string;
+            label: string;
+            status: string;
+            accessLevel: string;
+            capabilityMatrix: Array<{
+              key: string;
+              label: string;
+              category: "read" | "draft" | "write";
+              enabled: boolean;
+              policy: "deny" | "ask" | "allow" | null;
+            }>;
+          }>;
+        };
+      };
+      if (!response.ok) {
+        throw new Error(json.error || `Failed to load integrations for ${agentName}`);
+      }
+      setAccounts(json.store?.accounts || []);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : String(loadError));
+    } finally {
+      setLoading(false);
+    }
+  }, [agentId, agentName]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <div className="rounded-lg border border-foreground/10 bg-card/80 p-3 space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" />
+          Google Integrations
+        </div>
+        <Link
+          href={`/integrations?agentId=${encodeURIComponent(agentId)}`}
+          className="text-xs text-[var(--accent-brand-text)] hover:text-[var(--accent-brand)]"
+        >
+          Manage
+        </Link>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center gap-2 py-1 text-xs text-muted-foreground/60">
+          <InlineSpinner size="sm" />
+          Loading integration access...
+        </div>
+      ) : error ? (
+        <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-400">
+          {error}
+        </div>
+      ) : accounts.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-foreground/10 px-3 py-2 text-xs text-muted-foreground/60">
+          No Google accounts are connected for Mission Control yet.
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {accounts.map((account) => {
+            const allowedReads = account.capabilityMatrix.filter(
+              (capability) =>
+                capability.enabled &&
+                capability.category === "read" &&
+                capability.policy !== "deny",
+            ).length;
+            const approvalWrites = account.capabilityMatrix.filter(
+              (capability) =>
+                capability.enabled &&
+                capability.category === "write" &&
+                capability.policy === "ask",
+            ).length;
+            const autoWrites = account.capabilityMatrix.filter(
+              (capability) =>
+                capability.enabled &&
+                capability.category === "write" &&
+                capability.policy === "allow",
+            ).length;
+            return (
+              <div key={account.id} className="rounded-lg border border-foreground/10 bg-foreground/5 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-semibold text-foreground/90">{account.label}</p>
+                    <p className="text-xs text-muted-foreground">{account.email}</p>
+                  </div>
+                  <span className="rounded-full bg-[var(--accent-brand-subtle)] px-2 py-0.5 text-[10px] font-medium text-[var(--accent-brand-text)]">
+                    {account.accessLevel}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+                  <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-emerald-400">
+                    {allowedReads} read allowed
+                  </span>
+                  <span className="rounded bg-amber-500/10 px-2 py-0.5 text-amber-400">
+                    {approvalWrites} write needs approval
+                  </span>
+                  <span className="rounded bg-rose-500/10 px-2 py-0.5 text-rose-400">
+                    {autoWrites} write auto-allowed
+                  </span>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

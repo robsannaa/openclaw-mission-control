@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { DashboardView } from "@/components/dashboard-view";
 import { ChatView } from "@/components/chat-view";
 import { PanelErrorBoundary } from "@/components/panel-error-boundary";
@@ -108,6 +108,10 @@ const CalendarView = dynamic(
   () => import("@/components/calendar-view").then((m) => m.CalendarView),
   { loading: () => <SectionLoading /> }
 );
+const IntegrationsView = dynamic(
+  () => import("@/components/integrations-view").then((m) => m.IntegrationsView),
+  { loading: () => <SectionLoading /> }
+);
 const SettingsView = dynamic(
   () => import("@/components/settings-view").then((m) => m.SettingsView),
   { loading: () => <SectionLoading /> }
@@ -157,6 +161,7 @@ export type DashboardSection =
   | "permissions"
   | "tailscale"
   | "browser"
+  | "integrations"
   | "search"
   | "settings"
   | "hooks"
@@ -218,6 +223,8 @@ function SectionContent({ section }: { section: DashboardSection }) {
       return <TailscaleView />;
     case "browser":
       return <BrowserRelayView isHosted={isAgentbayHosting} />;
+    case "integrations":
+      return <IntegrationsView />;
     case "search":
       return <WebSearchView />;
     case "settings":
@@ -237,15 +244,10 @@ function SectionContent({ section }: { section: DashboardSection }) {
 
 export function RouteSectionView({ section }: { section: DashboardSection }) {
   const isChatSection = section === "chat";
-  const [chatResetKey, setChatResetKey] = useState(0);
 
   useEffect(() => {
     setChatActive(isChatSection);
     return () => setChatActive(false);
-  }, [isChatSection]);
-
-  useEffect(() => {
-    if (isChatSection) setChatResetKey(k => k + 1);
   }, [isChatSection]);
 
   return (
@@ -253,7 +255,7 @@ export function RouteSectionView({ section }: { section: DashboardSection }) {
       <div
         className={isChatSection ? "flex flex-1 flex-col overflow-hidden" : "hidden"}
       >
-        <PanelErrorBoundary key={chatResetKey} section="chat">
+        <PanelErrorBoundary key={isChatSection ? "chat-visible" : "chat-hidden"} section="chat">
           <ChatView isVisible={isChatSection} />
         </PanelErrorBoundary>
       </div>

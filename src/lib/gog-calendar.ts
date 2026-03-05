@@ -4,7 +4,7 @@
  */
 
 import { homedir } from "os";
-import { getGogBin, getGogKeyringDir } from "@/lib/paths";
+import { getGogBin } from "@/lib/paths";
 import { runGogCaptureBoth } from "@/lib/gog-cli";
 
 export type GogNormalizedEvent = {
@@ -89,7 +89,6 @@ export async function fetchCalendarEventsViaGog(
   // Run gog with same env as CLI: HOME and keyring path so it finds your tokens
   const envOverrides: Record<string, string> = {
     HOME: process.env.HOME || homedir(),
-    GOG_KEYRING_DIR: getGogKeyringDir(),
   };
   if (account) envOverrides.GOG_ACCOUNT = account;
   let stdout: string;

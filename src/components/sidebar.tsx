@@ -40,6 +40,7 @@ import {
   Webhook,
   Stethoscope,
   HelpCircle,
+  Puzzle,
 } from "lucide-react";
 import { getChatUnreadCount, subscribeChatStore } from "@/lib/chat-store";
 
@@ -71,6 +72,7 @@ const navItems: NavItem[] = [
   { group: "Work", section: "tasks", label: "Tasks", icon: ListChecks, href: "/tasks" },
   { section: "calendar", label: "Calendar", icon: Calendar, href: "/calendar" },
   { section: "calendar", label: "Providers", icon: Settings2, href: "/calendar/providers", tab: "providers", isSubItem: true },
+  { section: "integrations", label: "Integrations", icon: Puzzle, href: "/integrations" },
   { section: "cron", label: "Cron Jobs", icon: Clock, href: "/cron" },
   { section: "cron", label: "Heartbeat", icon: Heart, href: "/heartbeat", tab: "heartbeat", isSubItem: true },
   { section: "skills", label: "Skills", icon: Wrench, href: "/skills" },
@@ -125,6 +127,7 @@ function deriveSectionFromPath(pathname: string): string | null {
     "agents",
     "tasks",
     "calendar",
+    "integrations",
     "sessions",
     "cron",
     "heartbeat",

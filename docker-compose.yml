@@ -1,0 +1,21 @@
+services:
+  mission-control:
+    container_name: openclaw-mission-control
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: openclaw-mission-control:local
+    ports:
+      - "${MISSION_CONTROL_PORT:-3333}:3333"
+    environment:
+      NODE_ENV: production
+      OPENCLAW_HOME: /openclaw
+      OPENCLAW_WORKSPACE: /openclaw/workspace
+      OPENCLAW_TRANSPORT: "${OPENCLAW_TRANSPORT:-http}"
+      OPENCLAW_GATEWAY_URL: "${OPENCLAW_GATEWAY_URL:-http://host.docker.internal:18789}"
+      OPENCLAW_GATEWAY_TOKEN: "${OPENCLAW_GATEWAY_TOKEN:-}"
+    volumes:
+      - "${OPENCLAW_HOME_HOST:-./.openclaw}:/openclaw"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
