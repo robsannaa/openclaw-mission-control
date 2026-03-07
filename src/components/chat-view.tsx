@@ -23,6 +23,7 @@ import {
   X,
   KeyRound,
   ArrowRight,
+  Plus,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -904,6 +905,22 @@ function ChatPanel({
 
 /* ── Main chat view with agent selector ────────── */
 
+function formatAge(ms: number): string {
+  const secs = Math.floor(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
+  return `${(n / 1_000_000).toFixed(2)}M`;
+}
+
 const isHosted = process.env.NEXT_PUBLIC_AGENTBAY_HOSTED === "true";
 
 export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
@@ -1239,6 +1256,81 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
                 </div>
               )}
             </div>
+
+            {/* Session dropdown */}
+            <div className="relative" ref={sessionDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setSessionDropdownOpen(!sessionDropdownOpen)}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                  "border-stone-200 bg-white text-stone-700 hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
+                )}
+              >
+                <span className="text-xs text-muted-foreground">
+                  {activeSessionKey
+                    ? formatAge(
+                        agentSessions.find((s) => s.key === activeSessionKey)?.ageMs ?? 0
+                      ) + " ago"
+                    : "Current session"}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 text-stone-400 dark:text-stone-500" />
+              </button>
+
+              {sessionDropdownOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 min-w-56 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 shadow-xl dark:border-stone-700 dark:bg-stone-800">
+                  {agentSessions.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">No sessions yet</div>
+                  ) : (
+                    agentSessions.map((session) => {
+                      const isActive = session.key === activeSessionKey || (!activeSessionKey && session.key === agentSessions[0]?.key);
+                      const isRecent = session.updatedAt > 0 && Date.now() - session.updatedAt < 300_000;
+                      return (
+                        <button
+                          key={session.key}
+                          type="button"
+                          onClick={() => selectSession(session.key)}
+                          className={cn(
+                            "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
+                            isActive
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                              : "text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
+                          )}
+                        >
+                          {isRecent && (
+                            <Circle className="h-2 w-2 shrink-0 fill-emerald-400 text-emerald-400" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium">
+                              {session.ageMs > 0 ? formatAge(session.ageMs) + " ago" : "Just now"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {formatTokens(session.totalTokens)} tokens
+                            </div>
+                          </div>
+                          {isActive && (
+                            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                              current
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* New session button */}
+            <button
+              type="button"
+              onClick={startNewSession}
+              title="Start new session"
+              className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2.5 py-2 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
+            >
+              <Plus className="h-3.5 w-3.5" /> New
+            </button>
+
           </div>
         </div>
       </div>
