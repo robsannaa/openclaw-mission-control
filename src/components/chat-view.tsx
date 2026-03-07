@@ -59,9 +59,9 @@ type ChatBootstrapResponse = {
 
 /* ── Agent display helpers ──────────────────────── */
 
-/** Show a friendly display name: use agent name, but if it's just the raw ID, show model instead */
+/** Show a friendly display name: capitalize the agent name */
 function agentDisplayName(agent: Agent): string {
-  if (agent.name && agent.name !== agent.id) return agent.name;
+  if (agent.name) return agent.name.charAt(0).toUpperCase() + agent.name.slice(1);
   return formatModel(agent.model);
 }
 
