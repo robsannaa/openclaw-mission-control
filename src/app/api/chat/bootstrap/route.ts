@@ -14,6 +14,7 @@ export async function GET() {
       {
         agents: [],
         models: [],
+        connectedProviders: [],
         warnings: [String(error)],
         degraded: true,
       },

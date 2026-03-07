@@ -169,9 +169,25 @@ let pingState: PingChatState = {
 
 const pingListeners = new Set<Listener>();
 
+let _persistTimer: ReturnType<typeof setTimeout> | null = null;
+
 function emitPing() {
   pingListeners.forEach((fn) => { try { fn(); } catch { /* */ } });
-  // Persist on every state change (debounced writes are overkill for this size)
+  // Debounce localStorage writes during rapid updates (e.g. streaming)
+  if (!_persistTimer) {
+    _persistTimer = setTimeout(() => {
+      _persistTimer = null;
+      persistState(pingState);
+    }, 300);
+  }
+}
+
+/** Flush pending persist immediately (call after send completes, clear, etc.) */
+function flushPersist() {
+  if (_persistTimer) {
+    clearTimeout(_persistTimer);
+    _persistTimer = null;
+  }
   persistState(pingState);
 }
 
@@ -233,25 +249,28 @@ export const chatStore = {
   clearMessages() {
     pingState = { ...pingState, messages: [], unread: 0 };
     emitPing();
+    flushPersist();
   },
 
   async send(prompt: string) {
     if (!prompt.trim() || !pingState.agentId || pingState.sending) return;
+
+    // Capture agentId before any async work so setAgent() during flight
+    // doesn't change which agent this request targets
+    const agentId = pingState.agentId;
 
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       role: "user",
       text: prompt.trim(),
       timestamp: Date.now(),
-      agentId: pingState.agentId,
+      agentId,
     };
 
     pingState = { ...pingState, messages: [...pingState.messages, userMsg], sending: true };
     emitPing();
-
-    const agentId = pingState.agentId;
     const chatBody = JSON.stringify({
-      agent: agentId,
+      agentId,
       messages: [
         {
           role: "user",
@@ -270,7 +289,10 @@ export const chatStore = {
         body: chatBody,
       });
 
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      if (!res.ok) {
+        const errBody = await res.text().catch(() => "");
+        throw new Error(errBody || `${res.status} ${res.statusText}`);
+      }
 
       // Read as a stream to show progressive text in the ping panel
       let text = "";
@@ -279,12 +301,18 @@ export const chatStore = {
       if (res.body) {
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
-        let lastPersist = 0;
+        let gotFirstChunk = false;
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           text += decoder.decode(value, { stream: true });
+
+          // Clear 'sending' (typing indicator) once first chunk arrives
+          // so the UI shows streaming text instead of "Agent is thinking..."
+          if (!gotFirstChunk) {
+            gotFirstChunk = true;
+          }
 
           // Update the streaming message in-place for progressive display
           const streamingMsg: ChatMessage = {
@@ -301,28 +329,29 @@ export const chatStore = {
           pingState = {
             ...pingState,
             messages: streamUpdated,
+            sending: !gotFirstChunk,
           };
+          // emitPing() debounces localStorage writes; UI updates are immediate
           emitPing();
-
-          // Debounce localStorage writes during streaming to at most once per 500ms
-          const now = Date.now();
-          if (now - lastPersist > 500) {
-            persistState(pingState);
-            lastPersist = now;
-          }
         }
 
-        // Always persist once when the stream completes
-        persistState(pingState);
+        // Flush persist after stream completes
+        flushPersist();
       } else {
         text = await res.text();
       }
 
       // Finalize the message
+      const trimmed = text.trim();
+      if (!trimmed) {
+        // Empty response — show as error instead of blank bubble
+        throw new Error("Agent returned an empty response. The gateway may still be starting up — try again in a moment.");
+      }
+
       const assistantMsg: ChatMessage = {
         id: assistantMsgId,
         role: "assistant",
-        text: text.trim(),
+        text: trimmed,
         timestamp: Date.now(),
         agentId,
       };
@@ -339,15 +368,17 @@ export const chatStore = {
         unread: isStillOpen ? 0 : pingState.unread + 1,
       };
       emitPing();
+      flushPersist();
 
       if (!isStillOpen) {
-        chatStore._notify(agentId, text.trim());
+        chatStore._notify(agentId, trimmed);
       }
     } catch (err) {
+      const rawErr = err instanceof Error ? err.message : String(err);
       const errMsg: ChatMessage = {
         id: crypto.randomUUID(),
         role: "error",
-        text: String(err),
+        text: rawErr,
         timestamp: Date.now(),
         agentId,
       };
@@ -360,6 +391,7 @@ export const chatStore = {
         unread: isStillOpen ? 0 : pingState.unread + 1,
       };
       emitPing();
+      flushPersist();
 
       if (!isStillOpen) {
         chatStore._notify(agentId, "Error getting response");

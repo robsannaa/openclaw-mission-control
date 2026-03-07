@@ -87,10 +87,10 @@ type ChannelStatus = {
 };
 
 async function buildChannelStatuses(): Promise<ChannelStatus[]> {
-  // Fetch gateway status + config in parallel
+  // Fetch gateway status + config in parallel (5s timeout — keep UI snappy)
   const [statusResult, configResult, diskConfig] = await Promise.all([
-    gatewayCall<Record<string, unknown>>("channels.status", {}, 10000).catch(() => ({})),
-    gatewayCall<Record<string, unknown>>("config.get", undefined, 10000).catch(() => null),
+    gatewayCall<Record<string, unknown>>("channels.status", {}, 5000).catch(() => ({})),
+    gatewayCall<Record<string, unknown>>("config.get", undefined, 5000).catch(() => null),
     readChannelsConfig(),
   ]);
 
@@ -223,6 +223,24 @@ export async function POST(request: NextRequest) {
         );
 
         return NextResponse.json({ ok: true, message: `${channel} disconnected.` });
+      }
+
+      /* ── Delete (fully remove channel from config) ── */
+      case "delete": {
+        // WhatsApp: logout session first
+        if (channel === "whatsapp") {
+          try {
+            await gatewayCall("channels.logout", { channel }, 15000);
+          } catch { /* best effort */ }
+        }
+
+        // Remove the entire channel config section
+        await patchConfig(
+          { channels: { [channel]: null } },
+          { restartDelayMs: 2000 },
+        );
+
+        return NextResponse.json({ ok: true, message: `${channel} removed from configuration.` });
       }
 
       /* ── Update policy ── */

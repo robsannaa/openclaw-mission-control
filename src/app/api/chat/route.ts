@@ -1,6 +1,6 @@
 import { runOpenResponsesText, guessMime } from "@/lib/openresponses";
 import { getGatewayUrl, getGatewayToken } from "@/lib/paths";
-import { waitForResponsesEndpoint } from "@/app/api/gateway/route";
+import { waitForResponsesEndpoint, triggerResponsesEndpointSetup } from "@/app/api/gateway/route";
 
 /**
  * Chat endpoint that sends a message to an OpenClaw agent and returns the response.
@@ -118,7 +118,11 @@ async function* parseOpenResponsesStream(
 
   while (true) {
     const { done, value } = await reader.read();
-    if (done) break;
+    if (done) {
+      // Flush remaining decoder bytes + any trailing buffer content
+      buffer += decoder.decode();
+      break;
+    }
 
     buffer += decoder.decode(value, { stream: true });
 
@@ -144,6 +148,24 @@ async function* parseOpenResponsesStream(
         }
       } catch {
         // Non-JSON SSE line — skip
+      }
+    }
+  }
+
+  // Process any remaining buffered line after stream ends
+  if (buffer.trim()) {
+    const line = buffer.trim();
+    if (line.startsWith("data: ")) {
+      const data = line.slice(6);
+      if (data !== "[DONE]") {
+        try {
+          const event = JSON.parse(data);
+          if (event.type === "response.output_text.delta" && event.delta) {
+            yield event.delta;
+          }
+        } catch {
+          // Non-JSON — skip
+        }
       }
     }
   }
@@ -200,6 +222,13 @@ async function tryStreamingResponse(
     const status = gwRes.status;
     const text = await gwRes.text().catch(() => "");
     console.warn(`[chat] Gateway returned ${status} from ${endpoint}.`, text.slice(0, 200));
+    // Surface auth/config errors (4xx) directly instead of falling through
+    if (text && status >= 400 && status < 500 && status !== 404) {
+      return new Response(`Error: ${text.slice(0, 500)}`, {
+        status,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
     return null;
   }
 
@@ -247,7 +276,16 @@ async function nonStreamingResponse(
       timeoutMs: 180_000,
     });
 
-    if (!result.ok) return null;
+    if (!result.ok) {
+      // Surface auth/config errors from the gateway instead of swallowing them
+      if (result.text && result.status >= 400 && result.status < 500) {
+        return new Response(`Error: ${result.text}`, {
+          status: result.status,
+          headers: { "Content-Type": "text/plain; charset=utf-8" },
+        });
+      }
+      return null;
+    }
 
     return new Response(result.text || "", {
       status: 200,
@@ -278,7 +316,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const messages: Message[] = body.messages || [];
-    const agentId: string = body.agentId || "main";
+    const agentId: string = body.agentId || body.agent || "main";
     const sessionKey = normalizeRequestedSessionKey(body.sessionKey);
 
     const { plainText, openResponsesInput } = extractContent(messages);
@@ -290,8 +328,9 @@ export async function POST(req: Request) {
       });
     }
 
-    // Wait for the responses endpoint setup if it's still in progress
-    // (ensureResponsesEndpoint fires async on the first gateway health check)
+    // Ensure the OpenResponses endpoint is enabled (trigger setup if the
+    // gateway health poll hasn't fired yet), then wait for it to complete.
+    triggerResponsesEndpointSetup();
     await waitForResponsesEndpoint();
 
     // Try streaming via OpenResponses API first

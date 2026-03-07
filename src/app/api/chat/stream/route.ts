@@ -1,11 +1,13 @@
 import { getGatewayUrl, getGatewayToken } from "@/lib/paths";
+import { guessMime } from "@/lib/openresponses";
 import { logRequest, logError } from "@/lib/request-log";
+import { triggerResponsesEndpointSetup, waitForResponsesEndpoint } from "@/app/api/gateway/route";
 
 /**
  * Streaming chat endpoint — proxies SSE from the Gateway's OpenResponses API.
  *
  * POST /api/chat/stream
- * Body: { agent, messages: [{ role, id, parts }], model? }
+ * Body: { agent, messages: [{ role, id, parts }], model?, sessionKey? }
  *
  * Streams back SSE events from the gateway's POST /v1/responses endpoint.
  * If the gateway doesn't support OpenResponses (404/502), returns a specific
@@ -20,8 +22,11 @@ export async function POST(req: Request) {
       parts?: { type: string; text?: string; url?: string; filename?: string; mimeType?: string }[];
       content?: string;
     }[] = body.messages || [];
-    const agentId: string = body.agent || body.agentId || "main";
+    const agentId: string = body.agentId || body.agent || "main";
     const model: string | undefined = body.model?.trim() || undefined;
+    const sessionKey: string | undefined = typeof body.sessionKey === "string" && body.sessionKey.trim()
+      ? body.sessionKey.trim()
+      : undefined;
 
     // Extract last user message — text + file attachments as OpenResponses input items
     const lastUserMsg = [...messages].reverse().find((m) => m.role === "user");
@@ -36,7 +41,7 @@ export async function POST(req: Request) {
             content: p.text,
           });
         } else if (p.type === "file" && p.url) {
-          const mime = p.mimeType || guessMimeFromUrl(p.url, p.filename);
+          const mime = p.mimeType || guessMime(p.url, p.filename);
           if (mime.startsWith("image/")) {
             inputItems.push({
               type: "input_image",
@@ -78,17 +83,21 @@ export async function POST(req: Request) {
 
     if (!input || (typeof input === "string" && !input.trim())) {
       return new Response("Please send a message or attach a file.", {
-        status: 200,
+        status: 400,
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     }
+
+    // Ensure the OpenResponses endpoint is enabled before hitting the gateway
+    triggerResponsesEndpointSetup();
+    await waitForResponsesEndpoint();
 
     const gwUrl = await getGatewayUrl();
     const token = getGatewayToken();
 
     // Build OpenResponses request
     const orBody: Record<string, unknown> = {
-      model: model || "openclaw",
+      model: model || `openclaw:${agentId}`,
       input,
       stream: true,
     };
@@ -97,12 +106,18 @@ export async function POST(req: Request) {
       "Content-Type": "application/json",
       "x-openclaw-agent-id": agentId,
     };
+    if (sessionKey) headers["x-openclaw-session-key"] = sessionKey;
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 180_000);
+
+    // Cancel upstream fetch if client disconnects
+    if (req.signal) {
+      req.signal.addEventListener("abort", () => controller.abort(), { once: true });
+    }
 
     let gwRes: Response;
     try {
@@ -160,11 +175,12 @@ export async function POST(req: Request) {
         // Stream interrupted (client disconnect, gateway error) — ok
       } finally {
         clearTimeout(timeout);
+        reader.cancel().catch(() => {});
         await writer.close().catch(() => {});
       }
     })();
 
-    logRequest("/api/chat/stream", 200, Date.now() - start, { agentId, model: model || "openclaw" });
+    logRequest("/api/chat/stream", 200, Date.now() - start, { agentId, model: model || `openclaw:${agentId}` });
     return new Response(readable, {
       status: 200,
       headers: {
@@ -183,21 +199,4 @@ export async function POST(req: Request) {
       { status: 500, headers: { "Content-Type": "application/json" } },
     );
   }
-}
-
-function guessMimeFromUrl(url: string, filename?: string): string {
-  const name = filename || url;
-  if (/\.(jpe?g)$/i.test(name)) return "image/jpeg";
-  if (/\.png$/i.test(name)) return "image/png";
-  if (/\.gif$/i.test(name)) return "image/gif";
-  if (/\.webp$/i.test(name)) return "image/webp";
-  if (/\.pdf$/i.test(name)) return "application/pdf";
-  if (/\.json$/i.test(name)) return "application/json";
-  if (/\.csv$/i.test(name)) return "text/csv";
-  if (/\.md$/i.test(name)) return "text/markdown";
-  if (/\.html?$/i.test(name)) return "text/html";
-  // Check data URL prefix
-  const mimeMatch = url.match(/^data:([^;]+);/);
-  if (mimeMatch) return mimeMatch[1];
-  return "text/plain";
 }

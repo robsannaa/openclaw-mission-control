@@ -281,10 +281,9 @@ function ChatPanel({
     getTimeFormatServerSnapshot,
   );
   const [inputValue, setInputValue] = useState("");
-  const [chatSessionKey, setChatSessionKey] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return createChatSessionKey(agentId);
-  });
+  const chatSessionKeyRef = useRef(
+    typeof window === "undefined" ? "" : createChatSessionKey(agentId)
+  );
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -298,12 +297,12 @@ function ChatPanel({
   }, []);
 
   const ensureChatSessionKey = useCallback(() => {
-    const existing = chatSessionKey.trim();
+    const existing = chatSessionKeyRef.current.trim();
     if (existing) return existing;
     const next = createChatSessionKey(agentId);
-    setChatSessionKey(next);
+    chatSessionKeyRef.current = next;
     return next;
-  }, [agentId, chatSessionKey]);
+  }, [agentId]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -410,7 +409,17 @@ function ChatPanel({
         ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
         .map((p) => p.text)
         .join("") || "";
-    if (retryText) void sendWithActiveModel({ text: retryText });
+    const retryFiles =
+      lastUser.parts
+        ?.filter(
+          (p): p is { type: "file"; mediaType: string; filename?: string; url: string } =>
+            p.type === "file" && "url" in p
+        ) || [];
+    if (!retryText && retryFiles.length === 0) return;
+    void sendWithActiveModel({
+      text: retryText,
+      ...(retryFiles.length > 0 ? { files: retryFiles } : {}),
+    });
   }, [messages, sendWithActiveModel]);
 
   const handleSend = useCallback(async () => {
@@ -437,7 +446,7 @@ function ChatPanel({
   const clearChat = useCallback(() => {
     setMessages([]);
     prevMsgCountRef.current = 0;
-    setChatSessionKey(createChatSessionKey(agentId));
+    chatSessionKeyRef.current = createChatSessionKey(agentId);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [agentId, setMessages]);
 
@@ -907,6 +916,8 @@ const isHosted = process.env.NEXT_PUBLIC_AGENTBAY_HOSTED === "true";
 export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [selectedAgent, setSelectedAgent] = useState<string>("main");
+  const selectedAgentRef = useRef(selectedAgent);
+  selectedAgentRef.current = selectedAgent;
   const [agentsLoading, setAgentsLoading] = useState(true);
   const [availableModels, setAvailableModels] = useState<Array<{ key: string; name: string }>>([]);
   const [connectedProviders, setConnectedProviders] = useState<Array<{ id: string; name: string }>>([]);
@@ -970,7 +981,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
         bootstrapLoadedRef.current = true;
         if (
           agentList.length > 0 &&
-          !agentList.find((a: Agent) => a.id === selectedAgent)
+          !agentList.find((a: Agent) => a.id === selectedAgentRef.current)
         ) {
           setSelectedAgent(agentList[0].id);
           setMountedAgents((prev) => {
@@ -992,7 +1003,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
         setAgentsLoading(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAgent, warmupExpired]);
+  }, [warmupExpired]);
 
   useEffect(() => {
     mountedAtRef.current = Date.now();
@@ -1031,7 +1042,6 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
     return () => clearInterval(id);
   }, [isVisible]);
 
-  // When user selects an agent, ensure it's in the mounted set
   // Mark chat as active when visible
   useEffect(() => {
     setChatActive(isVisible);

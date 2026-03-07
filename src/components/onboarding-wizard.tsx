@@ -293,7 +293,7 @@ function OnboardingModelPicker({
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
           <div className="border-b border-border px-3 py-2">
             <div className="flex items-center gap-2">
               <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
@@ -307,7 +307,7 @@ function OnboardingModelPicker({
               />
             </div>
           </div>
-          <div className="max-h-56 overflow-y-auto">
+          <div className="max-h-48 overflow-y-auto sm:max-h-56">
             {filteredModels.length === 0 ? (
               <div className="px-3 py-4 text-center text-xs text-muted-foreground">
                 No models match your search.
@@ -778,7 +778,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-background px-4">
+      <div className="fixed inset-0 z-50 flex flex-col items-center overflow-y-auto bg-background px-4 py-6 sm:justify-center sm:py-8">
         <div className="flex w-full max-w-2xl flex-col items-center">
           <div className="mb-6 text-center sm:mb-8">
             <h1 className="font-serif text-2xl font-bold tracking-tight text-foreground">
@@ -835,7 +835,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
           )}
 
           <div className="w-full rounded-2xl border border-border bg-card shadow-[0_20px_60px_rgba(0,0,0,0.06)]">
-            <div className="max-h-[72vh] overflow-y-auto p-6 sm:p-7">
+            <div className="p-5 sm:p-7">
               {step === "model" && (
                 <div className="space-y-6">
                   <div>
@@ -935,8 +935,8 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                       <p className="text-xs text-red-400">{keyError}</p>
                     ) : null}
                     {apiKey.trim().length > 0 && apiKey.trim().length < 8 && !testingKey && keyValid === null ? (
-                      <p className="text-xs text-muted-foreground/50">
-                        Keep typing — API keys are usually longer (starts with {currentProvider.placeholder})
+                      <p className="break-words text-xs text-muted-foreground/50">
+                        Keep typing — API keys are usually longer
                       </p>
                     ) : null}
                   </div>
@@ -1052,7 +1052,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                           />
                         </div>
                       )}
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         {currentChannel.docsUrl ? (
                           <a
                             href={currentChannel.docsUrl}
@@ -1178,7 +1178,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                     </div>
                   )}
 
-                  <div className="flex justify-between pt-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
                     <button
                       type="button"
                       onClick={() => {

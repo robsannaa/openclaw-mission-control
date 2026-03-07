@@ -263,12 +263,19 @@ export async function GET() {
             typeof model === "string" ? model : (model as Record<string, unknown>)?.primary,
           );
 
+          // Tier 1: API keys stored in config.env
           const env = getDotPath(config, "env");
           if (env && typeof env === "object") {
             hasApiKey = Object.values(PROVIDER_ENV_KEYS).some((key) => {
               const value = (env as Record<string, unknown>)[key];
               return typeof value === "string" && value.trim().length > 0;
             });
+          }
+
+          // Tier 2: auth.profiles in openclaw.json (written by quick-setup)
+          const authProfiles = getDotPath(config, "auth.profiles");
+          if (!hasApiKey && authProfiles && typeof authProfiles === "object") {
+            hasApiKey = Object.keys(authProfiles as Record<string, unknown>).length > 0;
           }
 
           // Check for local/custom providers (Ollama, LM Studio, vLLM, etc.)
@@ -288,13 +295,21 @@ export async function GET() {
       }
     }
 
-    if (authExists) {
+    // Tier 3: per-agent auth-profiles.json (merge, not overwrite)
+    if (!hasApiKey && authExists) {
       try {
         const auth = await readJsonSafe<{ profiles?: Record<string, unknown> }>(authPath);
         hasApiKey = Boolean(auth?.profiles && Object.keys(auth.profiles).length > 0);
       } catch {
         // auth unreadable
       }
+    }
+
+    // Tier 4: process.env (shell exports, Docker env, CI)
+    if (!hasApiKey) {
+      hasApiKey = Object.values(PROVIDER_ENV_KEYS).some(
+        (key) => typeof process.env[key] === "string" && process.env[key]!.trim().length > 0,
+      );
     }
 
     // Detect Ollama running locally (no API key needed)
@@ -308,9 +323,11 @@ export async function GET() {
       // Ollama not running
     }
 
+    const hasCredentials = hasApiKey || hasLocalProvider || hasOllama;
+
     return NextResponse.json({
       installed,
-      configured: hasApiKey || hasLocalProvider || hasOllama,
+      configured: hasCredentials && hasModel,
       configExists,
       hasModel,
       hasApiKey,
