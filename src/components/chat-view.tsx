@@ -1058,7 +1058,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   }, [fetchBootstrap, isVisible, warmingUp]);
 
   useEffect(() => {
-    void fetchSessions();
+    if (isVisible) void fetchSessions();
     const id = setInterval(() => {
       if (isVisible && document.visibilityState === "visible") void fetchSessions();
     }, 5000);
