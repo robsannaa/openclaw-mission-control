@@ -498,7 +498,7 @@ function ChatPanel({
       {/* ── Messages area ───────────────────────── */}
       <div className="flex-1 overflow-y-auto">
         {loadingHistory && isSelected ? (
-          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             Loading history...
           </div>
         ) : messages.length === 0 ? (
