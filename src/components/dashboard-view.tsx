@@ -683,7 +683,7 @@ export function DashboardView() {
 
   const fetchLive = useCallback(async () => {
     try {
-      const res = await fetch("/api/live", { cache: "no-store" });
+      const res = await fetch("/api/live", { cache: "no-store", signal: AbortSignal.timeout(10000) });
       const data = await res.json();
       setLive(data);
       setLastRefresh(Date.now());

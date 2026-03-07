@@ -42,6 +42,8 @@ let restartTimer: ReturnType<typeof setTimeout> | null = null;
 let fastPollCount = 0;
 let liteInFlight = false;
 let fullInFlight = false;
+let offlineConsecutiveFailures = 0;
+let tabHidden = false;
 
 function emit() {
   listeners.forEach((listener) => listener());
@@ -54,7 +56,7 @@ function setSnapshot(next: Partial<Snapshot>) {
 
 /** Lightweight poll via /api/status — 3s max, used for normal ticks. */
 async function pollLite() {
-  if (liteInFlight || typeof window === "undefined") return;
+  if (liteInFlight || typeof window === "undefined" || tabHidden) return;
   liteInFlight = true;
   try {
     const res = await fetch("/api/status", {
@@ -74,6 +76,8 @@ async function pollLite() {
     });
     if (nextStatus === "offline" || nextStatus === "degraded") {
       switchToOfflinePolling();
+    } else {
+      offlineConsecutiveFailures = 0;
     }
   } catch {
     setSnapshot({ status: "offline", health: null, latencyMs: null });
@@ -85,7 +89,7 @@ async function pollLite() {
 
 /** Full poll via /api/gateway — used for fast/recovery ticks and initial load. */
 async function poll() {
-  if (fullInFlight || typeof window === "undefined") return;
+  if (fullInFlight || typeof window === "undefined" || tabHidden) return;
   fullInFlight = true;
   try {
     const res = await fetch("/api/gateway", {
@@ -106,17 +110,23 @@ async function poll() {
     });
 
     if (fastPollCount > 0 && nextStatus === "online") {
+      // Restart recovery complete
       fastPollCount = 0;
+      offlineConsecutiveFailures = 0;
       switchToNormalPolling();
       setSnapshot({ restarting: false });
+    } else if (fastPollCount > 0) {
+      // During restart: stay in fast-poll mode even if degraded/offline.
+      // Don't downgrade to offline polling — the gateway is still coming up.
     } else if (nextStatus === "offline" || nextStatus === "degraded") {
       switchToOfflinePolling();
-    } else if (fastPollCount === 0) {
+    } else {
+      offlineConsecutiveFailures = 0;
       switchToNormalPolling();
     }
   } catch {
     setSnapshot({ status: "offline", health: null, latencyMs: null });
-    switchToOfflinePolling();
+    if (fastPollCount === 0) switchToOfflinePolling();
   } finally {
     fullInFlight = false;
   }
@@ -135,14 +145,16 @@ function switchToNormalPolling() {
   }, 12000);
 }
 
-/** Poll every 5s when offline — detect recovery faster. */
+/** Poll when offline with exponential backoff: 5s, 10s, 20s, capped at 30s. */
 function switchToOfflinePolling() {
   // Don't downgrade from fast polling (restart recovery).
   if (fastPollCount > 0) return;
   clearPollTimer();
+  offlineConsecutiveFailures += 1;
+  const delay = Math.min(5000 * Math.pow(2, Math.min(offlineConsecutiveFailures - 1, 3)), 30000);
   pollTimer = setInterval(() => {
     void poll();
-  }, 5000);
+  }, delay);
 }
 
 function switchToFastPolling() {
@@ -172,9 +184,22 @@ function handleRestartingSignal() {
   }, 5000);
 }
 
+function handleVisibilityChange() {
+  const hidden = document.visibilityState === "hidden";
+  if (tabHidden === hidden) return;
+  tabHidden = hidden;
+  if (!hidden && subscribers > 0) {
+    // Tab became visible — immediately refresh and resume polling.
+    void pollLite();
+    if (!pollTimer) switchToNormalPolling();
+  }
+}
+
 async function start() {
   if (typeof window === "undefined") return;
+  tabHidden = document.visibilityState === "hidden";
   window.addEventListener(RESTART_EVENT, handleRestartingSignal);
+  document.addEventListener("visibilitychange", handleVisibilityChange);
   // Fast preflight via /api/status (3s max) then full health data (sequenced to avoid race)
   await pollLite();
   await poll();
@@ -184,6 +209,7 @@ async function start() {
 function stop() {
   if (typeof window !== "undefined") {
     window.removeEventListener(RESTART_EVENT, handleRestartingSignal);
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
   }
   clearPollTimer();
   if (restartTimer) {
@@ -191,8 +217,10 @@ function stop() {
     restartTimer = null;
   }
   fastPollCount = 0;
+  offlineConsecutiveFailures = 0;
   liteInFlight = false;
   fullInFlight = false;
+  tabHidden = false;
 }
 
 export function notifyGatewayRestarting() {

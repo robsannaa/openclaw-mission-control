@@ -64,14 +64,14 @@ async function checkGatewayHealth(
     const res = await fetch(gatewayUrl, {
       signal: AbortSignal.timeout(4000),
     });
-    if (res.ok) {
-      const data = await res.json().catch(() => ({}));
-      return {
-        running: true,
-        version: typeof data.version === "string" ? data.version : undefined,
-      };
+    if (!res.ok) {
+      return { running: false };
     }
-    return { running: true };
+    const data = await res.json().catch(() => ({}));
+    return {
+      running: true,
+      version: typeof data.version === "string" ? data.version : undefined,
+    };
   } catch {
     return { running: false };
   }

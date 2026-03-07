@@ -147,7 +147,7 @@ export function LogsView() {
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (sourceFilter) params.set("source", sourceFilter);
       if (levelFilter) params.set("level", levelFilter);
-      const res = await fetch(`/api/logs?${params}`);
+      const res = await fetch(`/api/logs?${params}`, { signal: AbortSignal.timeout(10000) });
       const data = await res.json();
       setEntries(data.entries || []);
       setSources(data.sources || []);

@@ -72,8 +72,8 @@ const navItems: NavItem[] = [
   { section: "sessions", label: "Sessions", icon: MessageSquare, href: "/sessions" },
   // ── Work ──
   { group: "Work", section: "tasks", label: "Tasks", icon: ListChecks, href: "/tasks" },
-  { section: "calendar", label: "Calendar", icon: Calendar, href: "/calendar" },
-  { section: "integrations", label: "Integrations", icon: Puzzle, href: "/integrations" },
+  ...(!isAgentbayHosting ? [{ section: "calendar", label: "Calendar", icon: Calendar, href: "/calendar" } as NavItem] : []),
+  ...(!isAgentbayHosting ? [{ section: "integrations", label: "Integrations", icon: Puzzle, href: "/integrations" } as NavItem] : []),
   { section: "cron", label: "Cron Jobs", icon: Clock, href: "/cron" },
   { section: "cron", label: "Heartbeat", icon: Heart, href: "/heartbeat", tab: "heartbeat", isSubItem: true },
   { section: "skills", label: "Skills", icon: Wrench, href: "/skills" },
@@ -89,8 +89,8 @@ const navItems: NavItem[] = [
   { section: "hooks", label: "Hooks", icon: Webhook, href: "/hooks" },
   { section: "settings", label: "Preferences", icon: Settings2, href: "/settings" },
   // ── System ──
-  { group: "System", section: "doctor", label: "Doctor", icon: Stethoscope, href: "/doctor" },
-  { section: "terminal", label: "Terminal", icon: SquareTerminal, href: "/terminal" },
+  ...(!isAgentbayHosting ? [{ section: "doctor", label: "Doctor", icon: Stethoscope, href: "/doctor", group: "System" } as NavItem] : []),
+  { group: isAgentbayHosting ? "System" : undefined, section: "terminal", label: "Terminal", icon: SquareTerminal, href: "/terminal" },
   { section: "logs", label: "Logs", icon: Terminal, href: "/logs" },
   { section: "browser", label: "Browser Relay", icon: Globe, href: "/browser" },
   { section: "audio", label: "Audio & Voice", icon: Volume2, href: "/audio" },

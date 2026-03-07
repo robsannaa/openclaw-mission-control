@@ -4095,7 +4095,7 @@ export function AgentsView() {
 
   const fetchAgents = useCallback(async () => {
     try {
-      const res = await fetch("/api/agents", { cache: "no-store" });
+      const res = await fetch("/api/agents", { cache: "no-store", signal: AbortSignal.timeout(10000) });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);

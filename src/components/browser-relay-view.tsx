@@ -278,7 +278,7 @@ export function BrowserRelayView({ isHosted = false }: { isHosted?: boolean }) {
       setError(null);
       try {
         const qs = profile ? `?profile=${encodeURIComponent(profile)}` : "";
-        const res = await fetch(`/api/browser/relay${qs}`, { cache: "no-store" });
+        const res = await fetch(`/api/browser/relay${qs}`, { cache: "no-store", signal: AbortSignal.timeout(10000) });
         const data = (await res.json()) as RelayGetResponse;
         if (!res.ok || !data.ok || !data.snapshot) {
           throw new Error(data.error || `HTTP ${res.status}`);
