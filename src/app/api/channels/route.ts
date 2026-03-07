@@ -128,6 +128,15 @@ async function buildChannelStatuses(): Promise<ChannelStatus[]> {
     const error = accountRows.find((r) => typeof r.lastError === "string" && r.lastError.trim())?.lastError as string | undefined;
     const accounts = accountRows.map((r) => toStr(r.accountId) || "default");
 
+    const statuses = accountRows.map((r) => ({
+      channel: ch.id,
+      account: toStr(r.accountId) || "default",
+      status: r.running === true ? "running" : "idle",
+      connected: r.running === true,
+      linked: r.linked === true,
+      error: toStr(r.lastError),
+    }));
+
     return {
       ...ch,
       enabled,
@@ -137,6 +146,13 @@ async function buildChannelStatuses(): Promise<ChannelStatus[]> {
       dmPolicy: toStr(conf?.dmPolicy),
       groupPolicy: toStr(conf?.groupPolicy),
       accounts: accounts.length > 0 ? accounts : configured ? ["default"] : [],
+      // ChannelInfo-compatible fields for ChannelBindingPicker
+      channel: ch.id,
+      setupType: ch.setup as "qr" | "token",
+      setupCommand: "",
+      setupHint: ch.hint,
+      configHint: "",
+      statuses,
     };
   });
 }
