@@ -265,6 +265,9 @@ function ChatPanel({
   modelsLoaded,
   isPostOnboarding,
   onClearPostOnboarding,
+  overrideSessionKey,
+  overrideHistory,
+  loadingHistory,
 }: {
   agentId: string;
   agentName: string;
@@ -277,6 +280,9 @@ function ChatPanel({
   modelsLoaded: boolean;
   isPostOnboarding: boolean;
   onClearPostOnboarding: () => void;
+  overrideSessionKey?: string | null;
+  overrideHistory?: Array<{ role: string; text: string }> | null;
+  loadingHistory?: boolean;
 }) {
   const timeFormat = useSyncExternalStore(
     subscribeTimeFormatPreference,
@@ -294,6 +300,24 @@ function ChatPanel({
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevMsgCountRef = useRef(0);
+
+  // When parent selects a different session, switch to it
+  useEffect(() => {
+    if (!overrideSessionKey) return;
+    setChatSessionKey(overrideSessionKey);
+    setMessages([]);
+  }, [overrideSessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When parent loads history for the selected session, populate messages
+  useEffect(() => {
+    if (!overrideHistory) return;
+    const mapped = overrideHistory.map((entry, i) => ({
+      id: `history-${i}`,
+      role: entry.role as "user" | "assistant",
+      parts: [{ type: "text" as const, text: entry.text }],
+    }));
+    setMessages(mapped);
+  }, [overrideHistory]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const addFiles = useCallback((files: FileList | File[]) => {
     const list = Array.isArray(files) ? files : Array.from(files);
@@ -473,7 +497,11 @@ function ChatPanel({
     >
       {/* ── Messages area ───────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        {messages.length === 0 ? (
+        {loadingHistory && isSelected ? (
+          <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">
+            Loading history...
+          </div>
+        ) : messages.length === 0 ? (
           noApiKeys ? (
             /* ── No models — redirect to /models ── */
             <div className="flex h-full items-center justify-center px-4 md:px-6">
@@ -1432,6 +1460,13 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
               modelsLoaded={modelsLoaded}
               isPostOnboarding={isPostOnboarding}
               onClearPostOnboarding={clearPostOnboarding}
+              overrideSessionKey={selectedSessionKeys.get(agentId) ?? null}
+              overrideHistory={
+                selectedSessionKeys.has(agentId)
+                  ? (sessionHistories.get(selectedSessionKeys.get(agentId)!) ?? null)
+                  : null
+              }
+              loadingHistory={loadingHistory && agentId === selectedAgent}
             />
           );
         })
