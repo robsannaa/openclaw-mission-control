@@ -32,20 +32,16 @@ function collectOutputText(node: unknown, out: string[]) {
   if (typeof record.output_text === "string" && record.output_text.trim()) {
     out.push(record.output_text);
   }
+  if (typeof record.text === "string" && record.text.trim()) {
+    out.push(record.text);
+  }
+  if (typeof record.content === "string" && record.content.trim()) {
+    out.push(record.content);
+  }
 
-  // For typed records, only extract text/content from known output types
-  // to avoid duplicating content that will also be found via recursive traversal
   if (record.type === "output_text" || record.type === "text" || record.type === "message") {
     if (typeof record.text === "string" && record.text.trim()) out.push(record.text);
     if (typeof record.content === "string" && record.content.trim()) out.push(record.content);
-  } else {
-    // For untyped records, extract text/content directly
-    if (typeof record.text === "string" && record.text.trim()) {
-      out.push(record.text);
-    }
-    if (typeof record.content === "string" && record.content.trim()) {
-      out.push(record.content);
-    }
   }
 
   if ("output" in record) collectOutputText(record.output, out);
@@ -102,7 +98,7 @@ export async function runOpenResponsesText(
       stream: false,
     };
     if (request.instructions) body.instructions = request.instructions;
-    if (request.requestedModel) body.model = request.requestedModel;
+    if (request.requestedModel) body.model = `openclaw:${request.agentId}`;
 
     const response = await fetch(`${gwUrl}/v1/responses`, {
       method: "POST",

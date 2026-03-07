@@ -20,13 +20,6 @@ const MODE_CONFIG: Record<RunMode, { args: string[]; timeout: number }> = {
 // Concurrency guard
 let activeChild: ChildProcess | null = null;
 
-// Modes that mutate system state — blocked when OPENCLAW_READ_ONLY is set.
-const MUTATING_MODES: ReadonlySet<string> = new Set([
-  "repair",
-  "repair-force",
-  "generate-token",
-]);
-
 export async function POST(request: NextRequest) {
   const body = await request.json();
   const mode = body.mode as string;
@@ -35,14 +28,6 @@ export async function POST(request: NextRequest) {
     return new Response(
       JSON.stringify({ error: `Invalid mode. Expected one of: ${Object.keys(MODE_CONFIG).join(", ")}` }),
       { status: 400, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  // Respect read-only mode for mutating operations (issue #22).
-  if (MUTATING_MODES.has(mode) && process.env.OPENCLAW_READ_ONLY === "true") {
-    return new Response(
-      JSON.stringify({ error: "This operation is disabled in read-only mode (OPENCLAW_READ_ONLY=true)." }),
-      { status: 403, headers: { "Content-Type": "application/json" } }
     );
   }
 

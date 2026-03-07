@@ -36,7 +36,12 @@ type WizardStep = "model" | "channel" | "finishing";
 type ProviderId =
   | "anthropic"
   | "openai"
-  | "openrouter";
+  | "google"
+  | "openrouter"
+  | "groq"
+  | "xai"
+  | "mistral"
+  | "custom";
 
 type ChannelId = "telegram" | "discord" | "whatsapp";
 
@@ -53,6 +58,11 @@ type ProviderDef = {
   placeholder: string;
   helpUrl: string;
   helpSteps: string[];
+  /** Custom provider: API key is optional */
+  keyOptional?: boolean;
+  /** Custom provider: needs a base URL input */
+  needsBaseUrl?: boolean;
+  baseUrlPlaceholder?: string;
 };
 
 type ChannelDef = {
@@ -82,7 +92,7 @@ const PROVIDERS: ProviderDef[] = [
     id: "anthropic",
     label: "Anthropic",
     icon: "🟣",
-    defaultModel: "anthropic/claude-opus-4-6-20260219",
+    defaultModel: "anthropic/claude-sonnet-4-20250514",
     placeholder: "sk-ant-...",
     helpUrl: "https://console.anthropic.com/settings/keys",
     helpSteps: [
@@ -95,7 +105,7 @@ const PROVIDERS: ProviderDef[] = [
     id: "openai",
     label: "OpenAI",
     icon: "🟢",
-    defaultModel: "openai/gpt-5.3",
+    defaultModel: "openai/gpt-4o",
     placeholder: "sk-...",
     helpUrl: "https://platform.openai.com/api-keys",
     helpSteps: [
@@ -105,10 +115,23 @@ const PROVIDERS: ProviderDef[] = [
     ],
   },
   {
+    id: "google",
+    label: "Google",
+    icon: "🔵",
+    defaultModel: "google/gemini-2.0-flash",
+    placeholder: "AIza...",
+    helpUrl: "https://aistudio.google.com/app/apikey",
+    helpSteps: [
+      "Open Google AI Studio.",
+      "Choose Get API key.",
+      "Create a key and paste it here.",
+    ],
+  },
+  {
     id: "openrouter",
     label: "OpenRouter",
     icon: "🟠",
-    defaultModel: "openrouter/anthropic/claude-opus-4.6",
+    defaultModel: "openrouter/anthropic/claude-sonnet-4",
     placeholder: "sk-or-...",
     helpUrl: "https://openrouter.ai/keys",
     helpSteps: [
@@ -116,6 +139,61 @@ const PROVIDERS: ProviderDef[] = [
       "Create a key in the Keys section.",
       "Paste it here to fetch supported models.",
     ],
+  },
+  {
+    id: "groq",
+    label: "Groq",
+    icon: "⚡",
+    defaultModel: "groq/llama-3.3-70b-versatile",
+    placeholder: "gsk_...",
+    helpUrl: "https://console.groq.com/keys",
+    helpSteps: [
+      "Open the Groq Console.",
+      "Go to API Keys.",
+      "Create a key and paste it here.",
+    ],
+  },
+  {
+    id: "xai",
+    label: "xAI",
+    icon: "𝕏",
+    defaultModel: "xai/grok-3-mini",
+    placeholder: "xai-...",
+    helpUrl: "https://console.x.ai/",
+    helpSteps: [
+      "Open the xAI Console.",
+      "Find the API key section.",
+      "Create a key and paste it here.",
+    ],
+  },
+  {
+    id: "mistral",
+    label: "Mistral",
+    icon: "🌊",
+    defaultModel: "mistral/mistral-large-latest",
+    placeholder: "...",
+    helpUrl: "https://console.mistral.ai/api-keys/",
+    helpSteps: [
+      "Open the Mistral Console.",
+      "Go to API Keys.",
+      "Create a key and paste it here.",
+    ],
+  },
+  {
+    id: "custom",
+    label: "Custom / OpenAI-compatible",
+    icon: "🔗",
+    defaultModel: "",
+    placeholder: "Bearer token (optional for local endpoints)",
+    helpUrl: "",
+    helpSteps: [
+      "Enter your endpoint's base URL (e.g. http://localhost:1234/v1).",
+      "Add an API key if your endpoint requires authentication.",
+      "Models will be auto-detected from your server.",
+    ],
+    keyOptional: true,
+    needsBaseUrl: true,
+    baseUrlPlaceholder: "http://localhost:1234/v1",
   },
 ];
 
@@ -153,41 +231,54 @@ const CHANNELS: ChannelDef[] = [
   },
 ];
 
-const STEP_IDS: WizardStep[] = ["model", "channel", "finishing"];
+const STEP_IDS: Array<Exclude<WizardStep, "finishing">> = ["model", "channel"];
 
 const WELL_KNOWN_MODELS: Record<ProviderId, ModelItem[]> = {
   anthropic: [
-    { id: "anthropic/claude-opus-4-6-20260219", name: "Claude Opus 4.6" },
-    { id: "anthropic/claude-sonnet-4-6-20260219", name: "Claude Sonnet 4.6" },
     { id: "anthropic/claude-sonnet-4-20250514", name: "Claude Sonnet 4" },
+    { id: "anthropic/claude-opus-4-20250514", name: "Claude Opus 4" },
     { id: "anthropic/claude-haiku-4-5-20251001", name: "Claude Haiku 4.5" },
   ],
   openai: [
-    { id: "openai/gpt-5.3", name: "GPT-5.3" },
     { id: "openai/gpt-4o", name: "GPT-4o" },
     { id: "openai/gpt-4o-mini", name: "GPT-4o Mini" },
     { id: "openai/o3-mini", name: "o3-mini" },
   ],
-  openrouter: [
-    { id: "openrouter/anthropic/claude-opus-4.6", name: "Claude Opus 4.6" },
-    { id: "openrouter/anthropic/claude-sonnet-4.6", name: "Claude Sonnet 4.6" },
-    { id: "openrouter/openai/gpt-5.3", name: "GPT-5.3" },
-    { id: "openrouter/openai/gpt-4o", name: "GPT-4o" },
-    { id: "openrouter/moonshot/kimi-2.5", name: "Kimi 2.5" },
-    { id: "openrouter/minimax/minimax-m2.5", name: "MiniMax M2.5" },
-    { id: "openrouter/google/gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+  google: [
+    { id: "google/gemini-2.5-pro-preview-05-06", name: "Gemini 2.5 Pro" },
+    { id: "google/gemini-2.0-flash", name: "Gemini 2.0 Flash" },
+    { id: "google/gemini-2.0-flash-lite", name: "Gemini 2.0 Flash Lite" },
   ],
+  openrouter: [
+    { id: "openrouter/anthropic/claude-sonnet-4", name: "Claude Sonnet 4" },
+    { id: "openrouter/openai/gpt-4o", name: "GPT-4o" },
+    { id: "openrouter/google/gemini-2.0-flash-001", name: "Gemini 2.0 Flash" },
+  ],
+  groq: [
+    { id: "groq/llama-3.3-70b-versatile", name: "Llama 3.3 70B Versatile" },
+    { id: "groq/llama-3.1-8b-instant", name: "Llama 3.1 8B Instant" },
+    { id: "groq/mixtral-8x7b-32768", name: "Mixtral 8x7B" },
+  ],
+  xai: [
+    { id: "xai/grok-3-mini", name: "Grok 3 Mini" },
+    { id: "xai/grok-3", name: "Grok 3" },
+    { id: "xai/grok-2-1212", name: "Grok 2" },
+  ],
+  mistral: [
+    { id: "mistral/mistral-large-latest", name: "Mistral Large" },
+    { id: "mistral/mistral-small-latest", name: "Mistral Small" },
+    { id: "mistral/codestral-latest", name: "Codestral" },
+  ],
+  custom: [],
 };
 
 const RECOMMENDED_MODEL_MATCHERS = [
-  "anthropic/claude-opus-4-6",
-  "anthropic/claude-sonnet-4-6",
+  "anthropic/claude-sonnet-4-5",
   "anthropic/claude-sonnet-4",
-  "openai/gpt-5.3",
   "openai/gpt-4o",
-  "openrouter/anthropic/claude-opus-4.6",
-  "openrouter/openai/gpt-5.3",
-  "openrouter/moonshot/kimi-2.5",
+  "google/gemini-2.5-pro",
+  "google/gemini-2.0-flash",
+  "groq/llama-3.3-70b-versatile",
 ];
 
 function isRecommendedModel(modelId: string) {
@@ -261,9 +352,6 @@ function OnboardingModelPicker({
           <TypingDots size="sm" className="text-muted-foreground" />
           <span>Loading models from {provider.label}...</span>
         </div>
-        <p className="mt-1 text-xs text-muted-foreground/50">
-          You can also pick from the default list below while models load.
-        </p>
       </div>
     );
   }
@@ -293,7 +381,7 @@ function OnboardingModelPicker({
       </button>
 
       {open && (
-        <div className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
+        <div className="absolute left-0 right-0 top-full z-50 mt-1 max-h-72 overflow-hidden rounded-xl border border-border bg-card shadow-lg">
           <div className="border-b border-border px-3 py-2">
             <div className="flex items-center gap-2">
               <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/40" />
@@ -307,7 +395,7 @@ function OnboardingModelPicker({
               />
             </div>
           </div>
-          <div className="max-h-48 overflow-y-auto sm:max-h-56">
+          <div className="max-h-56 overflow-y-auto">
             {filteredModels.length === 0 ? (
               <div className="px-3 py-4 text-center text-xs text-muted-foreground">
                 No models match your search.
@@ -357,6 +445,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [model, setModel] = useState(PROVIDERS[0].defaultModel);
+  const [customBaseUrl, setCustomBaseUrl] = useState("");
   const [testingKey, setTestingKey] = useState(false);
   const [keyValid, setKeyValid] = useState<boolean | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -379,10 +468,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     "idle" | "validating" | "saving" | "restarting" | "ready"
   >("idle");
   const [botName, setBotName] = useState("");
-  const [botUsername, setBotUsername] = useState("");
   const [pairingTimeout, setPairingTimeout] = useState(false);
-  const [pairingError, setPairingError] = useState<string | null>(null);
-  const [healthProgress, setHealthProgress] = useState(0);
 
   const [launchError, setLaunchError] = useState<string | null>(null);
   const [showSkipConfirm, setShowSkipConfirm] = useState(false);
@@ -392,7 +478,6 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
   const modelFetchSeqRef = useRef(0);
   const pairingPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pairingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const connectAbortRef = useRef<AbortController | null>(null);
 
   const currentProvider = useMemo(
     () => PROVIDERS.find((entry) => entry.id === provider) || PROVIDERS[0],
@@ -426,19 +511,15 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     };
   }, []);
 
-  const [modelFetchError, setModelFetchError] = useState(false);
-
   const fetchLiveModels = useCallback(async (nextProvider: ProviderId, token: string) => {
     const seq = ++modelFetchSeqRef.current;
     setLoadingModels(true);
-    setModelFetchError(false);
 
     try {
       const res = await fetch("/api/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "list-models", provider: nextProvider, token }),
-        signal: AbortSignal.timeout(20000),
       });
       const data = await res.json();
       if (seq !== modelFetchSeqRef.current) return;
@@ -450,7 +531,6 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     } catch {
       if (seq === modelFetchSeqRef.current) {
         setLiveModels([]);
-        setModelFetchError(true);
       }
     } finally {
       if (seq === modelFetchSeqRef.current) {
@@ -458,6 +538,33 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
       }
     }
   }, []);
+
+  const fetchCustomModels = useCallback(async (baseUrl: string, token: string) => {
+    const seq = ++modelFetchSeqRef.current;
+    setLoadingModels(true);
+    try {
+      const res = await fetch("/api/onboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "list-models", provider: "custom", baseUrl, token }),
+      });
+      const data = await res.json();
+      if (seq !== modelFetchSeqRef.current) return;
+      if (data.ok && Array.isArray(data.models)) {
+        setLiveModels(data.models as ModelItem[]);
+        // Auto-select first model if none selected
+        if (data.models.length > 0 && !model) {
+          setModel((data.models[0] as ModelItem).id);
+        }
+      } else {
+        setLiveModels([]);
+      }
+    } catch {
+      if (seq === modelFetchSeqRef.current) setLiveModels([]);
+    } finally {
+      if (seq === modelFetchSeqRef.current) setLoadingModels(false);
+    }
+  }, [model]);
 
   useEffect(() => {
     if (validateTimerRef.current) clearTimeout(validateTimerRef.current);
@@ -470,7 +577,62 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     setLiveModels([]);
     setLoadingModels(false);
 
-    // Validate API key
+    // Custom provider: validate by probing the base URL
+    if (provider === "custom") {
+      if (!customBaseUrl.trim() || customBaseUrl.trim().length < 8) return;
+
+      validateTimerRef.current = setTimeout(async () => {
+        setTestingKey(true);
+        try {
+          const res = await fetch("/api/onboard", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "test-key",
+              provider: "custom",
+              baseUrl: customBaseUrl.trim(),
+              token: apiKey.trim() || "",
+            }),
+          });
+          const data = await res.json();
+          if (seq !== validationSeqRef.current) return;
+
+          if (data.ok) {
+            setKeyValid(true);
+            setKeyError(null);
+            // Models may already be in the response
+            if (Array.isArray(data.models) && data.models.length > 0) {
+              const models = data.models.map((m: { id: string; name?: string }) => ({
+                id: m.id.includes("/") ? m.id : `custom/${m.id}`,
+                name: m.name || m.id,
+              }));
+              setLiveModels(models);
+              if (models.length > 0 && !model) {
+                setModel(models[0].id);
+              }
+              setLoadingModels(false);
+            } else {
+              await fetchCustomModels(customBaseUrl.trim(), apiKey.trim());
+            }
+          } else {
+            setKeyValid(false);
+            setKeyError(data.error || "Could not connect to endpoint.");
+          }
+        } catch (error) {
+          if (seq !== validationSeqRef.current) return;
+          setKeyValid(false);
+          setKeyError(error instanceof Error ? error.message : "Connection failed.");
+        } finally {
+          if (seq === validationSeqRef.current) setTestingKey(false);
+        }
+      }, 800);
+
+      return () => {
+        if (validateTimerRef.current) clearTimeout(validateTimerRef.current);
+      };
+    }
+
+    // Standard providers: validate API key
     if (apiKey.trim().length < 8) return;
 
     validateTimerRef.current = setTimeout(async () => {
@@ -506,7 +668,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     return () => {
       if (validateTimerRef.current) clearTimeout(validateTimerRef.current);
     };
-  }, [apiKey, fetchLiveModels, model, provider]);
+  }, [apiKey, customBaseUrl, fetchCustomModels, fetchLiveModels, model, provider]);
 
   useEffect(() => {
     if (!connectedChannel) {
@@ -515,11 +677,9 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
       return;
     }
 
-    const controller = new AbortController();
-
     const poll = async () => {
       try {
-        const res = await fetch("/api/pairing", { cache: "no-store", signal: controller.signal });
+        const res = await fetch("/api/pairing", { cache: "no-store" });
         if (!res.ok) return;
         const data = await res.json();
         const nextRequests = Array.isArray(data.dm)
@@ -527,28 +687,18 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
           : [];
         setPairingRequests(nextRequests);
       } catch {
-        // Silent polling failure (includes abort).
+        // Silent polling failure.
       }
     };
 
     poll();
-    pairingPollRef.current = setInterval(() => {
-      if (document.visibilityState === "visible") void poll();
-    }, 4000);
+    pairingPollRef.current = setInterval(poll, 4000);
 
     return () => {
-      controller.abort();
       if (pairingPollRef.current) clearInterval(pairingPollRef.current);
       pairingPollRef.current = null;
     };
   }, [connectedChannel]);
-
-  // Cleanup pairing timeout timer on unmount (Bug 6)
-  useEffect(() => {
-    return () => {
-      if (pairingTimeoutRef.current) clearTimeout(pairingTimeoutRef.current);
-    };
-  }, []);
 
   const handleProviderChange = useCallback((nextProvider: ProviderId) => {
     const nextDef = PROVIDERS.find((entry) => entry.id === nextProvider) || PROVIDERS[0];
@@ -562,6 +712,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     setKeyError(null);
     setLiveModels([]);
     setLoadingModels(false);
+    setCustomBaseUrl("");
   }, []);
 
   const saveCredentials = useCallback(async () => {
@@ -571,6 +722,9 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
       apiKey: apiKey.trim(),
       model,
     };
+    if (provider === "custom" && customBaseUrl.trim()) {
+      payload.baseUrl = customBaseUrl.trim();
+    }
     const res = await fetch("/api/onboard", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -580,7 +734,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     if (!res.ok || data.ok === false) {
       throw new Error(data.error || "Could not save your API credentials.");
     }
-  }, [apiKey, model, provider]);
+  }, [apiKey, customBaseUrl, model, provider]);
 
   const continueToChannelStep = useCallback(async () => {
     try {
@@ -592,43 +746,20 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     }
   }, [saveCredentials]);
 
-  const waitForGatewayHealth = useCallback(async (channel?: string, maxAttempts = 15): Promise<boolean> => {
-    setHealthProgress(0);
-    const url = channel ? `/api/channels/health?channel=${encodeURIComponent(channel)}` : "/api/channels/health";
+  const waitForGatewayHealth = useCallback(async (maxAttempts = 15): Promise<boolean> => {
     for (let i = 0; i < maxAttempts; i++) {
-      setHealthProgress(Math.round(((i + 1) / maxAttempts) * 100));
       try {
-        const res = await fetch(url, { cache: "no-store" });
-        if (res.ok) {
-          const data = await res.json();
-          // If checking a specific channel, wait until it's ready
-          if (channel && data.channelReady === false) {
-            // Gateway is up but channel not ready yet — keep polling
-          } else {
-            setHealthProgress(100);
-            return true;
-          }
-        }
+        const res = await fetch("/api/channels/health", { cache: "no-store" });
+        if (res.ok) return true;
       } catch { /* retry */ }
       await new Promise((r) => setTimeout(r, 2000));
     }
     return false;
   }, []);
 
-  const cancelChannelConnect = useCallback(() => {
-    connectAbortRef.current?.abort();
-    connectAbortRef.current = null;
-    setChannelBusy(false);
-    setConnectPhase("idle");
-    setChannelResult(null);
-  }, []);
-
   const handleConnectChannel = useCallback(async () => {
     if (!currentChannel || currentChannel.setupType !== "token" || !channelToken.trim()) return;
     if (currentChannel.requiresAppToken && !channelAppToken.trim()) return;
-
-    const abort = new AbortController();
-    connectAbortRef.current = abort;
 
     setChannelBusy(true);
     setChannelResult(null);
@@ -643,16 +774,12 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ channel: currentChannel.id, token: channelToken.trim() }),
-        signal: abort.signal,
       });
       const valData = await valRes.json();
       if (valData.ok === false) {
         throw new Error(valData.error || "Token validation failed.");
       }
       if (valData.botName) setBotName(valData.botName);
-      if (valData.botUsername) setBotUsername(valData.botUsername);
-
-      if (abort.signal.aborted) return;
 
       // Phase 2: Save config
       setConnectPhase("saving");
@@ -665,21 +792,17 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
           token: channelToken.trim(),
           ...(currentChannel.requiresAppToken ? { appToken: channelAppToken.trim() } : {}),
         }),
-        signal: abort.signal,
       });
       const data = await res.json();
       if (!res.ok || data.ok === false) {
         throw new Error(data.error || `Could not connect ${currentChannel.label}.`);
       }
 
-      if (abort.signal.aborted) return;
-
-      // Phase 3: Wait for gateway restart and channel readiness
+      // Phase 3: Wait for gateway restart
       setConnectPhase("restarting");
-      const healthy = await waitForGatewayHealth(currentChannel.id);
-      if (abort.signal.aborted) return;
+      const healthy = await waitForGatewayHealth();
       if (!healthy) {
-        throw new Error("The gateway is taking longer than expected to restart. You can try again or check that the gateway is running.");
+        throw new Error("Gateway did not come back online. Check the logs.");
       }
 
       setConnectPhase("ready");
@@ -696,23 +819,18 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
         setPairingTimeout(true);
       }, 120000);
     } catch (error) {
-      if (abort.signal.aborted) return;
       setConnectPhase("idle");
       setChannelResult({
         type: "error",
         message: error instanceof Error ? error.message : `Could not connect ${currentChannel.label}.`,
       });
     } finally {
-      if (!abort.signal.aborted) setChannelBusy(false);
-      connectAbortRef.current = null;
+      setChannelBusy(false);
     }
   }, [channelAppToken, channelToken, currentChannel, waitForGatewayHealth]);
 
   const handleApprovePairing = useCallback(async (request: PairingRequest) => {
-    // Idempotency guard: skip if already approved or in-flight
-    if (approvedCodes.has(request.code) || approvingCode) return;
     setApprovingCode(request.code);
-    setPairingError(null);
     try {
       const res = await fetch("/api/pairing", {
         method: "POST",
@@ -728,12 +846,12 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
         next.add(request.code);
         return next;
       });
-    } catch (err) {
-      setPairingError(err instanceof Error ? err.message : "Could not approve. Check your connection and try again.");
+    } catch {
+      // Keep the card as-is if approval fails.
     } finally {
       setApprovingCode(null);
     }
-  }, [approvedCodes, approvingCode]);
+  }, []);
 
   const runQuickSetup = useCallback(async () => {
     setLaunchError(null);
@@ -745,6 +863,9 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
         apiKey: apiKey.trim(),
         model,
       };
+      if (provider === "custom" && customBaseUrl.trim()) {
+        payload.baseUrl = customBaseUrl.trim();
+      }
       const res = await fetch("/api/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -764,21 +885,36 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
     } catch (error) {
       setLaunchError(error instanceof Error ? error.message : "Setup failed.");
     }
-  }, [apiKey, model, onComplete, provider, router]);
+  }, [apiKey, customBaseUrl, model, onComplete, provider, router]);
 
   const finishSetup = useCallback(() => {
     setStep("finishing");
     void runQuickSetup();
   }, [runQuickSetup]);
 
-  const visibleStepIndex = step === "model" ? 0 : step === "channel" ? 1 : 2;
-  const continueDisabled = !apiKey.trim() || testingKey || keyValid !== true || status?.installed === false;
+  const handleAddAnotherChannel = useCallback(() => {
+    setConnectedChannel(null);
+    setSelectedChannel(null);
+    setChannelToken("");
+    setChannelResult(null);
+    setPairingRequests([]);
+    setApprovedCodes(new Set());
+    setConnectPhase("idle");
+    setBotName("");
+    setPairingTimeout(false);
+    if (pairingTimeoutRef.current) clearTimeout(pairingTimeoutRef.current);
+  }, []);
+
+  const visibleStepIndex = step === "model" ? 0 : step === "channel" ? 1 : 1;
+  const continueDisabled = provider === "custom"
+    ? (!customBaseUrl.trim() || testingKey || keyValid !== true || status?.installed === false)
+    : (!apiKey.trim() || testingKey || keyValid !== true || status?.installed === false);
   const onboardingBlocked = status?.installed === false;
   const approvalComplete = approvedCodes.size > 0;
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex flex-col items-center overflow-y-auto bg-background px-4 py-6 sm:justify-center sm:py-8">
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center overflow-hidden bg-background px-4">
         <div className="flex w-full max-w-2xl flex-col items-center">
           <div className="mb-6 text-center sm:mb-8">
             <h1 className="font-serif text-2xl font-bold tracking-tight text-foreground">
@@ -787,55 +923,41 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
             <p className="mt-1 text-sm text-muted-foreground">This only takes a minute.</p>
           </div>
 
-          <div className="mb-6 flex items-center justify-center gap-2 sm:mb-6">
-            {STEP_IDS.map((stepId, index) => {
-              const isCurrent = index === visibleStepIndex;
-              const isPast = index < visibleStepIndex;
-
-              if (isCurrent) {
-                return <span key={stepId} className="h-1.5 w-6 rounded-full bg-foreground transition-all duration-300" />;
-              }
-
-              if (isPast) {
-                // Don't allow navigating back during finishing step
-                if (step === "finishing") {
-                  return <span key={stepId} className="h-1.5 w-1.5 rounded-full bg-foreground/40 transition-all duration-300" />;
-                }
-                return (
-                  <button
-                    key={stepId}
-                    type="button"
-                    onClick={() => setStep(stepId)}
-                    className="h-1.5 w-1.5 cursor-pointer rounded-full bg-foreground/40 transition-all duration-300"
-                    aria-label={`Go back to ${stepId}`}
-                  />
-                );
-              }
-
-              return <span key={stepId} className="h-1.5 w-1.5 rounded-full bg-foreground/10 transition-all duration-300" />;
-            })}
-          </div>
           {step !== "finishing" && (
-            <p className="mb-4 text-center text-xs text-muted-foreground/40">
-              Step {visibleStepIndex + 1} of {STEP_IDS.length}
-            </p>
+            <div className="mb-6 flex items-center justify-center gap-2 sm:mb-6">
+              {STEP_IDS.map((stepId, index) => {
+                const isCurrent = index === visibleStepIndex;
+                const isPast = index < visibleStepIndex;
+
+                if (isCurrent) {
+                  return <span key={stepId} className="h-1.5 w-6 rounded-full bg-foreground transition-all duration-300" />;
+                }
+
+                if (isPast) {
+                  return (
+                    <button
+                      key={stepId}
+                      type="button"
+                      onClick={() => setStep(stepId)}
+                      className="h-1.5 w-1.5 cursor-pointer rounded-full bg-foreground/40 transition-all duration-300"
+                      aria-label={`Go back to ${stepId}`}
+                    />
+                  );
+                }
+
+                return <span key={stepId} className="h-1.5 w-1.5 rounded-full bg-foreground/10 transition-all duration-300" />;
+              })}
+            </div>
           )}
 
           {onboardingBlocked && (
-            <div className="mb-4 w-full rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs text-red-400 space-y-2">
-              <p>OpenClaw is not installed yet. Install it first, then refresh this page.</p>
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="rounded-full border border-red-500/30 px-3 py-1 text-xs text-red-300 transition-colors hover:bg-red-500/10"
-              >
-                Refresh and retry
-              </button>
+            <div className="mb-4 w-full rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-xs text-red-400">
+              OpenClaw is not installed yet. Install the OpenClaw binary first, then return to finish setup.
             </div>
           )}
 
           <div className="w-full rounded-2xl border border-border bg-card shadow-[0_20px_60px_rgba(0,0,0,0.06)]">
-            <div className="p-5 sm:p-7">
+            <div className="max-h-[72vh] overflow-y-auto p-6 sm:p-7">
               {step === "model" && (
                 <div className="space-y-6">
                   <div>
@@ -872,11 +994,11 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                     <p className="text-xs font-medium text-foreground/80">
                       How to get your {currentProvider.label} API key
                     </p>
-                    <ol className="list-decimal list-inside space-y-1 text-xs leading-relaxed text-muted-foreground">
+                    <div className="space-y-1 text-xs leading-relaxed text-muted-foreground">
                       {currentProvider.helpSteps.map((stepText, index) => (
-                        <li key={`${currentProvider.id}-help-${index}`}>{stepText}</li>
+                        <p key={`${currentProvider.id}-help-${index}`}>{stepText}</p>
                       ))}
-                    </ol>
+                    </div>
                     {currentProvider.helpUrl ? (
                       <a
                         href={currentProvider.helpUrl}
@@ -890,15 +1012,32 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                     ) : null}
                   </div>
 
+                  {currentProvider.needsBaseUrl && (
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground">Endpoint URL</label>
+                      <input
+                        type="url"
+                        value={customBaseUrl}
+                        onChange={(event) => setCustomBaseUrl(event.target.value)}
+                        placeholder={currentProvider.baseUrlPlaceholder || "http://localhost:1234/v1"}
+                        autoComplete="off"
+                        className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-muted-foreground/40 focus:border-primary/50"
+                      />
+                      <p className="text-xs text-muted-foreground/50">
+                        Works with NVIDIA NIM, vLLM, Ollama, LM Studio, or any OpenAI-compatible server.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <label className="text-xs font-medium text-muted-foreground">
-                        API Key
+                        API Key{currentProvider.keyOptional ? " (optional)" : ""}
                       </label>
                       <div className="group relative inline-flex items-center">
                         <ShieldCheck className="h-3 w-3 text-emerald-500/60" />
                         <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 -translate-x-1/2 rounded-lg bg-foreground px-3 py-1.5 text-xs text-background opacity-0 transition-opacity group-hover:opacity-100">
-                          Stored securely on this machine. Never sent to external servers.
+                          Encrypted and stored locally. Not even we can see it.
                         </div>
                       </div>
                     </div>
@@ -934,11 +1073,6 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                     {keyValid === false && keyError ? (
                       <p className="text-xs text-red-400">{keyError}</p>
                     ) : null}
-                    {apiKey.trim().length > 0 && apiKey.trim().length < 8 && !testingKey && keyValid === null ? (
-                      <p className="break-words text-xs text-muted-foreground/50">
-                        Keep typing — API keys are usually longer
-                      </p>
-                    ) : null}
                   </div>
 
                   <div className="space-y-2">
@@ -951,17 +1085,6 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                       liveModels={liveModels}
                       loading={loadingModels}
                     />
-                    {modelFetchError && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (keyValid && apiKey.trim()) void fetchLiveModels(provider, apiKey.trim());
-                        }}
-                        className="text-xs text-amber-400 transition-colors hover:text-amber-300"
-                      >
-                        Could not load models from provider — using defaults. Click to retry.
-                      </button>
-                    )}
                     <p className="text-xs text-muted-foreground/50">
                       You can change this later in the Models section.
                     </p>
@@ -979,7 +1102,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                           : "bg-primary text-primary-foreground hover:opacity-90",
                       )}
                     >
-                      Save &amp; Continue
+                      Continue
                       <ChevronRight className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -993,11 +1116,9 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                     <p className="mt-1 text-xs text-muted-foreground">
                       Connect a channel so your agent can chat. You can skip this for now.
                     </p>
-                    {status?.gatewayRunning === false && (
-                      <div className="mt-2 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
-                        The gateway is not running. Channel setup requires a running gateway — it will be started automatically when you finish setup, or you can start it manually first.
-                      </div>
-                    )}
+                    <p className="mt-1.5 text-xs text-muted-foreground/80">
+                      Telegram and Discord are built-in. If setup fails, ensure OpenClaw is up to date and the gateway is running; see the Channels docs for your channel.
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -1052,7 +1173,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                           />
                         </div>
                       )}
-                      <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center justify-between gap-3">
                         {currentChannel.docsUrl ? (
                           <a
                             href={currentChannel.docsUrl}
@@ -1086,26 +1207,30 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                             <span className="flex items-center gap-1.5">
                               <TypingDots size="sm" className="text-current" />
                               <span>
-                                {connectPhase === "validating" ? "Checking token..." :
-                                 connectPhase === "saving" ? "Saving config..." :
-                                 connectPhase === "restarting" ? `Starting gateway${healthProgress > 0 ? ` (${healthProgress}%)` : ""}...` :
+                                {connectPhase === "validating" ? "Validating..." :
+                                 connectPhase === "saving" ? "Saving..." :
+                                 connectPhase === "restarting" ? "Starting..." :
                                  "Connecting..."}
                               </span>
                             </span>
                           ) : "Connect"}
                         </button>
                       </div>
-                      {channelBusy && (
-                        <button
-                          type="button"
-                          onClick={cancelChannelConnect}
-                          className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                      {channelResult?.type === "success" ? (
+                        <p className="text-xs text-emerald-400">{channelResult.message}</p>
+                      ) : null}
+                      {channelResult?.type === "success" && connectedChannel === "telegram" && (
+                        <a
+                          href={`https://t.me/${channelResult.message.match(/@(\w+)/)?.[1] || ""}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
                         >
-                          Cancel
-                        </button>
+                          <ExternalLink className="h-3 w-3" /> Open in Telegram to test
+                        </a>
                       )}
                       {channelResult?.type === "error" ? (
-                        <p className="text-xs text-red-400">{channelResult.message}</p>
+                        <p className="text-xs text-red-400">Error: {channelResult.message}</p>
                       ) : null}
                     </div>
                   )}
@@ -1119,24 +1244,9 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                           setQrChannel("whatsapp");
                           setShowQrModal(true);
                         }}
-                        disabled={channelBusy}
-                        className={cn(
-                          "rounded-full px-5 py-2.5 text-sm font-medium transition-opacity",
-                          channelBusy
-                            ? "cursor-not-allowed bg-muted text-muted-foreground"
-                            : "bg-primary text-primary-foreground hover:opacity-90",
-                        )}
+                        className="rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
                       >
-                        {channelBusy ? (
-                          <span className="flex items-center gap-1.5">
-                            <TypingDots size="sm" className="text-current" />
-                            <span>
-                              {connectPhase === "saving" ? "Saving config..." :
-                               connectPhase === "restarting" ? `Starting gateway${healthProgress > 0 ? ` (${healthProgress}%)` : ""}...` :
-                               "Connecting..."}
-                            </span>
-                          </span>
-                        ) : "Scan QR Code"}
+                        Scan QR Code
                       </button>
                       {currentChannel.docsUrl && (
                         <a
@@ -1178,47 +1288,21 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                     </div>
                   )}
 
-                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+                  <div className="flex justify-between pt-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        if (pairingTimeoutRef.current) clearTimeout(pairingTimeoutRef.current);
-                        pairingTimeoutRef.current = null;
-                        setPairingRequests([]);
-                        setPairingTimeout(false);
-                        setConnectedChannel(null);
-                        setSelectedChannel(null);
-                        setChannelToken("");
-                        setChannelAppToken("");
-                        setChannelResult(null);
-                        setConnectPhase("idle");
-                        setBotName("");
-                        setBotUsername("");
-                        setStep("model");
-                      }}
-                      disabled={channelBusy}
-                      className={cn(
-                        "rounded-full px-5 py-2.5 text-sm font-medium transition-colors",
-                        channelBusy
-                          ? "cursor-not-allowed text-muted-foreground/40"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
+                      onClick={() => setStep("model")}
+                      className="rounded-full px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                     >
                       Back
                     </button>
                     <button
                       type="button"
                       onClick={finishSetup}
-                      disabled={channelBusy}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border border-border px-5 py-2.5 text-sm font-medium transition-colors",
-                        channelBusy
-                          ? "cursor-not-allowed text-muted-foreground/40"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      )}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       <SkipForward className="h-3.5 w-3.5" />
-                      Skip channel setup
+                      Skip
                     </button>
                   </div>
                 </div>
@@ -1240,16 +1324,6 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                     <p className="text-sm font-medium text-emerald-300">
                       {connectedChannelDef.icon} {connectedChannelDef.label} connected{botName ? ` (${botName})` : ""}
                     </p>
-                    {connectedChannel === "telegram" && botUsername && (
-                      <a
-                        href={`https://t.me/${botUsername}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
-                      >
-                        <ExternalLink className="h-3 w-3" /> Open @{botUsername} in Telegram
-                      </a>
-                    )}
                   </div>
 
                   {/* Prompt user to text the bot */}
@@ -1257,10 +1331,8 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                     <div>
                       <p className="text-xs font-medium text-foreground/80">Now test the connection</p>
                       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        Open {connectedChannelDef.label} and send any message (like &quot;hi&quot;) to your bot
-                        {connectedChannel === "telegram" && botUsername ? ` (@${botUsername})` : ""}.
-                        The bot will reply with an 8-character pairing code — come back here and click <strong>Confirm &amp; Approve</strong> to activate the connection.
-                        Codes expire after 1 hour.
+                        Open {connectedChannelDef.label} and send a message to your bot.
+                        You will receive a pairing code — then confirm it here.
                       </p>
                     </div>
 
@@ -1274,18 +1346,9 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                           </span>
                         </div>
                         {pairingTimeout && (
-                          <div className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300 space-y-1">
-                            <p className="font-medium">No pairing request detected yet.</p>
-                            <ul className="list-inside list-disc space-y-0.5 text-amber-300/80">
-                              <li>Open {connectedChannelDef.label} and send a message to your bot{connectedChannel === "telegram" && botUsername ? ` (@${botUsername})` : ""}</li>
-                              <li>Make sure you&apos;re messaging the correct bot, not a group</li>
-                              <li>If the problem persists, go back and re-enter the token</li>
-                            </ul>
-                          </div>
-                        )}
-                        {pairingError && (
-                          <div className="rounded-md border border-red-500/20 bg-red-500/10 px-2.5 py-2 text-xs text-red-300">
-                            {pairingError}
+                          <div className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2.5 py-2 text-xs text-amber-300">
+                            No pairing request detected yet. Make sure you sent a message to the correct bot.
+                            {" "}If the problem persists, go back and re-enter the token.
                           </div>
                         )}
                       </div>
@@ -1350,19 +1413,20 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                     ) : null}
                   </div>
 
-                  <div className="flex items-center justify-end pt-2">
+                  <div className="flex items-center justify-between pt-2">
+                    <button
+                      type="button"
+                      onClick={handleAddAnotherChannel}
+                      className="rounded-full px-5 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      Add Another Channel
+                    </button>
                     <button
                       type="button"
                       onClick={finishSetup}
-                      disabled={channelBusy}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-5 py-2.5 text-sm font-medium transition-opacity",
-                        channelBusy
-                          ? "cursor-not-allowed bg-muted text-muted-foreground"
-                          : "bg-primary text-primary-foreground hover:opacity-90",
-                      )}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
                     >
-                      Finish setup
+                      Continue
                       <ChevronRight className="h-3.5 w-3.5" />
                     </button>
                   </div>
@@ -1374,12 +1438,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                   {!launchError ? (
                     <div className="flex flex-col items-center justify-center gap-4 text-center">
                       <TypingDots size="lg" className="text-muted-foreground" />
-                      <div>
-                        <p className="text-sm text-muted-foreground">Setting up your agent...</p>
-                        <p className="mt-1 text-xs text-muted-foreground/50">
-                          Saving credentials, configuring model, and starting the gateway. This may take 20–30 seconds.
-                        </p>
-                      </div>
+                      <p className="text-sm text-muted-foreground">Setting up your agent...</p>
                     </div>
                   ) : (
                     <div className="mx-auto flex max-w-sm flex-col items-center gap-3 text-center">
@@ -1419,15 +1478,15 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                       onClick={() => setShowSkipConfirm(true)}
                       className="text-xs text-muted-foreground/40 transition-colors hover:text-muted-foreground"
                     >
-                      I prefer to configure manually
+                      Skip setup and configure manually
                     </button>
                   ) : (
                     <div className="mx-auto max-w-sm rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
                       <p className="text-xs font-medium text-foreground">Are you sure?</p>
                       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        You&apos;ll need to set up API keys, choose a model, and start the gateway
-                        yourself using the command line. You can always come back to the app
-                        settings later to configure everything through the UI instead.
+                        Skipping means you&apos;ll need to configure everything manually using the
+                        terminal. You&apos;ll need to set API keys, models, and start the gateway
+                        yourself via the command line.
                       </p>
                       <div className="mt-3 flex items-center justify-center gap-3">
                         <button
@@ -1435,7 +1494,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                           onClick={() => setShowSkipConfirm(false)}
                           className="rounded-full border border-border px-4 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
                         >
-                          Continue setup
+                          Go back
                         </button>
                         <button
                           type="button"
@@ -1445,7 +1504,7 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
                           }}
                           className="rounded-full bg-amber-600 px-4 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
                         >
-                          Skip for now
+                          Skip anyway
                         </button>
                       </div>
                     </div>
@@ -1462,53 +1521,15 @@ export function OnboardingWizard({ onComplete }: { onComplete?: () => void }) {
         <QrLoginModal
           channel={qrChannel}
           onClose={() => setShowQrModal(false)}
-          onSuccess={async () => {
-            setShowQrModal(false);
+          onSuccess={() => {
             setSelectedChannel(qrChannel);
-            setChannelBusy(true);
-            setConnectPhase("saving");
-
-            try {
-              // Enable WhatsApp in gateway config
-              const res = await fetch("/api/channels", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "connect", channel: qrChannel }),
-              });
-              const data = await res.json();
-              if (!res.ok || data.ok === false) {
-                throw new Error(data.error || "Could not enable WhatsApp in config.");
-              }
-
-              // Wait for gateway restart and channel readiness
-              setConnectPhase("restarting");
-              const healthy = await waitForGatewayHealth(qrChannel);
-              if (!healthy) {
-                throw new Error("Gateway did not come back online. Check the logs.");
-              }
-
-              setConnectPhase("ready");
-              setConnectedChannel(qrChannel);
-              setChannelResult({
-                type: "success",
-                message: `${getChannelLabel(qrChannel)} connected successfully!`,
-              });
-              setApprovedCodes(new Set());
-              setPairingRequests([]);
-
-              // Start 2-minute pairing timeout
-              pairingTimeoutRef.current = setTimeout(() => {
-                setPairingTimeout(true);
-              }, 120000);
-            } catch (error) {
-              setConnectPhase("idle");
-              setChannelResult({
-                type: "error",
-                message: error instanceof Error ? error.message : "Could not enable WhatsApp.",
-              });
-            } finally {
-              setChannelBusy(false);
-            }
+            setConnectedChannel(qrChannel);
+            setChannelResult({
+              type: "success",
+              message: `${getChannelLabel(qrChannel)} connected successfully!`,
+            });
+            setApprovedCodes(new Set());
+            setPairingRequests([]);
           }}
         />
       )}

@@ -731,7 +731,7 @@ const CONFIRM_CONFIG: Record<string, { title: string; description: string; serio
   "repair-force": {
     title: "Advanced Repair",
     description:
-      "This overwrites service configs and applies aggressive fixes. Only use if standard fix didn't help. On memory-constrained deployments this may cause high RAM usage — consider running from the host CLI instead.",
+      "This overwrites service configs and applies aggressive fixes. Only use if standard fix didn't help.",
     serious: true,
   },
   "generate-token": {
@@ -743,8 +743,8 @@ const CONFIRM_CONFIG: Record<string, { title: string; description: string; serio
   "restart-gateway": {
     title: "Restart Gateway",
     description:
-      "This will restart the gateway service. Connected clients will disconnect and the system will be briefly unavailable. On memory-constrained environments (e.g. Docker with limited RAM) this may cause cascading failures — consider running 'openclaw doctor' directly on the host instead.",
-    serious: true,
+      "This will restart the gateway service. Connected clients may briefly disconnect.",
+    serious: false,
   },
 };
 

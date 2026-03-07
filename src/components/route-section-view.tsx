@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect } from "react";
+import { useEffect, Suspense } from "react";
 import { DashboardView } from "@/components/dashboard-view";
 import { ChatView } from "@/components/chat-view";
 import { PanelErrorBoundary } from "@/components/panel-error-boundary";
@@ -256,7 +256,9 @@ export function RouteSectionView({ section }: { section: DashboardSection }) {
         className={isChatSection ? "flex flex-1 flex-col overflow-hidden" : "hidden"}
       >
         <PanelErrorBoundary key={isChatSection ? "chat-visible" : "chat-hidden"} section="chat">
-          <ChatView isVisible={isChatSection} />
+          <Suspense fallback={<SectionLoading />}>
+            <ChatView isVisible={isChatSection} />
+          </Suspense>
         </PanelErrorBoundary>
       </div>
 

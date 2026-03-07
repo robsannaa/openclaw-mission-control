@@ -77,15 +77,6 @@ export async function waitForResponsesEndpoint(): Promise<void> {
   }
 }
 
-/**
- * Trigger the responses endpoint setup if it hasn't been attempted yet.
- * Called by the chat route when a user sends a message before the gateway
- * health poll has fired (which normally triggers ensureResponsesEndpoint).
- */
-export function triggerResponsesEndpointSetup(): void {
-  ensureResponsesEndpoint();
-}
-
 async function runGatewayServiceCommand(
   subcommand: "restart" | "stop" | "start",
   timeout = 25000

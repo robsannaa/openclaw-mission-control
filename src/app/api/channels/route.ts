@@ -87,10 +87,10 @@ type ChannelStatus = {
 };
 
 async function buildChannelStatuses(): Promise<ChannelStatus[]> {
-  // Fetch gateway status + config in parallel (5s timeout — keep UI snappy)
+  // Fetch gateway status + config in parallel
   const [statusResult, configResult, diskConfig] = await Promise.all([
-    gatewayCall<Record<string, unknown>>("channels.status", {}, 5000).catch(() => ({})),
-    gatewayCall<Record<string, unknown>>("config.get", undefined, 5000).catch(() => null),
+    gatewayCall<Record<string, unknown>>("channels.status", {}, 10000).catch(() => ({})),
+    gatewayCall<Record<string, unknown>>("config.get", undefined, 10000).catch(() => null),
     readChannelsConfig(),
   ]);
 
@@ -128,6 +128,15 @@ async function buildChannelStatuses(): Promise<ChannelStatus[]> {
     const error = accountRows.find((r) => typeof r.lastError === "string" && r.lastError.trim())?.lastError as string | undefined;
     const accounts = accountRows.map((r) => toStr(r.accountId) || "default");
 
+    const statuses = accountRows.map((r) => ({
+      channel: ch.id,
+      account: toStr(r.accountId) || "default",
+      status: r.running === true ? "running" : "idle",
+      connected: r.running === true,
+      linked: r.linked === true,
+      error: toStr(r.lastError),
+    }));
+
     return {
       ...ch,
       enabled,
@@ -137,6 +146,13 @@ async function buildChannelStatuses(): Promise<ChannelStatus[]> {
       dmPolicy: toStr(conf?.dmPolicy),
       groupPolicy: toStr(conf?.groupPolicy),
       accounts: accounts.length > 0 ? accounts : configured ? ["default"] : [],
+      // ChannelInfo-compatible fields for ChannelBindingPicker
+      channel: ch.id,
+      setupType: ch.setup as "qr" | "token",
+      setupCommand: "",
+      setupHint: ch.hint,
+      configHint: "",
+      statuses,
     };
   });
 }
@@ -209,13 +225,9 @@ export async function POST(request: NextRequest) {
         }
 
         // Disable and clear credentials
-        const clearPatch: Record<string, unknown> = { enabled: false, dmPolicy: "", groupPolicy: "" };
+        const clearPatch: Record<string, unknown> = { enabled: false };
         if (channel === "telegram") clearPatch.botToken = "";
         if (channel === "discord") clearPatch.token = "";
-        if (channel === "whatsapp") {
-          clearPatch.dmPolicy = "";
-          clearPatch.groupPolicy = "";
-        }
 
         await patchConfig(
           { channels: { [channel]: clearPatch } },
@@ -223,24 +235,6 @@ export async function POST(request: NextRequest) {
         );
 
         return NextResponse.json({ ok: true, message: `${channel} disconnected.` });
-      }
-
-      /* ── Delete (fully remove channel from config) ── */
-      case "delete": {
-        // WhatsApp: logout session first
-        if (channel === "whatsapp") {
-          try {
-            await gatewayCall("channels.logout", { channel }, 15000);
-          } catch { /* best effort */ }
-        }
-
-        // Remove the entire channel config section
-        await patchConfig(
-          { channels: { [channel]: null } },
-          { restartDelayMs: 2000 },
-        );
-
-        return NextResponse.json({ ok: true, message: `${channel} removed from configuration.` });
       }
 
       /* ── Update policy ── */

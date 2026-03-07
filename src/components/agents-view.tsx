@@ -2058,7 +2058,7 @@ function ChannelBindingPicker({
     try {
       const res = await fetch("/api/channels?scope=all", { cache: "no-store" });
       const data = await res.json();
-      setChannels((data.channels || []).map((c: Record<string, unknown>) => ({ ...c, statuses: Array.isArray(c.statuses) ? c.statuses : [] })) as ChannelInfo[]);
+      setChannels((data.channels || []) as ChannelInfo[]);
     } catch { /* ignore */ }
     setLoading(false);
   }, []);
