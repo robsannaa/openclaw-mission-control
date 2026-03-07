@@ -926,6 +926,11 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   }>>([]);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
+  const sessionDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedSessionKeys, setSelectedSessionKeys] = useState<Map<string, string>>(new Map());
+  const [sessionHistories, setSessionHistories] = useState<Map<string, Array<{ role: string; text: string }>>>(new Map());
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // ── Warm-up state: friendly loading for new users ──
   const [warmupExpired, setWarmupExpired] = useState(false);
@@ -1097,10 +1102,13 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
 
   // Close dropdowns on click outside
   useEffect(() => {
-    if (!agentDropdownOpen && !providerDropdownOpen) return;
+    if (!agentDropdownOpen && !sessionDropdownOpen && !providerDropdownOpen) return;
     const handleClick = (e: MouseEvent) => {
       if (agentDropdownOpen && dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setAgentDropdownOpen(false);
+      }
+      if (sessionDropdownOpen && sessionDropdownRef.current && !sessionDropdownRef.current.contains(e.target as Node)) {
+        setSessionDropdownOpen(false);
       }
       if (providerDropdownOpen && providerDropdownRef.current && !providerDropdownRef.current.contains(e.target as Node)) {
         setProviderDropdownOpen(false);
@@ -1108,7 +1116,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [agentDropdownOpen, providerDropdownOpen]);
+  }, [agentDropdownOpen, sessionDropdownOpen, providerDropdownOpen]);
 
   const currentAgent = useMemo(
     () => agents.find((a) => a.id === selectedAgent),
@@ -1119,6 +1127,34 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
     () => allSessions.filter((s) => s.agentId === selectedAgent),
     [allSessions, selectedAgent]
   );
+
+  const activeSessionKey = selectedSessionKeys.get(selectedAgent) ?? null;
+
+  const selectSession = useCallback(
+    async (sessionKey: string) => {
+      setSelectedSessionKeys((prev) => new Map(prev).set(selectedAgent, sessionKey));
+      setSessionDropdownOpen(false);
+      setLoadingHistory(true);
+      try {
+        const res = await fetch(
+          `/api/chat/history?sessionKey=${encodeURIComponent(sessionKey)}`,
+          { cache: "no-store" }
+        );
+        const data = await res.json();
+        setSessionHistories((prev) => new Map(prev).set(sessionKey, data.messages || []));
+      } catch { /* ignore */ }
+      setLoadingHistory(false);
+    },
+    [selectedAgent]
+  );
+
+  const startNewSession = useCallback(() => {
+    setSelectedSessionKeys((prev) => {
+      const next = new Map(prev);
+      next.delete(selectedAgent);
+      return next;
+    });
+  }, [selectedAgent]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
