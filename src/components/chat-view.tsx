@@ -1036,14 +1036,16 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
           setSelectedProvider(match?.id || providers[0]?.id || null);
         }
         bootstrapLoadedRef.current = true;
-        if (
-          agentList.length > 0 &&
-          !agentList.find((a: Agent) => a.id === selectedAgent)
-        ) {
-          setSelectedAgent(agentList[0].id);
+        // Resolve the actual agent ID — may differ from selectedAgent if the URL value isn't valid
+        const resolvedAgentId =
+          agentList.length > 0 && !agentList.find((a: Agent) => a.id === selectedAgent)
+            ? agentList[0].id
+            : selectedAgent;
+        if (resolvedAgentId !== selectedAgent && agentList.length > 0) {
+          setSelectedAgent(resolvedAgentId);
           setMountedAgents((prev) => {
             const next = new Set(prev);
-            next.add(agentList[0].id);
+            next.add(resolvedAgentId);
             return next;
           });
         }
@@ -1052,7 +1054,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
         if (initSession) {
           initialSessionKeyRef.current = null;
           void (async () => {
-            setSelectedSessionKeys((prev) => new Map(prev).set(selectedAgent, initSession));
+            setSelectedSessionKeys((prev) => new Map(prev).set(resolvedAgentId, initSession));
             setLoadingHistory(true);
             try {
               const r = await fetch(`/api/chat/history?sessionKey=${encodeURIComponent(initSession)}`, { cache: "no-store" });
