@@ -30,7 +30,13 @@ export async function GET(request: NextRequest) {
 
   try {
     const data = await gatewayCall<HistoryResult>("chat.history", { sessionKey });
-    const raw = data.messages ?? data.history ?? data.entries ?? [];
+    const raw = Array.isArray(data.messages)
+      ? data.messages
+      : Array.isArray(data.history)
+      ? data.history
+      : Array.isArray(data.entries)
+      ? data.entries
+      : [];
     const messages = raw
       .map((entry) => ({
         role: String(entry.role ?? "user"),
