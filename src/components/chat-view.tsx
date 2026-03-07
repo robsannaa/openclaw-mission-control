@@ -25,6 +25,7 @@ import {
   ArrowRight,
   Plus,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { TypingDots } from "@/components/typing-dots";
@@ -952,8 +953,12 @@ function formatTokens(n: number): string {
 const isHosted = process.env.NEXT_PUBLIC_AGENTBAY_HOSTED === "true";
 
 export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<string>("main");
+  const [selectedAgent, setSelectedAgent] = useState<string>(
+    searchParams.get("agent") || "main"
+  );
   const [agentsLoading, setAgentsLoading] = useState(true);
   const [availableModels, setAvailableModels] = useState<Array<{ key: string; name: string }>>([]);
   const [connectedProviders, setConnectedProviders] = useState<Array<{ id: string; name: string }>>([]);
@@ -976,6 +981,8 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   const [selectedSessionKeys, setSelectedSessionKeys] = useState<Map<string, string>>(new Map());
   const [sessionHistories, setSessionHistories] = useState<Map<string, Array<{ role: string; text: string }>>>(new Map());
   const [loadingHistory, setLoadingHistory] = useState(false);
+  // Capture initial ?session= URL param at mount so we can restore it after sessions load
+  const initialSessionKeyRef = useRef(searchParams.get("session"));
 
   // ── Warm-up state: friendly loading for new users ──
   const [warmupExpired, setWarmupExpired] = useState(false);
@@ -1039,6 +1046,22 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
             next.add(agentList[0].id);
             return next;
           });
+        }
+        // Restore session from URL on first load only
+        const initSession = initialSessionKeyRef.current;
+        if (initSession) {
+          initialSessionKeyRef.current = null;
+          void (async () => {
+            setSelectedSessionKeys((prev) => new Map(prev).set(selectedAgent, initSession));
+            setLoadingHistory(true);
+            try {
+              const r = await fetch(`/api/chat/history?sessionKey=${encodeURIComponent(initSession)}`, { cache: "no-store" });
+              const d = await r.json();
+              setSessionHistories((prev) => new Map(prev).set(initSession, d.messages || []));
+            } catch { /* ignore */ } finally {
+              setLoadingHistory(false);
+            }
+          })();
         }
         // Only mark models as "loaded" if we actually found models,
         // or if warm-up is over. Prevents flash of "No model configured"
@@ -1138,7 +1161,12 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
     setAgentDropdownOpen(false);
     // Clear unread for this agent since user is looking at it
     clearUnread(agentId);
-  }, []);
+    // Sync URL
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("agent", agentId);
+    params.delete("session");
+    router.replace(`/chat?${params.toString()}`);
+  }, [router, searchParams]);
 
   // Mark chat as active when visible
   useEffect(() => {
@@ -1180,6 +1208,11 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
       setSelectedSessionKeys((prev) => new Map(prev).set(selectedAgent, sessionKey));
       setSessionDropdownOpen(false);
       setLoadingHistory(true);
+      // Sync URL
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("agent", selectedAgent);
+      params.set("session", sessionKey);
+      router.replace(`/chat?${params.toString()}`);
       const controller = new AbortController();
       try {
         const res = await fetch(
@@ -1194,7 +1227,7 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
         setLoadingHistory(false);
       }
     },
-    [selectedAgent]
+    [selectedAgent, router, searchParams]
   );
 
   const startNewSession = useCallback(() => {
@@ -1203,7 +1236,11 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
       next.delete(selectedAgent);
       return next;
     });
-  }, [selectedAgent]);
+    // Sync URL
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("session");
+    router.replace(`/chat?${params.toString()}`);
+  }, [selectedAgent, router, searchParams]);
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
