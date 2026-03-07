@@ -1135,15 +1135,19 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
       setSelectedSessionKeys((prev) => new Map(prev).set(selectedAgent, sessionKey));
       setSessionDropdownOpen(false);
       setLoadingHistory(true);
+      const controller = new AbortController();
       try {
         const res = await fetch(
           `/api/chat/history?sessionKey=${encodeURIComponent(sessionKey)}`,
-          { cache: "no-store" }
+          { cache: "no-store", signal: controller.signal }
         );
         const data = await res.json();
         setSessionHistories((prev) => new Map(prev).set(sessionKey, data.messages || []));
-      } catch { /* ignore */ }
-      setLoadingHistory(false);
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") { /* ignore */ }
+      } finally {
+        setLoadingHistory(false);
+      }
     },
     [selectedAgent]
   );
