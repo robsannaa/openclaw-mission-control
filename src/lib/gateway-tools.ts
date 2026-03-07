@@ -87,7 +87,10 @@ export async function gatewayMemorySearch(opts: {
   const args: Record<string, unknown> = { query: opts.query };
   if (opts.agent) args.agent = opts.agent;
   if (opts.maxResults) args.max_results = opts.maxResults;
-  if (opts.minScore) args.min_score = opts.minScore;
+  if (opts.minScore) {
+    const parsed = parseFloat(opts.minScore);
+    if (!Number.isNaN(parsed)) args.min_score = parsed;
+  }
 
   const result = await invokeGatewayTool<MemorySearchToolResult>(
     "memory_search",
@@ -95,20 +98,28 @@ export async function gatewayMemorySearch(opts: {
     30000,
   );
 
-  if (result.results) {
+  if (Array.isArray(result.results)) {
     return { results: result.results };
   }
 
   // Fallback: parse from content blocks
-  const text = result.content
-    ?.map((item) => (item?.type === "text" ? String(item.text || "") : ""))
-    .filter(Boolean)
-    .join("\n") || "";
+  const text = Array.isArray(result.content)
+    ? result.content
+        .map((item) => (item?.type === "text" ? String(item.text || "") : ""))
+        .filter(Boolean)
+        .join("\n")
+    : "";
+
+  if (!text) {
+    console.warn("gatewayMemorySearch: gateway returned no results and no parseable content");
+    return { results: [] };
+  }
 
   try {
     const parsed = JSON.parse(text) as { results?: MemorySearchResult[] };
-    return { results: parsed.results || [] };
+    return { results: Array.isArray(parsed.results) ? parsed.results : [] };
   } catch {
+    console.warn("gatewayMemorySearch: failed to parse content block as JSON");
     return { results: [] };
   }
 }

@@ -198,10 +198,14 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ ok: true, message: "WhatsApp enabled. Use QR login to link your phone." });
         }
 
-        // Telegram / Discord: save token via config patch
+        // Telegram / Discord: save token via config patch.
+        // groupPolicy defaults to "mention" so the bot responds when mentioned
+        // in groups. Without this, the gateway defaults to "allowlist" with an
+        // empty allowFrom list, silently dropping all group messages.
         const patch: Record<string, unknown> = {
           enabled: true,
           dmPolicy: (body.dmPolicy as string) || "pairing",
+          groupPolicy: (body.groupPolicy as string) || "mention",
         };
         if (channel === "telegram") patch.botToken = token;
         else if (channel === "discord") patch.token = token;

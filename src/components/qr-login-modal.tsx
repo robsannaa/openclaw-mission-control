@@ -38,13 +38,15 @@ export function QrLoginModal({
   const eventSourceRef = useRef<EventSource | null>(null);
   const mountedRef = useRef(true);
   const notifiedSuccessRef = useRef(false);
+  const onSuccessRef = useRef(onSuccess);
+  useEffect(() => { onSuccessRef.current = onSuccess; }, [onSuccess]);
 
   const finishSuccess = useCallback(() => {
     if (notifiedSuccessRef.current) return;
     notifiedSuccessRef.current = true;
     setState("success");
-    onSuccess?.();
-  }, [onSuccess]);
+    onSuccessRef.current?.();
+  }, []);
 
   const closeStream = useCallback(() => {
     eventSourceRef.current?.close();
@@ -118,14 +120,15 @@ export function QrLoginModal({
             return;
         }
       } catch {
-        // Ignore malformed stream payloads.
+        // Log but don't crash on malformed payloads
+        setLogs((prev) => [...prev.slice(-49), "[warning] Received malformed data from server"]);
       }
     };
 
     es.onerror = () => {
       if (!mountedRef.current || notifiedSuccessRef.current) return;
       setState("error");
-      setErrorMessage("Could not connect to the login session.");
+      setErrorMessage("Connection lost. Make sure the OpenClaw gateway is running and try again.");
       closeStream();
     };
   }, [account, channel, closeStream, finishSuccess]);
@@ -134,8 +137,18 @@ export function QrLoginModal({
     mountedRef.current = true;
     const timer = window.setTimeout(() => connect(false), 0);
 
+    // Hard timeout: if login hasn't succeeded after 2 minutes, show error
+    const loginTimeout = window.setTimeout(() => {
+      if (!notifiedSuccessRef.current && mountedRef.current) {
+        setState("error");
+        setErrorMessage("QR login timed out. Please try again.");
+        closeStream();
+      }
+    }, 120_000);
+
     return () => {
       window.clearTimeout(timer);
+      window.clearTimeout(loginTimeout);
       mountedRef.current = false;
       closeStream();
     };
@@ -171,7 +184,8 @@ export function QrLoginModal({
         {state === "scanning" && qrText && (
           <div className="flex flex-col items-center gap-4">
             <p className="text-center text-xs text-muted-foreground">
-              Scan this QR code with your <span className="font-medium text-foreground">{label}</span> app
+              Open <span className="font-medium text-foreground">{label}</span> on your phone and scan this QR code.
+              Keep this window open — it will move to the next step automatically.
             </p>
             <div className="rounded-lg border border-foreground/10 bg-white p-3">
               <pre
@@ -185,7 +199,7 @@ export function QrLoginModal({
               </pre>
             </div>
             <p className="text-center text-[11px] text-muted-foreground/60">
-              QR code refreshes automatically. Keep this window open until login completes.
+              The QR code refreshes automatically every few seconds. This session expires after 2 minutes.
             </p>
           </div>
         )}

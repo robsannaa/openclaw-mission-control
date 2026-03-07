@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readdir, stat, unlink } from "fs/promises";
 import { dirname, resolve } from "path";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { runCliJson, gatewayCall } from "@/lib/openclaw";
-import { getOpenClawHome, getDefaultWorkspace } from "@/lib/paths";
+import { getOpenClawHome, getDefaultWorkspace, getOpenClawBin } from "@/lib/paths";
 import { buildModelsSummary } from "@/lib/models-summary";
 import { gatewayMemorySearch, gatewayMemoryIndex } from "@/lib/gateway-tools";
+
+const exec = promisify(execFile);
 
 export const dynamic = "force-dynamic";
 
@@ -199,12 +203,30 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ results: [], query });
       }
 
-      const data = await gatewayMemorySearch({
-        query: query.trim(),
-        agent: agent || undefined,
-        maxResults: parseInt(maxResults, 10) || 10,
-        minScore: minScore || undefined,
-      });
+      // Try gateway tool first; fall back to CLI if the tool isn't registered
+      let data: { results: SearchResult[] };
+      try {
+        data = await gatewayMemorySearch({
+          query: query.trim(),
+          agent: agent || undefined,
+          maxResults: parseInt(maxResults, 10) || 10,
+          minScore: minScore || undefined,
+        });
+      } catch (gwErr) {
+        const is404 = gwErr instanceof Error && gwErr.message.includes("(404)");
+        if (!is404) throw gwErr;
+
+        const bin = await getOpenClawBin();
+        const args = ["memory", "search", query.trim(), "--json", "--max-results", String(parseInt(maxResults, 10) || 10)];
+        if (agent) args.push("--agent", agent);
+        if (minScore) args.push("--min-score", minScore);
+        const { stdout } = await exec(bin, args, {
+          timeout: 30000,
+          env: { ...process.env, NO_COLOR: "1" },
+        });
+        const parsed = JSON.parse(stdout || "{}") as { results?: SearchResult[] };
+        data = { results: Array.isArray(parsed.results) ? parsed.results : [] };
+      }
 
       const results = (data.results || []).map((r) => ({
         ...r,
@@ -232,10 +254,33 @@ export async function POST(request: NextRequest) {
       case "reindex": {
         const agent = body.agent as string | undefined;
         const force = body.force as boolean | undefined;
-        const output = await gatewayMemoryIndex({
-          agent: agent || undefined,
-          force: force || undefined,
-        });
+
+        // Try gateway tool first; fall back to CLI if the tool isn't registered
+        // (memory_index is a CLI-only operation in most gateway versions — see #25).
+        let output: string;
+        try {
+          output = await gatewayMemoryIndex({
+            agent: agent || undefined,
+            force: force || undefined,
+          });
+        } catch (gwErr) {
+          const is404 = gwErr instanceof Error && gwErr.message.includes("(404)");
+          if (!is404) throw gwErr;
+
+          const bin = await getOpenClawBin();
+          // `openclaw memory index` supports --agent and --verbose only (no --force).
+          // For force-reindex, use `memory status --deep --index` which reindexes dirty stores.
+          const args = force
+            ? ["memory", "status", "--deep", "--index"]
+            : ["memory", "index"];
+          if (agent) args.push("--agent", agent);
+          const { stdout } = await exec(bin, args, {
+            timeout: 60000,
+            env: { ...process.env, NO_COLOR: "1" },
+          });
+          output = stdout || "Reindex completed via CLI";
+        }
+
         return NextResponse.json({ ok: true, action, output });
       }
 

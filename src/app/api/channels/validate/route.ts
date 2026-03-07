@@ -33,6 +33,13 @@ export async function POST(request: NextRequest) {
       const res = await fetch(`https://api.telegram.org/bot${token}/getMe`, {
         signal: AbortSignal.timeout(10000),
       });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        return NextResponse.json({
+          ok: false,
+          error: (body as Record<string, string>).description || `Telegram API returned ${res.status}. Check your bot token.`,
+        });
+      }
       const data = await res.json();
       if (!data.ok || !data.result) {
         return NextResponse.json({

@@ -15,8 +15,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { access, readFile, writeFile, mkdir } from "fs/promises";
 import { join, dirname } from "path";
-import { gatewayCall, runCli } from "@/lib/openclaw";
-import { getOpenClawBin, getOpenClawHome, getGatewayUrl } from "@/lib/paths";
+import { runCli } from "@/lib/openclaw";
+import { patchConfig } from "@/lib/gateway-config";
+import { getOpenClawBin, getOpenClawHome, getDefaultWorkspace, getGatewayUrl } from "@/lib/paths";
 import {
   buildProviderCredentialPatch,
   fetchModelsFromProvider,
@@ -53,18 +54,7 @@ async function writeJsonAtomic(p: string, data: unknown): Promise<void> {
 }
 
 async function applyGatewayConfigPatch(rawPatch: Record<string, unknown>): Promise<void> {
-  const cfg = await gatewayCall<Record<string, unknown>>("config.get", undefined, 15000);
-  const baseHash = String(cfg?.hash || "");
-
-  await gatewayCall(
-    "config.patch",
-    {
-      raw: JSON.stringify(rawPatch),
-      baseHash,
-      restartDelayMs: 2000,
-    },
-    20000,
-  );
+  await patchConfig(rawPatch, { restartDelayMs: 2000 });
 }
 
 async function checkGatewayHealth(
@@ -194,14 +184,14 @@ async function probeCustomEndpoint(
     });
 
     if (res.status === 401 || res.status === 403) {
-      return { ok: false, error: "Authentication required — provide an API key." };
+      return { ok: false, error: "This API key was not accepted. Double-check that it is correct and has not expired." };
     }
 
     if (!res.ok) {
       const errBody = await res.text().catch(() => "");
       return {
         ok: false,
-        error: `Endpoint returned ${res.status}${errBody ? `: ${errBody.slice(0, 200)}` : ""}`,
+        error: `The endpoint could not be reached (status ${res.status}).${errBody ? ` Details: ${errBody.slice(0, 200)}` : ""} Make sure the URL is correct and the server is running.`,
       };
     }
 
@@ -273,12 +263,19 @@ export async function GET() {
             typeof model === "string" ? model : (model as Record<string, unknown>)?.primary,
           );
 
+          // Tier 1: API keys stored in config.env
           const env = getDotPath(config, "env");
           if (env && typeof env === "object") {
             hasApiKey = Object.values(PROVIDER_ENV_KEYS).some((key) => {
               const value = (env as Record<string, unknown>)[key];
               return typeof value === "string" && value.trim().length > 0;
             });
+          }
+
+          // Tier 2: auth.profiles in openclaw.json (written by quick-setup)
+          const authProfiles = getDotPath(config, "auth.profiles");
+          if (!hasApiKey && authProfiles && typeof authProfiles === "object") {
+            hasApiKey = Object.keys(authProfiles as Record<string, unknown>).length > 0;
           }
 
           // Check for local/custom providers (Ollama, LM Studio, vLLM, etc.)
@@ -298,13 +295,21 @@ export async function GET() {
       }
     }
 
-    if (authExists) {
+    // Tier 3: per-agent auth-profiles.json (merge, not overwrite)
+    if (!hasApiKey && authExists) {
       try {
         const auth = await readJsonSafe<{ profiles?: Record<string, unknown> }>(authPath);
         hasApiKey = Boolean(auth?.profiles && Object.keys(auth.profiles).length > 0);
       } catch {
         // auth unreadable
       }
+    }
+
+    // Tier 4: process.env (shell exports, Docker env, CI)
+    if (!hasApiKey) {
+      hasApiKey = Object.values(PROVIDER_ENV_KEYS).some(
+        (key) => typeof process.env[key] === "string" && process.env[key]!.trim().length > 0,
+      );
     }
 
     // Detect Ollama running locally (no API key needed)
@@ -318,9 +323,11 @@ export async function GET() {
       // Ollama not running
     }
 
+    const hasCredentials = hasApiKey || hasLocalProvider || hasOllama;
+
     return NextResponse.json({
       installed,
-      configured: hasApiKey || hasLocalProvider || hasOllama,
+      configured: hasCredentials && hasModel,
       configExists,
       hasModel,
       hasApiKey,
@@ -449,8 +456,14 @@ export async function POST(request: NextRequest) {
           }
           return NextResponse.json({ ok: true });
         } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const friendly = errMsg.includes("EACCES")
+            ? "Permission denied — the app cannot write to the config directory. Check folder permissions."
+            : errMsg.includes("ENOSPC")
+              ? "No disk space left. Free up some space and try again."
+              : `Could not save credentials. ${errMsg}`;
           return NextResponse.json(
-            { ok: false, error: `Failed to save credentials: ${err}` },
+            { ok: false, error: friendly },
             { status: 500 },
           );
         }
@@ -561,8 +574,12 @@ export async function POST(request: NextRequest) {
           }
           steps.push(`Authenticated ${provider}`);
         } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const friendly = errMsg.includes("EACCES")
+            ? "Permission denied — cannot write configuration files. Check folder permissions."
+            : `Could not save authentication settings. ${errMsg}`;
           return NextResponse.json(
-            { ok: false, error: `Failed to write auth profile: ${err}`, steps },
+            { ok: false, error: friendly, steps },
             { status: 500 },
           );
         }
@@ -603,10 +620,10 @@ export async function POST(request: NextRequest) {
             await runCli(["gateway", "start"], 25000);
             steps.push("Gateway started");
 
-            // Health check retries: 5 × 1s
+            // Health check retries: 10 × 1.5s (up to 15s total)
             let running = false;
-            for (let i = 0; i < 5; i++) {
-              await new Promise((r) => setTimeout(r, 1000));
+            for (let i = 0; i < 10; i++) {
+              await new Promise((r) => setTimeout(r, 1500));
               const check = await checkGatewayHealth(gatewayUrl);
               if (check.running) {
                 running = true;
@@ -614,7 +631,7 @@ export async function POST(request: NextRequest) {
               }
             }
             if (!running) {
-              steps.push("Warning: gateway started but health check not responding yet");
+              steps.push("Gateway started but still initializing — it may need a few more seconds");
             } else {
               steps.push("Gateway running");
             }
@@ -623,6 +640,40 @@ export async function POST(request: NextRequest) {
           }
         } else {
           steps.push("Gateway running");
+        }
+
+        // 5. Scaffold workspace via `openclaw onboard --non-interactive`.
+        //    The onboard command initializes openclaw.json and the agent
+        //    workspace with all foundational files. We skip channels, daemon,
+        //    health, skills, and UI since those are already handled above or
+        //    are not needed during quick-setup.
+        try {
+          const workspace = await getDefaultWorkspace();
+          const workspaceExists = await fileExists(join(workspace, "SOUL.md"));
+          if (!workspaceExists) {
+            try {
+              await runCli(
+                [
+                  "onboard",
+                  "--non-interactive",
+                  "--accept-risk",
+                  "--workspace", workspace,
+                  "--skip-channels",
+                  "--skip-daemon",
+                  "--skip-health",
+                  "--skip-skills",
+                  "--skip-ui",
+                  "--auth-choice", "skip",
+                ],
+                30000,
+              );
+              steps.push("Workspace initialized");
+            } catch (setupErr) {
+              steps.push(`Warning: could not initialize workspace: ${setupErr}`);
+            }
+          }
+        } catch (err) {
+          steps.push(`Warning: could not initialize workspace: ${err}`);
         }
 
         return NextResponse.json({

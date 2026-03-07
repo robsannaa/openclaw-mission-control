@@ -91,6 +91,8 @@ function ScoreBar({ score }: { score: number }) {
 function ResultCard({ result, rank }: { result: SearchResult; rank: number }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copyTimerRef.current) clearTimeout(copyTimerRef.current); }, []);
   return (
     <div className="rounded-xl border border-stone-200 bg-white shadow-sm transition-colors hover:border-stone-300 dark:border-[#2c343d] dark:bg-[#171a1d]">
       <div className="flex flex-wrap items-center gap-3 px-4 py-3">
@@ -105,7 +107,7 @@ function ResultCard({ result, rank }: { result: SearchResult; rank: number }) {
         </div>
         <ScoreBar score={result.score} />
         <div className="flex items-center gap-1">
-          <button onClick={() => { navigator.clipboard.writeText(result.snippet); setCopied(true); setTimeout(() => setCopied(false), 1500); }} className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:hover:bg-[#20252a] dark:hover:text-[#f5f7fa]" title="Copy">
+          <button onClick={() => { navigator.clipboard.writeText(result.snippet); setCopied(true); if (copyTimerRef.current) clearTimeout(copyTimerRef.current); copyTimerRef.current = setTimeout(() => setCopied(false), 1500); }} className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:hover:bg-[#20252a] dark:hover:text-[#f5f7fa]" title="Copy" aria-label="Copy snippet">
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
           </button>
           <button onClick={() => setExpanded(!expanded)} className="rounded-lg p-1.5 text-muted-foreground/60 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:hover:bg-[#20252a] dark:hover:text-[#f5f7fa]">
@@ -265,7 +267,8 @@ function EmbeddingModelEditor({
     queueMicrotask(() => setAuthLoading(true));
     (async () => {
       try {
-        const res = await fetch("/api/models");
+        const res = await fetch("/api/models", { signal: AbortSignal.timeout(10000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const providers = new Set<string>();
         // Extract providers that have auth configured
@@ -733,7 +736,7 @@ export function VectorView() {
   const [apiWarning, setApiWarning] = useState<string | null>(null);
   const [apiDegraded, setApiDegraded] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [reindexing, setReindexing] = useState(false);
+  const [reindexingAgents, setReindexingAgents] = useState<Set<string>>(new Set());
   const [deletingNamespace, setDeletingNamespace] = useState<string | null>(null);
   const [ensuringExtraPaths, setEnsuringExtraPaths] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -748,13 +751,16 @@ export function VectorView() {
   const [searching, setSearching] = useState(false);
   const [lastQuery, setLastQuery] = useState("");
   const [searchTime, setSearchTime] = useState(0);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchAbortRef = useRef<AbortController | null>(null);
   const [authProviders, setAuthProviders] = useState<string[]>([]);
   const [memorySearch, setMemorySearch] = useState<Record<string, unknown> | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/vector?scope=status");
+      if (!res.ok) throw new Error(`Status fetch failed (${res.status})`);
       const data = await res.json();
       setApiWarning(
         typeof data.warning === "string" && data.warning.trim()
@@ -777,15 +783,27 @@ export function VectorView() {
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
   const doSearch = useCallback(async (q: string) => {
-    if (!q || q.trim().length < 2) { setResults([]); setLastQuery(""); return; }
-    setSearching(true); const start = performance.now();
+    if (!q || q.trim().length < 2) { setResults([]); setLastQuery(""); setSearchError(null); return; }
+    // Cancel any in-flight search
+    searchAbortRef.current?.abort();
+    const controller = new AbortController();
+    searchAbortRef.current = controller;
+    setSearching(true); setSearchError(null);
+    const start = performance.now();
     try {
       const p = new URLSearchParams({ scope: "search", q: q.trim(), max: maxResults });
       if (searchAgent) p.set("agent", searchAgent);
       if (minScore) p.set("minScore", minScore);
-      const res = await fetch("/api/vector?" + p); const data = await res.json();
+      const res = await fetch("/api/vector?" + p, { signal: controller.signal });
+      if (!res.ok) throw new Error(`Search failed (${res.status})`);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
       setResults(data.results || []); setLastQuery(q); setSearchTime(Math.round(performance.now() - start));
-    } catch { setResults([]); } finally { setSearching(false); }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
+      setResults([]);
+      setSearchError(err instanceof Error ? err.message : "Search failed");
+    } finally { setSearching(false); }
   }, [searchAgent, maxResults, minScore]);
 
   useEffect(() => {
@@ -795,13 +813,16 @@ export function VectorView() {
   }, [query, doSearch]);
 
   const handleReindex = useCallback(async (agentId: string, force: boolean) => {
-    setReindexing(true);
+    setReindexingAgents((prev) => new Set(prev).add(agentId));
     try {
       const res = await fetch("/api/vector", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "reindex", agent: agentId, force }) });
+      if (!res.ok) throw new Error(`Reindex failed (${res.status})`);
       const d = await res.json();
       if (d.ok) { setToast({ message: agentId + (force ? " force" : "") + " reindexed", type: "success" }); await fetchStatus(); }
-      else setToast({ message: d.error || "Reindex failed", type: "error" });
-    } catch (e) { setToast({ message: String(e), type: "error" }); } finally { setReindexing(false); }
+      else setToast({ message: typeof d.error === "string" ? d.error : "Reindex failed", type: "error" });
+    } catch (e) { setToast({ message: e instanceof Error ? e.message : "Reindex failed", type: "error" }); } finally {
+      setReindexingAgents((prev) => { const next = new Set(prev); next.delete(agentId); return next; });
+    }
   }, [fetchStatus]);
 
   const handleDeleteNamespace = useCallback(async (agentId: string) => {
@@ -817,15 +838,16 @@ export function VectorView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "delete-namespace", agent: agentId }),
       });
+      if (!res.ok) throw new Error(`Delete failed (${res.status})`);
       const d = await res.json();
       if (d.ok) {
         setToast({ message: `${agentId} namespace deleted`, type: "success" });
         await fetchStatus();
       } else {
-        setToast({ message: d.error || "Namespace delete failed", type: "error" });
+        setToast({ message: typeof d.error === "string" ? d.error : "Namespace delete failed", type: "error" });
       }
     } catch (e) {
-      setToast({ message: String(e), type: "error" });
+      setToast({ message: e instanceof Error ? e.message : "Delete failed", type: "error" });
     } finally {
       setDeletingNamespace(null);
     }
@@ -835,13 +857,14 @@ export function VectorView() {
     setEnsuringExtraPaths(true);
     try {
       const res = await fetch("/api/vector", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ensure-extra-paths" }) });
+      if (!res.ok) throw new Error(`Failed (${res.status})`);
       const d = await res.json();
       if (d.ok) {
-        const paths = (d.extraPaths as string[]) || [];
-        setToast({ message: paths.length > 0 ? `Added ${paths.length} reference file(s) to index and reindexed` : d.message || "Done", type: "success" });
+        const paths = Array.isArray(d.extraPaths) ? d.extraPaths : [];
+        setToast({ message: paths.length > 0 ? `Added ${paths.length} reference file(s) to index and reindexed` : (typeof d.message === "string" ? d.message : "Done"), type: "success" });
         await fetchStatus();
-      } else setToast({ message: d.error || "Failed", type: "error" });
-    } catch (e) { setToast({ message: String(e), type: "error" }); } finally { setEnsuringExtraPaths(false); }
+      } else setToast({ message: typeof d.error === "string" ? d.error : "Failed", type: "error" });
+    } catch (e) { setToast({ message: e instanceof Error ? e.message : "Failed", type: "error" }); } finally { setEnsuringExtraPaths(false); }
   }, [fetchStatus]);
 
   const handleUpdateModel = useCallback(async (prov: string, mod: string, options?: EmbeddingOptions) => {
@@ -852,10 +875,11 @@ export function VectorView() {
       if (options?.fallback !== undefined) body.fallback = options.fallback;
       if (options?.cacheEnabled !== undefined) body.cacheEnabled = options.cacheEnabled;
       const res = await fetch("/api/vector", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (!res.ok) throw new Error(`Update failed (${res.status})`);
       const d = await res.json();
       if (d.ok) { setToast({ message: "Model changed to " + prov + "/" + mod + ". Run reindex.", type: "success" }); await fetchStatus(); }
-      else setToast({ message: d.error || "Failed", type: "error" });
-    } catch (e) { setToast({ message: String(e), type: "error" }); } finally { setSaving(false); }
+      else setToast({ message: typeof d.error === "string" ? d.error : "Failed", type: "error" });
+    } catch (e) { setToast({ message: e instanceof Error ? e.message : "Update failed", type: "error" }); } finally { setSaving(false); }
   }, [fetchStatus]);
 
   const handleSetup = useCallback(async (provider: string, model: string, options?: { localModelPath?: string }) => {
@@ -868,16 +892,17 @@ export function VectorView() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      if (!res.ok) throw new Error(`Setup failed (${res.status})`);
       const d = await res.json();
       if (d.ok) {
         setToast({ message: "Vector memory enabled with " + provider + "/" + model + "!", type: "success" });
         setLoading(true);
         await fetchStatus();
       } else {
-        setToast({ message: d.error || "Setup failed", type: "error" });
+        setToast({ message: typeof d.error === "string" ? d.error : "Setup failed", type: "error" });
       }
     } catch (e) {
-      setToast({ message: String(e), type: "error" });
+      setToast({ message: e instanceof Error ? e.message : "Setup failed", type: "error" });
     } finally {
       setSettingUp(false);
     }
@@ -1002,7 +1027,15 @@ export function VectorView() {
           </div>
         )}
 
-        {lastQuery && results.length === 0 && !searching && (
+        {searchError && !searching && (
+          <div className="rounded-xl border border-dashed border-red-500/20 bg-red-500/5 p-8 text-center">
+            <AlertTriangle className="mx-auto h-8 w-8 text-red-400/60 mb-3" />
+            <p className="text-sm text-red-400">{searchError}</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Check that the gateway is running and memory is indexed.</p>
+          </div>
+        )}
+
+        {lastQuery && results.length === 0 && !searching && !searchError && (
           <div className="rounded-xl border border-dashed border-foreground/10 bg-muted/50 p-8 text-center">
             <Search className="mx-auto h-8 w-8 text-muted-foreground/40 mb-3" />
             <p className="text-sm text-muted-foreground">No results for <span className="text-emerald-700 dark:text-emerald-300">{"\u201C"}{lastQuery}{"\u201D"}</span></p>
@@ -1010,7 +1043,7 @@ export function VectorView() {
           </div>
         )}
 
-        <div><h2 className="mb-3 flex items-center gap-2 text-xs font-semibold text-foreground/90"><Database className="h-4 w-4 text-stone-700 dark:text-[#d6dce3]" />Namespaces<span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">{agents.length}</span></h2><div className="space-y-2">{agents.map((a) => <AgentIndexCard key={a.agentId} agent={a} onReindex={handleReindex} onDelete={handleDeleteNamespace} reindexing={reindexing} deleting={deletingNamespace === a.agentId} />)}</div></div>
+        <div><h2 className="mb-3 flex items-center gap-2 text-xs font-semibold text-foreground/90"><Database className="h-4 w-4 text-stone-700 dark:text-[#d6dce3]" />Namespaces<span className="rounded bg-muted px-1.5 py-0.5 text-xs font-normal text-muted-foreground">{agents.length}</span></h2><div className="space-y-2">{agents.map((a) => <AgentIndexCard key={a.agentId} agent={a} onReindex={handleReindex} onDelete={handleDeleteNamespace} reindexing={reindexingAgents.has(a.agentId)} deleting={deletingNamespace === a.agentId} />)}</div></div>
 
         <div className="rounded-xl border border-foreground/10 bg-foreground/5 p-4 space-y-3">
           <div className="flex items-center justify-between gap-2">
