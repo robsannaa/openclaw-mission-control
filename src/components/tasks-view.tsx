@@ -1,7 +1,13 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { useEffect, useState, useCallback, useRef, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useState,
+  useCallback,
+  useRef,
+  useSyncExternalStore,
+} from "react";
 import {
   Plus,
   ChevronLeft,
@@ -21,11 +27,15 @@ import {
   Play,
   AlertCircle,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LoadingState } from "@/components/ui/loading-state";
 import { SectionLayout } from "@/components/section-layout";
-import { useFocusTrap, useBodyScrollLock } from "@/hooks/use-modal-accessibility";
+import {
+  useFocusTrap,
+  useBodyScrollLock,
+} from "@/hooks/use-modal-accessibility";
 import {
   getTimeFormatSnapshot,
   getTimeFormatServerSnapshot,
@@ -50,6 +60,9 @@ type Task = {
   dispatchedAt?: number;
   completedAt?: number;
   dispatchError?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  _boardAgentId?: string;
 };
 
 type AgentInfo = {
@@ -57,7 +70,12 @@ type AgentInfo = {
   name: string;
   emoji: string;
 };
-type KanbanData = { columns: Column[]; tasks: Task[]; _fileExists?: boolean };
+type KanbanData = {
+  columns: Column[];
+  tasks: Task[];
+  _fileExists?: boolean;
+  _allAgents?: boolean;
+};
 
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|bmp|ico)$/i;
 function isImageAttachment(path: string): boolean {
@@ -109,33 +127,83 @@ export function TasksView() {
   useBodyScrollLock(detailTaskId != null || lightboxImage != null);
   const streamRef = useRef<EventSource | null>(null);
   const [agents, setAgents] = useState<AgentInfo[]>([]);
-  const [dispatchingTaskIds, setDispatchingTaskIds] = useState<Set<number>>(new Set());
+  const [selectedAgentId, setSelectedAgentId] = useState<string>("");
+  const selectedAgentIdRef = useRef<string>("");
+  const [dispatchingTaskIds, setDispatchingTaskIds] = useState<Set<number>>(
+    new Set(),
+  );
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    fetch("/api/tasks")
+    // Fetch agents first so we know the default agentId before loading the board
+    fetch("/api/agents")
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.agents && Array.isArray(d.agents)) {
+          const list = d.agents.map(
+            (a: { id: string; name: string; emoji: string }) => ({
+              id: a.id,
+              name: a.name,
+              emoji: a.emoji,
+            }),
+          );
+          setAgents(list);
+          const defaultId = ""; // "All agents" is the default
+          selectedAgentIdRef.current = defaultId;
+          setSelectedAgentId(defaultId);
+          fetch("/api/tasks")
+            .then((r) => r.json())
+            .then((board) => {
+              setData(board);
+              setLoading(false);
+            })
+            .catch(() => setLoading(false));
+        } else {
+          // No agents — load default board
+          fetch("/api/tasks")
+            .then((r) => r.json())
+            .then((board) => {
+              setData(board);
+              setLoading(false);
+            })
+            .catch(() => setLoading(false));
+        }
+      })
+      .catch(() => {
+        // Agents unavailable — load default board
+        fetch("/api/tasks")
+          .then((r) => r.json())
+          .then((board) => {
+            setData(board);
+            setLoading(false);
+          })
+          .catch(() => setLoading(false));
+      });
+  }, []);
+
+  // Keep ref in sync with state for SSE closure
+  useEffect(() => {
+    selectedAgentIdRef.current = selectedAgentId;
+  }, [selectedAgentId]);
+
+  // Reload board when agent selection changes (skip first render — initial load handles it)
+  const isFirstRender = useRef(true);
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    setLoading(true);
+    fetch(
+      `/api/tasks${selectedAgentId ? `?agentId=${encodeURIComponent(selectedAgentId)}` : ""}`,
+    )
       .then((r) => r.json())
       .then((d) => {
         setData(d);
         setLoading(false);
       })
       .catch(() => setLoading(false));
-
-    // Fetch agents for assignment dropdown
-    fetch("/api/agents")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.agents && Array.isArray(d.agents)) {
-          setAgents(
-            d.agents.map((a: { id: string; name: string; emoji: string }) => ({
-              id: a.id,
-              name: a.name,
-              emoji: a.emoji,
-            }))
-          );
-        }
-      })
-      .catch(() => {});
-  }, []);
+  }, [selectedAgentId]);
 
   // Live updates: when kanban is written (dashboard or agent), refetch without polling
   // Skip SSE refetch while a local save is in-flight to avoid clobbering edits
@@ -147,10 +215,13 @@ export function TasksView() {
         const payload = JSON.parse(e.data);
         if (payload?.type === "kanban-updated") {
           if (savingRef.current) return; // don't clobber in-flight edits
-          fetch("/api/tasks")
+          const agentId = selectedAgentIdRef.current;
+          fetch(
+            `/api/tasks${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ""}`,
+          )
             .then((r) => r.json())
             .then((d) => setData(d))
-            .catch(() => {});
+            .catch(() => { });
         }
       } catch {
         /* ignore */
@@ -164,39 +235,46 @@ export function TasksView() {
 
   /* ── persist helpers ───────────────────────────── */
 
-  const persist = useCallback((newData: KanbanData) => {
-    prevDataRef.current = data;
-    setData(newData);
-    setSaveStatus("saving");
-    savingRef.current = true;
-    if (saveRef.current) clearTimeout(saveRef.current);
-    saveRef.current = setTimeout(async () => {
-      try {
-        const res = await fetch("/api/tasks", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newData),
-        });
-        if (res.ok) {
-          prevDataRef.current = null;
-          setSaveStatus("saved");
-          setTimeout(() => setSaveStatus(null), 2000);
-        } else {
-          // Rollback on server rejection
+  const persist = useCallback(
+    (newData: KanbanData) => {
+      if (selectedAgentIdRef.current === "") return; // all-view is read-only
+      prevDataRef.current = data;
+      setData(newData);
+      setSaveStatus("saving");
+      savingRef.current = true;
+      if (saveRef.current) clearTimeout(saveRef.current);
+      saveRef.current = setTimeout(async () => {
+        try {
+          const res = await fetch("/api/tasks", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...newData,
+              boardAgentId: selectedAgentIdRef.current || undefined,
+            }),
+          });
+          if (res.ok) {
+            prevDataRef.current = null;
+            setSaveStatus("saved");
+            setTimeout(() => setSaveStatus(null), 2000);
+          } else {
+            // Rollback on server rejection
+            if (prevDataRef.current) setData(prevDataRef.current);
+            prevDataRef.current = null;
+            setSaveStatus(null);
+          }
+        } catch {
+          // Rollback on network failure
           if (prevDataRef.current) setData(prevDataRef.current);
           prevDataRef.current = null;
           setSaveStatus(null);
+        } finally {
+          savingRef.current = false;
         }
-      } catch {
-        // Rollback on network failure
-        if (prevDataRef.current) setData(prevDataRef.current);
-        prevDataRef.current = null;
-        setSaveStatus(null);
-      } finally {
-        savingRef.current = false;
-      }
-    }, 500);
-  }, [data]);
+      }, 500);
+    },
+    [data],
+  );
 
   /* ── task CRUD ─────────────────────────────────── */
 
@@ -204,25 +282,35 @@ export function TasksView() {
     (task: Omit<Task, "id">) => {
       if (!data) return;
       const maxId = data.tasks.reduce((m, t) => Math.max(m, t.id), 0);
+      const now = Date.now();
       const newData = {
         ...data,
-        tasks: [...data.tasks, { ...task, id: maxId + 1 }],
+        tasks: [
+          ...data.tasks,
+          { ...task, id: maxId + 1, createdAt: now, updatedAt: now },
+        ],
       };
       persist(newData);
     },
-    [data, persist]
+    [data, persist],
   );
 
   const updateTask = useCallback(
     (id: number, updates: Partial<Task>) => {
       if (!data) return;
+      const now = Date.now();
       const newData = {
         ...data,
-        tasks: data.tasks.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+        tasks: data.tasks.map((t) => {
+          if (t.id !== id) return t;
+          const completedAt =
+            updates.column === "done" && !t.completedAt ? now : t.completedAt;
+          return { ...t, ...updates, updatedAt: now, completedAt };
+        }),
       };
       persist(newData);
     },
-    [data, persist]
+    [data, persist],
   );
 
   const moveTask = useCallback(
@@ -238,7 +326,7 @@ export function TasksView() {
       if (newIdx === colIdx) return;
       updateTask(id, { column: data.columns[newIdx].id });
     },
-    [data, updateTask]
+    [data, updateTask],
   );
 
   const deleteTask = useCallback(
@@ -250,37 +338,58 @@ export function TasksView() {
       };
       persist(newData);
     },
-    [data, persist]
+    [data, persist],
   );
 
   /* ── dispatch to agent ────────────────────────── */
 
-  const dispatchTask = useCallback(
-    async (taskId: number, agentId?: string) => {
-      setDispatchingTaskIds((prev) => new Set(prev).add(taskId));
-      try {
-        const res = await fetch("/api/tasks", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "dispatch", taskId, agentId }),
-        });
-        if (res.ok) {
-          // Refetch board to get updated status
-          const boardRes = await fetch("/api/tasks");
-          if (boardRes.ok) {
-            const d = await boardRes.json();
-            setData(d);
-          }
-        }
-      } catch { /* handled by SSE */ }
-      setDispatchingTaskIds((prev) => {
-        const next = new Set(prev);
-        next.delete(taskId);
-        return next;
+  const dispatchTask = useCallback(async (taskId: number, agentId?: string) => {
+    const boardAgentId = selectedAgentIdRef.current || undefined;
+    setDispatchingTaskIds((prev) => new Set(prev).add(taskId));
+    try {
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "dispatch",
+          taskId,
+          agentId,
+          boardAgentId,
+        }),
       });
-    },
-    []
-  );
+      if (res.ok) {
+        // Refetch board to get updated status
+        const aid = selectedAgentIdRef.current;
+        const boardRes = await fetch(
+          `/api/tasks${aid ? `?agentId=${encodeURIComponent(aid)}` : ""}`,
+        );
+        if (boardRes.ok) {
+          const d = await boardRes.json();
+          setData(d);
+        }
+      }
+    } catch {
+      /* handled by SSE */
+    }
+    setDispatchingTaskIds((prev) => {
+      const next = new Set(prev);
+      next.delete(taskId);
+      return next;
+    });
+  }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      const url = `/api/tasks${selectedAgentId ? `?agentId=${encodeURIComponent(selectedAgentId)}` : ""}`;
+      const res = await fetch(url);
+      const d = await res.json();
+      setData(d);
+    } catch {
+      /* ignore */
+    }
+    setRefreshing(false);
+  }, [selectedAgentId]);
 
   /* ── rendering ─────────────────────────────────── */
 
@@ -319,6 +428,7 @@ export function TasksView() {
 
   const { columns, tasks } = data;
   const fileExists = data._fileExists !== false;
+  const isAllView = selectedAgentId === "";
   const totalTasks = tasks.length;
   const doneTasks = tasks.filter((t) => t.column === "done").length;
   const inProgress = tasks.filter((t) => t.column === "in-progress").length;
@@ -335,6 +445,7 @@ export function TasksView() {
         addingToColumn={addingToColumn}
         setAddingToColumn={setAddingToColumn}
         addTask={addTask}
+        boardAgentId={selectedAgentId || undefined}
       />
     );
   }
@@ -371,349 +482,459 @@ export function TasksView() {
               <span className="text-muted-foreground">Completion</span>
             </span>
           </div>
-          {saveStatus && (
-            <span
-              className={cn(
-                "text-xs",
-                saveStatus === "saving" ? "text-muted-foreground" : "text-emerald-500"
-              )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70 disabled:opacity-40"
+              title="Refresh board"
             >
-              {saveStatus === "saving" ? "Saving..." : "Saved"}
-            </span>
-          )}
+              <RefreshCw
+                className={cn("h-3.5 w-3.5", refreshing && "animate-spin")}
+              />
+            </button>
+            {agents.length > 0 && (
+              <select
+                value={selectedAgentId}
+                onChange={(e) => setSelectedAgentId(e.target.value)}
+                className="rounded-md border border-border bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              >
+                <option value="">🌐 All agents</option>
+                {agents.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.emoji} {a.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            {saveStatus && (
+              <span
+                className={cn(
+                  "text-xs",
+                  saveStatus === "saving"
+                    ? "text-muted-foreground"
+                    : "text-emerald-500",
+                )}
+              >
+                {saveStatus === "saving" ? "Saving..." : "Saved"}
+              </span>
+            )}
+          </div>
         </div>
         <p className="text-xs text-muted-foreground/60">
-          Source: workspace/kanban.json &bull; {totalTasks} tasks across{" "}
-          {columns.length} columns
-          <span className="ml-2 text-muted-foreground/40/60 italic select-none" title="You know it's true.">
-            &mdash; added because every dude on X is flexing their Kanban board, so <strong>maybe</strong> it&apos;s not BS after all
+          Source:{" "}
+          {isAllView
+            ? "All agent workspaces"
+            : `${agents.find((a) => a.id === selectedAgentId)?.name ?? selectedAgentId}/kanban.json`}{" "}
+          &bull; {totalTasks} tasks across {columns.length} columns
+          <span
+            className="ml-2 text-muted-foreground/40/60 italic select-none"
+            title="You know it's true."
+          >
+            &mdash; added because every dude on X is flexing their Kanban board,
+            so <strong>maybe</strong> it&apos;s not BS after all
           </span>
         </p>
       </div>
 
       {/* Kanban columns — horizontal scroll; columns fixed width; card content wraps vertically */}
-      <div className="flex-1 min-h-0 min-w-0 overflow-x-auto overflow-y-hidden px-4 md:px-6 pb-6">
-        <div className="flex flex-col md:flex-row md:flex-nowrap gap-4 md:gap-6 pb-2 md:pb-0 w-max md:w-max">
+      <div className="flex-1 min-h-0 min-w-0 overflow-x-auto md:overflow-y-hidden px-4 md:px-6 pb-6">
+        <div className="flex flex-col md:flex-row md:flex-nowrap md:h-full gap-4 md:gap-6 pb-2 md:pb-0 w-max md:w-max max-md:w-full">
           {columns.map((col) => {
-          const colTasks = tasks.filter((t) => t.column === col.id);
-          const isDragTarget = dragOverColumn === col.id && draggingTaskId !== null;
-          return (
-            <div
-              key={col.id}
-              className={cn(
-                "flex w-[280px] md:w-80 flex-shrink-0 flex-col min-w-0 overflow-hidden rounded-xl border border-foreground/5 bg-muted/30 py-3 px-3 transition-all",
-                isDragTarget && "bg-violet-500/10 border-violet-500/20 ring-1 ring-inset ring-violet-500/20"
-              )}
-              onDragOver={(e) => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-                if (dragOverColumn !== col.id) setDragOverColumn(col.id);
-              }}
-              onDragLeave={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                  setDragOverColumn(null);
-                }
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                const taskId = Number(e.dataTransfer.getData("text/plain"));
-                if (taskId && !isNaN(taskId)) {
-                  updateTask(taskId, { column: col.id });
-                }
-                setDraggingTaskId(null);
-                setDragOverColumn(null);
-              }}
-            >
-              <div className="mb-3 flex min-w-0 items-center gap-2 px-1">
-                <div
-                  className="h-3 w-3 shrink-0 rounded-full shadow-sm"
-                  style={{ backgroundColor: col.color }}
-                />
-                <h3 className="min-w-0 truncate text-sm font-semibold text-foreground/80">
-                  {col.title}
-                </h3>
-                <span
-                  className="rounded-full bg-foreground/10 px-2 py-0.5 text-xs font-medium text-muted-foreground"
-                  style={{ minWidth: "1.5rem", textAlign: "center" }}
-                >
-                  {colTasks.length}
-                </span>
-                <div className="flex-1" />
-                <button
-                  type="button"
-                  onClick={() =>
-                    setAddingToColumn(
-                      addingToColumn === col.id ? null : col.id
-                    )
-                  }
-                  className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70"
-                  title={`Add task to ${col.title}`}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                </button>
-              </div>
-
-              {/* Inline add form */}
-              {addingToColumn === col.id && (
-                <AddTaskInline
-                  column={col.id}
-                  agents={agents}
-                  onAdd={(task) => {
-                    addTask(task);
-                    setAddingToColumn(null);
-                  }}
-                  onAddAndRun={(task) => {
-                    if (!data) return;
-                    const maxId = data.tasks.reduce((m, t) => Math.max(m, t.id), 0);
-                    const newId = maxId + 1;
-                    addTask(task);
-                    setAddingToColumn(null);
-                    if (task.agentId) {
-                      // Dispatch after a short delay to ensure the task is saved
-                      setTimeout(() => dispatchTask(newId, task.agentId), 700);
-                    }
-                  }}
-                  onCancel={() => setAddingToColumn(null)}
-                />
-              )}
-
-              <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overflow-x-hidden min-w-0">
-                {colTasks.length === 0 && addingToColumn !== col.id ? (
-                  <div className={cn(
-                    "flex items-center justify-center rounded-lg border border-dashed py-8 text-xs transition-colors",
-                    isDragTarget
-                      ? "border-violet-500/30 text-violet-400/60 bg-violet-500/5"
-                      : "border-foreground/10 text-muted-foreground/60"
-                  )}>
-                    {isDragTarget ? "Drop here" : "No tasks"}
-                  </div>
-                ) : (
-                  colTasks.map((task) =>
-                    editingTask === task.id ? (
-                      <EditTaskInline
-                        key={task.id}
-                        task={task}
-                        columns={columns}
-                        agents={agents}
-                        onSave={(updates) => {
-                          updateTask(task.id, updates);
-                          setEditingTask(null);
-                        }}
-                        onCancel={() => setEditingTask(null)}
-                        onDelete={() => {
-                          deleteTask(task.id);
-                          setEditingTask(null);
-                        }}
-                      />
-                    ) : (
-                      <TaskCard
-                        key={task.id}
-                        task={task}
-                        columns={columns}
-                        agents={agents}
-                        onEdit={() => setEditingTask(task.id)}
-                        onMove={(dir) => moveTask(task.id, dir)}
-                        onDelete={() => deleteTask(task.id)}
-                        onOpenDetail={() => setDetailTaskId(task.id)}
-                        onAttachmentClick={(url) => setLightboxImage(url)}
-                        onDispatch={(agentId) => dispatchTask(task.id, agentId)}
-                        isDispatching={dispatchingTaskIds.has(task.id)}
-                        isDragging={draggingTaskId === task.id}
-                        onDragStart={() => setDraggingTaskId(task.id)}
-                        onDragEnd={() => { setDraggingTaskId(null); setDragOverColumn(null); }}
-                        isRenaming={renamingTaskId === task.id}
-                        onStartRename={() => setRenamingTaskId(task.id)}
-                        onRename={(title) => {
-                          if (title !== task.title) updateTask(task.id, { title });
-                          setRenamingTaskId(null);
-                        }}
-                      />
-                    )
-                  )
+            const colTasks = tasks.filter((t) => t.column === col.id);
+            const isDragTarget =
+              dragOverColumn === col.id && draggingTaskId !== null;
+            return (
+              <div
+                key={col.id}
+                className={cn(
+                  "flex max-md:w-full md:w-80 flex-shrink-0 flex-col min-w-0 overflow-hidden rounded-xl border border-foreground/5 bg-muted/30 py-3 px-3 transition-all md:h-full",
+                  isDragTarget &&
+                  "bg-violet-500/10 border-violet-500/20 ring-1 ring-inset ring-violet-500/20",
                 )}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dragOverColumn !== col.id) setDragOverColumn(col.id);
+                }}
+                onDragLeave={(e) => {
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setDragOverColumn(null);
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (!isAllView) {
+                    const taskId = Number(e.dataTransfer.getData("text/plain"));
+                    if (taskId && !isNaN(taskId)) {
+                      updateTask(taskId, { column: col.id });
+                    }
+                  }
+                  setDraggingTaskId(null);
+                  setDragOverColumn(null);
+                }}
+              >
+                <div className="mb-3 flex min-w-0 items-center gap-2 px-1">
+                  <div
+                    className="h-3 w-3 shrink-0 rounded-full shadow-sm"
+                    style={{ backgroundColor: col.color }}
+                  />
+                  <h3 className="min-w-0 truncate text-sm font-semibold text-foreground/80">
+                    {col.title}
+                  </h3>
+                  <span
+                    className="rounded-full bg-foreground/10 px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                    style={{ minWidth: "1.5rem", textAlign: "center" }}
+                  >
+                    {colTasks.length}
+                  </span>
+                  <div className="flex-1" />
+                  {!isAllView && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAddingToColumn(
+                          addingToColumn === col.id ? null : col.id,
+                        )
+                      }
+                      className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70"
+                      title={`Add task to ${col.title}`}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Inline add form */}
+                {addingToColumn === col.id && (
+                  <AddTaskInline
+                    column={col.id}
+                    agents={agents}
+                    onAdd={(task) => {
+                      addTask(task);
+                      setAddingToColumn(null);
+                    }}
+                    onAddAndRun={(task) => {
+                      if (!data) return;
+                      const maxId = data.tasks.reduce(
+                        (m, t) => Math.max(m, t.id),
+                        0,
+                      );
+                      const newId = maxId + 1;
+                      addTask(task);
+                      setAddingToColumn(null);
+                      if (task.agentId) {
+                        // Dispatch after a short delay to ensure the task is saved
+                        setTimeout(
+                          () => dispatchTask(newId, task.agentId),
+                          700,
+                        );
+                      }
+                    }}
+                    onCancel={() => setAddingToColumn(null)}
+                  />
+                )}
+
+                <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto overflow-x-hidden min-w-0">
+                  {colTasks.length === 0 && addingToColumn !== col.id ? (
+                    <div
+                      className={cn(
+                        "flex items-center justify-center rounded-lg border border-dashed py-8 text-xs transition-colors",
+                        isDragTarget
+                          ? "border-violet-500/30 text-violet-400/60 bg-violet-500/5"
+                          : "border-foreground/10 text-muted-foreground/60",
+                      )}
+                    >
+                      {isDragTarget ? "Drop here" : "No tasks"}
+                    </div>
+                  ) : (
+                    colTasks.map((task) =>
+                      !isAllView && editingTask === task.id ? (
+                        <EditTaskInline
+                          key={task.id}
+                          task={task}
+                          columns={columns}
+                          agents={agents}
+                          onSave={(updates) => {
+                            updateTask(task.id, updates);
+                            setEditingTask(null);
+                          }}
+                          onCancel={() => setEditingTask(null)}
+                          onDelete={() => {
+                            deleteTask(task.id);
+                            setEditingTask(null);
+                          }}
+                        />
+                      ) : (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          columns={columns}
+                          agents={agents}
+                          onEdit={() => setEditingTask(task.id)}
+                          onMove={(dir) => moveTask(task.id, dir)}
+                          onDelete={() => deleteTask(task.id)}
+                          onOpenDetail={() => setDetailTaskId(task.id)}
+                          onAttachmentClick={(url) => setLightboxImage(url)}
+                          onDispatch={(agentId) =>
+                            dispatchTask(task.id, agentId)
+                          }
+                          isDispatching={dispatchingTaskIds.has(task.id)}
+                          isDragging={draggingTaskId === task.id}
+                          onDragStart={() => setDraggingTaskId(task.id)}
+                          onDragEnd={() => {
+                            setDraggingTaskId(null);
+                            setDragOverColumn(null);
+                          }}
+                          isRenaming={renamingTaskId === task.id}
+                          onStartRename={() => setRenamingTaskId(task.id)}
+                          onRename={(title) => {
+                            if (title !== task.title)
+                              updateTask(task.id, { title });
+                            setRenamingTaskId(null);
+                          }}
+                          readOnly={isAllView}
+                        />
+                      ),
+                    )
+                  )}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
         </div>
       </div>
 
       {/* Task detail popup */}
-      {detailTaskId != null && data && (() => {
-        const task = data.tasks.find((t) => t.id === detailTaskId);
-        if (!task) return null;
-        const column = data.columns.find((c) => c.id === task.column);
-        const columnTitle = column?.title ?? task.column;
-        return (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-            onClick={() => setDetailTaskId(null)}
-          >
+      {detailTaskId != null &&
+        data &&
+        (() => {
+          const task = data.tasks.find((t) => t.id === detailTaskId);
+          if (!task) return null;
+          const column = data.columns.find((c) => c.id === task.column);
+          const columnTitle = column?.title ?? task.column;
+          return (
             <div
-              ref={detailFocusTrapRef}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Task details"
-              className="relative w-full max-w-md rounded-xl border border-foreground/10 bg-card shadow-xl"
-              onClick={(e) => e.stopPropagation()}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+              onClick={() => setDetailTaskId(null)}
             >
-              <div className="flex items-start justify-between gap-2 border-b border-foreground/10 px-4 py-3">
-                <h3 className="text-sm font-semibold text-foreground truncate pr-8">
-                  {task.title}
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setDetailTaskId(null)}
-                  className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                  aria-label="Close"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="px-4 py-3 space-y-3 text-sm">
-                {task.description && (
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70 mb-1">Description</p>
-                    <p className="text-foreground/90 whitespace-pre-wrap">{task.description}</p>
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-x-4 gap-y-1">
-                  <div>
-                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Priority</span>
-                    <p className={cn("font-medium capitalize", PRIORITY_TEXT[task.priority] || "text-muted-foreground")}>
-                      {task.priority}
-                    </p>
-                  </div>
-                  {task.agentId && (
+              <div
+                ref={detailFocusTrapRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Task details"
+                className="relative w-full max-w-md rounded-xl border border-foreground/10 bg-card shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-2 border-b border-foreground/10 px-4 py-3">
+                  <h3 className="text-sm font-semibold text-foreground truncate pr-8">
+                    {task.title}
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setDetailTaskId(null)}
+                    className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    aria-label="Close"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="px-4 py-3 space-y-3 text-sm">
+                  {task.description && (
                     <div>
-                      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Agent</span>
-                      <p className="text-foreground/90">
-                        {(() => {
-                          const ag = agents.find((a) => a.id === task.agentId);
-                          return ag ? `${ag.emoji} ${ag.name}` : task.agentId;
-                        })()}
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70 mb-1">
+                        Description
+                      </p>
+                      <p className="text-foreground/90 whitespace-pre-wrap">
+                        {task.description}
                       </p>
                     </div>
                   )}
-                  {task.assignee && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
                     <div>
-                      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Assignee</span>
-                      <p className="text-foreground/90">{task.assignee}</p>
+                      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                        Priority
+                      </span>
+                      <p
+                        className={cn(
+                          "font-medium capitalize",
+                          PRIORITY_TEXT[task.priority] ||
+                          "text-muted-foreground",
+                        )}
+                      >
+                        {task.priority}
+                      </p>
+                    </div>
+                    {task.agentId && (
+                      <div>
+                        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                          Agent
+                        </span>
+                        <p className="text-foreground/90">
+                          {(() => {
+                            const ag = agents.find(
+                              (a) => a.id === task.agentId,
+                            );
+                            return ag ? `${ag.emoji} ${ag.name}` : task.agentId;
+                          })()}
+                        </p>
+                      </div>
+                    )}
+                    {task.assignee && (
+                      <div>
+                        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                          Assignee
+                        </span>
+                        <p className="text-foreground/90">{task.assignee}</p>
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                        Status
+                      </span>
+                      <p className="text-foreground/90">{columnTitle}</p>
+                    </div>
+                    <div>
+                      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                        ID
+                      </span>
+                      <p className="text-muted-foreground font-mono text-xs">
+                        {task.id}
+                      </p>
+                    </div>
+                    {task.dispatchStatus && task.dispatchStatus !== "idle" && (
+                      <div>
+                        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                          Dispatch
+                        </span>
+                        <p
+                          className={cn(
+                            "font-medium capitalize",
+                            task.dispatchStatus === "running" &&
+                            "text-amber-400",
+                            task.dispatchStatus === "completed" &&
+                            "text-emerald-400",
+                            task.dispatchStatus === "failed" && "text-red-400",
+                          )}
+                        >
+                          {task.dispatchStatus}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                  {task.dispatchStatus === "failed" && task.dispatchError && (
+                    <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-2">
+                      <p className="text-xs text-red-400">
+                        {task.dispatchError}
+                      </p>
                     </div>
                   )}
-                  <div>
-                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Status</span>
-                    <p className="text-foreground/90">{columnTitle}</p>
-                  </div>
-                  <div>
-                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">ID</span>
-                    <p className="text-muted-foreground font-mono text-xs">{task.id}</p>
-                  </div>
-                  {task.dispatchStatus && task.dispatchStatus !== "idle" && (
+                  {(task as Task & Record<string, unknown>).completedAt !=
+                    null && (
+                      <div>
+                        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">
+                          Completed
+                        </span>
+                        <p className="text-foreground/90">
+                          {new Date(
+                            (task as Task & Record<string, unknown>)
+                              .completedAt as string | number,
+                          ).toLocaleString(
+                            undefined,
+                            withTimeFormat(
+                              {
+                                year: "numeric",
+                                month: "numeric",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                second: "2-digit",
+                              },
+                              timeFormat,
+                            ),
+                          )}
+                        </p>
+                      </div>
+                    )}
+                  {task.attachments && task.attachments.length > 0 && (
                     <div>
-                      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Dispatch</span>
-                      <p className={cn(
-                        "font-medium capitalize",
-                        task.dispatchStatus === "running" && "text-amber-400",
-                        task.dispatchStatus === "completed" && "text-emerald-400",
-                        task.dispatchStatus === "failed" && "text-red-400",
-                      )}>
-                        {task.dispatchStatus}
+                      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70 mb-2">
+                        Attachments
                       </p>
+                      <div className="flex flex-wrap gap-2">
+                        {task.attachments
+                          .filter(isImageAttachment)
+                          .map((path, i) => (
+                            <button
+                              key={`${path}-${i}`}
+                              type="button"
+                              onClick={() =>
+                                setLightboxImage(attachmentUrl(path))
+                              }
+                              aria-label={`View attachment ${i + 1}`}
+                              className="overflow-hidden rounded-lg border border-foreground/10 bg-muted/50 transition-opacity hover:opacity-90 focus:ring-2 focus:ring-violet-500/50"
+                            >
+                              <img
+                                src={attachmentUrl(path)}
+                                alt=""
+                                className="h-20 w-20 object-cover"
+                              />
+                            </button>
+                          ))}
+                        {task.attachments.filter((p) => !isImageAttachment(p))
+                          .length > 0 && (
+                            <span className="text-xs text-muted-foreground/70 self-center">
+                              +
+                              {
+                                task.attachments.filter(
+                                  (p) => !isImageAttachment(p),
+                                ).length
+                              }{" "}
+                              file(s)
+                            </span>
+                          )}
+                      </div>
                     </div>
                   )}
                 </div>
-                {task.dispatchStatus === "failed" && task.dispatchError && (
-                  <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-2">
-                    <p className="text-xs text-red-400">{task.dispatchError}</p>
-                  </div>
-                )}
-                {(task as Task & Record<string, unknown>).completedAt != null && (
-                  <div>
-                    <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70">Completed</span>
-                    <p className="text-foreground/90">
-                      {new Date((task as Task & Record<string, unknown>).completedAt as string | number).toLocaleString(
-                        undefined,
-                        withTimeFormat(
-                          {
-                            year: "numeric",
-                            month: "numeric",
-                            day: "numeric",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                            second: "2-digit",
-                          },
-                          timeFormat,
-                        ),
-                      )}
-                    </p>
-                  </div>
-                )}
-                {task.attachments && task.attachments.length > 0 && (
-                  <div>
-                    <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground/70 mb-2">Attachments</p>
-                    <div className="flex flex-wrap gap-2">
-                      {task.attachments.filter(isImageAttachment).map((path, i) => (
-                        <button
-                          key={`${path}-${i}`}
-                          type="button"
-                          onClick={() => setLightboxImage(attachmentUrl(path))}
-                          aria-label={`View attachment ${i + 1}`}
-                          className="overflow-hidden rounded-lg border border-foreground/10 bg-muted/50 transition-opacity hover:opacity-90 focus:ring-2 focus:ring-violet-500/50"
-                        >
-                          <img
-                            src={attachmentUrl(path)}
-                            alt=""
-                            className="h-20 w-20 object-cover"
-                          />
-                        </button>
-                      ))}
-                      {task.attachments.filter((p) => !isImageAttachment(p)).length > 0 && (
-                        <span className="text-xs text-muted-foreground/70 self-center">
-                          +{task.attachments.filter((p) => !isImageAttachment(p)).length} file(s)
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="flex justify-end gap-2 border-t border-foreground/10 px-4 py-2">
-                {task.agentId && task.dispatchStatus !== "running" && (
+                <div className="flex justify-end gap-2 border-t border-foreground/10 px-4 py-2">
+                  {task.agentId && task.dispatchStatus !== "running" && (
+                    <button
+                      type="button"
+                      disabled={dispatchingTaskIds.has(task.id)}
+                      onClick={() => {
+                        dispatchTask(task.id);
+                        setDetailTaskId(null);
+                      }}
+                      className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
+                    >
+                      <Play className="h-3 w-3" />
+                      {task.dispatchStatus === "failed" ? "Retry" : "Run"}
+                    </button>
+                  )}
                   <button
                     type="button"
-                    disabled={dispatchingTaskIds.has(task.id)}
                     onClick={() => {
-                      dispatchTask(task.id);
+                      setEditingTask(task.id);
                       setDetailTaskId(null);
                     }}
-                    className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 transition-colors disabled:opacity-40"
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                   >
-                    <Play className="h-3 w-3" />
-                    {task.dispatchStatus === "failed" ? "Retry" : "Run"}
+                    Edit
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingTask(task.id);
-                    setDetailTaskId(null);
-                  }}
-                  className="rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                >
-                  Edit
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDetailTaskId(null)}
-                  className="rounded-lg px-3 py-1.5 text-xs font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors"
-                >
-                  Close
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => setDetailTaskId(null)}
+                    className="rounded-lg px-3 py-1.5 text-xs font-medium bg-muted text-foreground hover:bg-muted/80 transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
 
       {/* Image lightbox */}
       {lightboxImage && (
@@ -768,6 +989,7 @@ function TaskCard({
   isRenaming,
   onStartRename,
   onRename,
+  readOnly,
 }: {
   task: Task;
   columns: Column[];
@@ -785,6 +1007,7 @@ function TaskCard({
   isRenaming: boolean;
   onStartRename: () => void;
   onRename: (title: string) => void;
+  readOnly?: boolean;
 }) {
   const colIdx = columns.findIndex((c) => c.id === task.column);
   const canLeft = colIdx > 0;
@@ -807,10 +1030,11 @@ function TaskCard({
       className={cn(
         "group min-w-0 rounded-xl border border-foreground/10 bg-card p-3.5 shadow-sm transition-all hover:border-foreground/15 hover:shadow-md",
         isDragging && "opacity-40 scale-95",
-        !isRenaming && "cursor-grab active:cursor-grabbing"
+        !isRenaming && !readOnly && "cursor-grab active:cursor-grabbing",
       )}
-      draggable={!isRenaming}
+      draggable={!isRenaming && !readOnly}
       onDragStart={(e) => {
+        if (readOnly) return;
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("text/plain", String(task.id));
         onDragStart();
@@ -827,11 +1051,13 @@ function TaskCard({
       }}
     >
       <div className="flex items-start gap-2">
-        <GripVertical className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground/20 transition-colors group-hover:text-muted-foreground/40" />
+        {!readOnly && (
+          <GripVertical className="mt-1 h-3.5 w-3.5 shrink-0 text-muted-foreground/20 transition-colors group-hover:text-muted-foreground/40" />
+        )}
         <div
           className={cn(
             "mt-1.5 h-2 w-2 shrink-0 rounded-full",
-            PRIORITY_COLORS[task.priority] || "bg-zinc-500"
+            PRIORITY_COLORS[task.priority] || "bg-zinc-500",
           )}
         />
         <div className="min-w-0 flex-1">
@@ -841,7 +1067,8 @@ function TaskCard({
               value={renameValue}
               onChange={(e) => setRenameValue(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") onRename(renameValue.trim() || task.title);
+                if (e.key === "Enter")
+                  onRename(renameValue.trim() || task.title);
                 if (e.key === "Escape") onRename(task.title);
               }}
               onBlur={() => onRename(renameValue.trim() || task.title)}
@@ -864,53 +1091,85 @@ function TaskCard({
               {task.description}
             </p>
           )}
-          {task.attachments && task.attachments.length > 0 && isImageAttachment(task.attachments[0]) && !isRenaming && (
-            <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
-              {task.attachments.filter(isImageAttachment).slice(0, 3).map((path, i) => (
-                <button
-                  key={`${path}-${i}`}
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onAttachmentClick?.(attachmentUrl(path));
-                  }}
-                  className="h-14 w-14 shrink-0 overflow-hidden rounded-md border border-foreground/10 bg-muted/50 object-cover transition-opacity hover:opacity-90 focus:ring-2 focus:ring-violet-500/40"
-                >
-                  <img
-                    src={attachmentUrl(path)}
-                    alt=""
-                    className="h-full w-full object-cover"
-                  />
-                </button>
-              ))}
-              {task.attachments.filter(isImageAttachment).length > 3 && (
-                <span className="flex h-14 shrink-0 items-center rounded-md bg-muted/50 px-2 text-xs text-muted-foreground">
-                  +{task.attachments.filter(isImageAttachment).length - 3}
-                </span>
-              )}
-            </div>
-          )}
+          {task.attachments &&
+            task.attachments.length > 0 &&
+            isImageAttachment(task.attachments[0]) &&
+            !isRenaming && (
+              <div className="mt-2 flex gap-1.5 overflow-x-auto pb-0.5">
+                {task.attachments
+                  .filter(isImageAttachment)
+                  .slice(0, 3)
+                  .map((path, i) => (
+                    <button
+                      key={`${path}-${i}`}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAttachmentClick?.(attachmentUrl(path));
+                      }}
+                      className="h-14 w-14 shrink-0 overflow-hidden rounded-md border border-foreground/10 bg-muted/50 object-cover transition-opacity hover:opacity-90 focus:ring-2 focus:ring-violet-500/40"
+                    >
+                      <img
+                        src={attachmentUrl(path)}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    </button>
+                  ))}
+                {task.attachments.filter(isImageAttachment).length > 3 && (
+                  <span className="flex h-14 shrink-0 items-center rounded-md bg-muted/50 px-2 text-xs text-muted-foreground">
+                    +{task.attachments.filter(isImageAttachment).length - 3}
+                  </span>
+                )}
+              </div>
+            )}
           <div className="mt-2 flex items-center gap-2 text-xs">
             <span
               className={cn(
                 "font-medium capitalize",
-                PRIORITY_TEXT[task.priority] || "text-muted-foreground"
+                PRIORITY_TEXT[task.priority] || "text-muted-foreground",
               )}
             >
               {task.priority}
             </span>
-            {task.agentId && (() => {
-              const ag = agents.find((a) => a.id === task.agentId);
-              return (
-                <>
-                  <span className="text-muted-foreground/40">&bull;</span>
-                  <span className="inline-flex items-center gap-1 text-muted-foreground" title={`Agent: ${task.agentId}`}>
-                    <span>{ag?.emoji || "🤖"}</span>
-                    <span className="truncate max-w-[80px]">{ag?.name || task.agentId}</span>
-                  </span>
-                </>
-              );
-            })()}
+            {readOnly &&
+              task._boardAgentId &&
+              (() => {
+                const ag = agents.find((a) => a.id === task._boardAgentId);
+                return (
+                  <>
+                    <span className="text-muted-foreground/40">&bull;</span>
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-muted/60 px-1.5 py-0.5 text-muted-foreground"
+                      title={`From: ${task._boardAgentId}`}
+                    >
+                      <span>{ag?.emoji || "🤖"}</span>
+                      <span className="truncate max-w-[80px]">
+                        {ag?.name || task._boardAgentId}
+                      </span>
+                    </span>
+                  </>
+                );
+              })()}
+            {!readOnly &&
+              task.agentId &&
+              (() => {
+                const ag = agents.find((a) => a.id === task.agentId);
+                return (
+                  <>
+                    <span className="text-muted-foreground/40">&bull;</span>
+                    <span
+                      className="inline-flex items-center gap-1 text-muted-foreground"
+                      title={`Agent: ${task.agentId}`}
+                    >
+                      <span>{ag?.emoji || "🤖"}</span>
+                      <span className="truncate max-w-[80px]">
+                        {ag?.name || task.agentId}
+                      </span>
+                    </span>
+                  </>
+                );
+              })()}
             {task.assignee && !task.agentId && (
               <>
                 <span className="text-muted-foreground/40">&bull;</span>
@@ -929,7 +1188,10 @@ function TaskCard({
             {task.dispatchStatus === "failed" && (
               <>
                 <span className="text-muted-foreground/40">&bull;</span>
-                <span className="inline-flex items-center gap-1 text-red-400" title={task.dispatchError || "Failed"}>
+                <span
+                  className="inline-flex items-center gap-1 text-red-400"
+                  title={task.dispatchError || "Failed"}
+                >
                   <AlertCircle className="h-3 w-3" />
                   Failed
                 </span>
@@ -948,58 +1210,68 @@ function TaskCard({
         </div>
       </div>
 
-      {/* Action bar -- visible on hover */}
-      <div
-        className="mt-2 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <button
-          type="button"
-          disabled={!canLeft}
-          onClick={() => onMove("left")}
-          className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70 disabled:opacity-30"
-          title="Move left"
+      {/* Action bar -- visible on hover, hidden in read-only (all agents) view */}
+      {!readOnly && (
+        <div
+          className="mt-2 flex items-center gap-1.5 opacity-0 transition-opacity group-hover:opacity-100"
+          onClick={(e) => e.stopPropagation()}
         >
-          <ChevronLeft className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          disabled={!canRight}
-          onClick={() => onMove("right")}
-          className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70 disabled:opacity-30"
-          title="Move right"
-        >
-          <ChevronRight className="h-3.5 w-3.5" />
-        </button>
-        <div className="flex-1" />
-        {task.agentId && task.dispatchStatus !== "running" && (
           <button
             type="button"
-            disabled={isDispatching}
-            onClick={() => onDispatch?.()}
-            className="rounded p-1 text-emerald-400/60 transition-colors hover:bg-emerald-500/20 hover:text-emerald-400 disabled:opacity-40"
-            title={task.dispatchStatus === "failed" ? "Retry dispatch" : "Run with agent"}
+            disabled={!canLeft}
+            onClick={() => onMove("left")}
+            className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70 disabled:opacity-30"
+            title="Move left"
           >
-            {isDispatching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+            <ChevronLeft className="h-3.5 w-3.5" />
           </button>
-        )}
-        <button
-          type="button"
-          onClick={onEdit}
-          className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70"
-          title="Edit"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-red-500/20 hover:text-red-400"
-          title="Delete"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
-      </div>
+          <button
+            type="button"
+            disabled={!canRight}
+            onClick={() => onMove("right")}
+            className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70 disabled:opacity-30"
+            title="Move right"
+          >
+            <ChevronRight className="h-3.5 w-3.5" />
+          </button>
+          <div className="flex-1" />
+          {task.agentId && task.dispatchStatus !== "running" && (
+            <button
+              type="button"
+              disabled={isDispatching}
+              onClick={() => onDispatch?.()}
+              className="rounded p-1 text-emerald-400/60 transition-colors hover:bg-emerald-500/20 hover:text-emerald-400 disabled:opacity-40"
+              title={
+                task.dispatchStatus === "failed"
+                  ? "Retry dispatch"
+                  : "Run with agent"
+              }
+            >
+              {isDispatching ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Play className="h-3.5 w-3.5" />
+              )}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onEdit}
+            className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground/70"
+            title="Edit"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            className="rounded p-1 text-muted-foreground/60 transition-colors hover:bg-red-500/20 hover:text-red-400"
+            title="Delete"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1141,6 +1413,7 @@ function BoardOnboarding({
   addingToColumn,
   setAddingToColumn,
   addTask,
+  boardAgentId,
 }: {
   fileExists: boolean;
   columns: Column[];
@@ -1148,6 +1421,7 @@ function BoardOnboarding({
   addingToColumn: string | null;
   setAddingToColumn: (col: string | null) => void;
   addTask: (task: Omit<Task, "id">) => void;
+  boardAgentId?: string;
 }) {
   const [initializing, setInitializing] = useState(false);
   const [initStep, setInitStep] = useState(0); // 0=idle, 1=creating board, 2=teaching agent, 3=done
@@ -1174,7 +1448,10 @@ function BoardOnboarding({
       const res = await fetch("/api/tasks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "init" }),
+        body: JSON.stringify({
+          action: "init",
+          boardAgentId: boardAgentId || undefined,
+        }),
       });
 
       if (!res.ok) throw new Error("Failed to initialize");
@@ -1189,7 +1466,7 @@ function BoardOnboarding({
       setInitializing(false);
       setInitStep(0);
     }
-  }, [onBoardCreated]);
+  }, [onBoardCreated, boardAgentId]);
 
   // --- Initializing animation ---
   if (initializing) {
@@ -1243,7 +1520,7 @@ function BoardOnboarding({
     return (
       <div className="flex flex-1 flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto">
-            <div className="mx-auto max-w-xl px-4 md:px-6 py-12">
+          <div className="mx-auto max-w-xl px-4 md:px-6 py-12">
             {/* Hero */}
             <div className="text-center">
               <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-violet-500/10">
@@ -1253,8 +1530,8 @@ function BoardOnboarding({
                 Task Board
               </h1>
               <p className="mx-auto mt-3 max-w-md text-xs leading-relaxed text-muted-foreground">
-                A Kanban board that both you and your agents can manage.
-                Add tasks here or just ask your agent &mdash; it all stays in sync.
+                A Kanban board that both you and your agents can manage. Add
+                tasks here or just ask your agent &mdash; it all stays in sync.
               </p>
             </div>
 
@@ -1314,11 +1591,15 @@ function BoardOnboarding({
                 Set Up Task Board
               </button>
               <p className="max-w-xs text-center text-xs leading-relaxed text-muted-foreground/60">
-                Creates <code className="rounded bg-foreground/5 px-1 text-xs">kanban.json</code>
-                {" "}&amp;{" "}
-                <code className="rounded bg-foreground/5 px-1 text-xs">TASKS.md</code>
-                {" "}in your workspace.{" "}
-                One click, zero config.
+                Creates{" "}
+                <code className="rounded bg-foreground/5 px-1 text-xs">
+                  kanban.json
+                </code>{" "}
+                &amp;{" "}
+                <code className="rounded bg-foreground/5 px-1 text-xs">
+                  TASKS.md
+                </code>{" "}
+                in your workspace. One click, zero config.
               </p>
             </div>
 
@@ -1328,7 +1609,11 @@ function BoardOnboarding({
                 Or create the file yourself
               </p>
               <p className="mb-3 text-xs leading-relaxed text-muted-foreground/80">
-                Save as <code className="rounded bg-foreground/5 px-1 text-xs">kanban.json</code> in your workspace and paste:
+                Save as{" "}
+                <code className="rounded bg-foreground/5 px-1 text-xs">
+                  kanban.json
+                </code>{" "}
+                in your workspace and paste:
               </p>
               <div className="relative">
                 <pre className="overflow-x-auto rounded-lg border border-foreground/10 bg-foreground/5 px-4 py-3.5 pr-12 text-left text-[11px] leading-snug text-foreground/90">
@@ -1373,7 +1658,8 @@ function BoardOnboarding({
               Board is clear
             </h1>
             <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">
-              All tasks done! Add a new one or ask your agent to add tasks for you.
+              All tasks done! Add a new one or ask your agent to add tasks for
+              you.
             </p>
           </div>
 
@@ -1394,7 +1680,10 @@ function BoardOnboarding({
           {addingToColumn && (
             <div className="mx-auto mt-6 max-w-sm">
               <p className="mb-2 text-xs font-medium text-muted-foreground">
-                Adding to: <span className="text-violet-400 capitalize">{addingToColumn}</span>
+                Adding to:{" "}
+                <span className="text-violet-400 capitalize">
+                  {addingToColumn}
+                </span>
               </p>
               <AddTaskInline
                 column={addingToColumn}
@@ -1433,7 +1722,9 @@ function FeatureRow({
       </div>
       <div className="min-w-0">
         <p className="text-sm font-medium text-foreground/90">{title}</p>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{desc}</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+          {desc}
+        </p>
       </div>
     </div>
   );
@@ -1462,7 +1753,7 @@ function StepIndicator({
         "flex items-center gap-3 rounded-lg px-4 py-2.5 transition-all duration-300",
         isDone && "bg-emerald-500/5",
         isActive && "bg-violet-500/5",
-        isPending && "opacity-40"
+        isPending && "opacity-40",
       )}
     >
       <div className="flex h-6 w-6 shrink-0 items-center justify-center">
@@ -1482,7 +1773,11 @@ function StepIndicator({
         <p
           className={cn(
             "text-sm font-medium",
-            isDone ? "text-emerald-300" : isActive ? "text-foreground/90" : "text-muted-foreground"
+            isDone
+              ? "text-emerald-300"
+              : isActive
+                ? "text-foreground/90"
+                : "text-muted-foreground",
           )}
         >
           {label}
