@@ -11,7 +11,7 @@ import {
 import { join, extname, basename, resolve } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
-import { getDefaultWorkspaceSync, getOpenClawBin } from "@/lib/paths";
+import { getDefaultWorkspaceSync } from "@/lib/paths";
 import { runCliJson } from "@/lib/openclaw";
 import { gatewayMemoryIndex } from "@/lib/gateway-tools";
 import { fetchConfig, extractAgentsList } from "@/lib/gateway-config";
@@ -391,29 +391,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Try gateway tool first; fall back to CLI if the tool isn't registered
-    // (memory_index is a CLI-only operation in most gateway versions — see #25).
-    try {
-      await gatewayMemoryIndex({
-        agent: agentId || undefined,
-        force: force || undefined,
-      });
-    } catch (gwErr) {
-      const is404 = gwErr instanceof Error && gwErr.message.includes("(404)");
-      if (!is404) throw gwErr;
-
-      const bin = await getOpenClawBin();
-      // `openclaw memory index` supports --agent and --verbose only (no --force).
-      // For force-reindex, use `memory status --deep --index` which reindexes dirty stores.
-      const args = force
-        ? ["memory", "status", "--deep", "--index"]
-        : ["memory", "index"];
-      if (agentId) args.push("--agent", agentId);
-      await exec(bin, args, {
-        timeout: 60000,
-        env: { ...process.env, NO_COLOR: "1" },
-      });
-    }
+    await gatewayMemoryIndex({
+      agent: agentId || undefined,
+      force: force || undefined,
+    });
 
     let vectorState: VectorState | undefined;
     if (file) {

@@ -91,10 +91,8 @@ export async function GET(request: NextRequest) {
         qrTimer = setTimeout(flushQr, QR_DEBOUNCE_MS);
       });
 
-      let stderrBuffer = "";
       proc.stderr?.on("data", (chunk: Buffer) => {
         const text = chunk.toString().trim();
-        stderrBuffer += text + "\n";
         if (text) send({ type: "log", data: text });
       });
 
@@ -106,20 +104,13 @@ export async function GET(request: NextRequest) {
         }
         flushQr();
 
-        let exitMessage: string;
-        if (code === 0) {
-          exitMessage = "Login successful";
-        } else if (code === null) {
-          exitMessage = "Login session timed out. Please try again.";
-        } else {
-          // Try to extract a meaningful message from stderr
-          const lastLine = stderrBuffer.trim().split("\n").pop()?.trim();
-          exitMessage = lastLine && lastLine.length > 5
-            ? lastLine
-            : "Login did not complete. Please close and try again.";
-        }
-
-        send({ type: "done", data: exitMessage });
+        send({
+          type: "done",
+          data:
+            code === 0
+              ? "Login successful"
+              : `Process exited with code ${code}`,
+        });
 
         if (!closed) {
           closed = true;

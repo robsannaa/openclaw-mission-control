@@ -4,8 +4,21 @@ import { getDefaultWorkspace } from "@/lib/paths";
 import { getClient } from "@/lib/openclaw-client";
 import { gatewayCall } from "@/lib/openclaw";
 import { notifyKanbanUpdated } from "@/lib/kanban-live";
+import { fetchConfig, extractAgentsList } from "@/lib/gateway-config";
 
-async function getKanbanPath(): Promise<string> {
+async function getKanbanPath(boardAgentId?: string | null): Promise<string> {
+  if (boardAgentId) {
+    try {
+      const config = await fetchConfig();
+      const agents = extractAgentsList(config);
+      const agent = agents.find((a) => a.id === boardAgentId);
+      if (agent?.workspace) {
+        return join(agent.workspace, "kanban.json");
+      }
+    } catch {
+      // Fall through to default workspace
+    }
+  }
   const ws = await getDefaultWorkspace();
   return join(ws, "kanban.json");
 }
@@ -33,6 +46,8 @@ type KanbanTask = {
   dispatchedAt?: number;
   completedAt?: number;
   dispatchError?: string;
+  createdAt?: number;
+  updatedAt?: number;
 };
 
 type KanbanData = {
@@ -40,24 +55,80 @@ type KanbanData = {
   tasks: KanbanTask[];
 };
 
-async function readKanban(): Promise<KanbanData> {
+async function readKanban(boardAgentId?: string | null): Promise<KanbanData> {
   const client = await getClient();
-  const kanbanPath = await getKanbanPath();
+  const kanbanPath = await getKanbanPath(boardAgentId);
   const raw = await client.readFile(kanbanPath);
   return JSON.parse(raw) as KanbanData;
 }
 
-async function writeKanban(data: KanbanData): Promise<void> {
+async function writeKanban(data: KanbanData, boardAgentId?: string | null): Promise<void> {
   const client = await getClient();
-  const kanbanPath = await getKanbanPath();
+  const kanbanPath = await getKanbanPath(boardAgentId);
   await client.writeFile(kanbanPath, JSON.stringify(data, null, 2));
 }
 
 /* ── GET — read existing board ────────────────────── */
 
-export async function GET() {
+async function readAllKanbans(): Promise<KanbanData> {
+  const config = await fetchConfig();
+  const agents = extractAgentsList(config);
+  const client = await getClient();
+
+  const results = await Promise.allSettled(
+    agents.map(async (agent, idx) => {
+      if (!agent.workspace || !agent.id) return null;
+      const path = join(agent.workspace, "kanban.json");
+      const raw = await client.readFile(path);
+      const data = JSON.parse(raw) as KanbanData;
+      if (!Array.isArray(data?.tasks)) return null;
+      const tasks = data.tasks.map((t) => ({
+        ...t,
+        id: idx * 1_000_000 + t.id,
+        _boardAgentId: agent.id,
+      }));
+      return { tasks, columns: data.columns ?? [] };
+    })
+  );
+
+  type BoardResult = { tasks: (KanbanTask & { _boardAgentId: string })[]; columns: KanbanData["columns"] };
+  const fulfilled = results.filter(
+    (r): r is PromiseFulfilledResult<BoardResult> =>
+      r.status === "fulfilled" && r.value !== null
+  );
+
+  const allTasks = fulfilled.flatMap((r) => r.value.tasks);
+
+  // Merge columns: deduplicate by id, preserve first-appearance order
+  const seenColIds = new Set<string>();
+  const mergedColumns: KanbanData["columns"] = [];
+  for (const { columns } of fulfilled.map((r) => r.value)) {
+    for (const col of columns) {
+      if (!seenColIds.has(col.id)) {
+        seenColIds.add(col.id);
+        mergedColumns.push(col);
+      }
+    }
+  }
+
+  return {
+    columns: mergedColumns.length > 0 ? mergedColumns : DEFAULT_COLUMNS,
+    tasks: allTasks,
+  };
+}
+
+export async function GET(request: NextRequest) {
+  const boardAgentId = request.nextUrl.searchParams.get("agentId") || null;
+  if (!boardAgentId) {
+    try {
+      const data = await readAllKanbans();
+      return NextResponse.json({ ...data, _fileExists: true, _allAgents: true });
+    } catch {
+      return NextResponse.json({ columns: DEFAULT_COLUMNS, tasks: [], _fileExists: false, _allAgents: true });
+    }
+  }
   try {
-    const data = await readKanban();
+    const data = await readKanban(boardAgentId);
     return NextResponse.json({ ...data, _fileExists: true });
   } catch {
     // Return empty kanban if file doesn't exist
@@ -81,9 +152,9 @@ export async function PUT(request: NextRequest) {
       );
     }
     // Strip internal fields before saving
-    const { _fileExists: _, ...saveData } = body;
+    const { _fileExists: _, boardAgentId, ...saveData } = body;
     void _;
-    await writeKanban(saveData as KanbanData);
+    await writeKanban(saveData as KanbanData, boardAgentId as string | null);
     notifyKanbanUpdated();
     return NextResponse.json({ ok: true });
   } catch (err) {
@@ -115,8 +186,8 @@ export async function POST(request: NextRequest) {
 
 /* ── dispatch handler ─────────────────────────────── */
 
-async function handleDispatch(body: { taskId: number; agentId?: string }) {
-  const { taskId } = body;
+async function handleDispatch(body: { taskId: number; agentId?: string; boardAgentId?: string }) {
+  const { taskId, boardAgentId } = body;
   if (!taskId) {
     return NextResponse.json({ error: "taskId is required" }, { status: 400 });
   }
@@ -124,7 +195,7 @@ async function handleDispatch(body: { taskId: number; agentId?: string }) {
   // 1. Read kanban, find task, validate
   let data: KanbanData;
   try {
-    data = await readKanban();
+    data = await readKanban(boardAgentId);
   } catch {
     return NextResponse.json({ error: "Could not read kanban.json" }, { status: 500 });
   }
@@ -186,7 +257,7 @@ async function handleDispatch(body: { taskId: number; agentId?: string }) {
     task.dispatchError = err instanceof Error ? err.message : String(err);
     data.tasks[taskIdx] = task;
     try {
-      await writeKanban(data);
+      await writeKanban(data, boardAgentId);
       notifyKanbanUpdated();
     } catch { /* best-effort save */ }
     return NextResponse.json(
@@ -200,7 +271,7 @@ async function handleDispatch(body: { taskId: number; agentId?: string }) {
   data.tasks[taskIdx] = task;
 
   // 4. Write updated kanban and notify
-  await writeKanban(data);
+  await writeKanban(data, boardAgentId);
   notifyKanbanUpdated();
 
   // 5. Background: wait for agent completion (up to 5 min)
@@ -216,7 +287,7 @@ async function handleDispatch(body: { taskId: number; agentId?: string }) {
       // Success — re-read kanban (may have been modified during execution)
       let freshData: KanbanData;
       try {
-        freshData = await readKanban();
+        freshData = await readKanban(boardAgentId);
       } catch {
         return;
       }
@@ -229,13 +300,13 @@ async function handleDispatch(body: { taskId: number; agentId?: string }) {
         dispatchStatus: "completed",
         completedAt: Date.now(),
       };
-      await writeKanban(freshData);
+      await writeKanban(freshData, boardAgentId);
       notifyKanbanUpdated();
     } catch (err) {
       // Failure — mark as failed
       let freshData: KanbanData;
       try {
-        freshData = await readKanban();
+        freshData = await readKanban(boardAgentId);
       } catch {
         return;
       }
@@ -247,7 +318,7 @@ async function handleDispatch(body: { taskId: number; agentId?: string }) {
         dispatchStatus: "failed",
         dispatchError: err instanceof Error ? err.message : String(err),
       };
-      await writeKanban(freshData);
+      await writeKanban(freshData, boardAgentId);
       notifyKanbanUpdated();
     }
   })();
@@ -257,11 +328,10 @@ async function handleDispatch(body: { taskId: number; agentId?: string }) {
 
 /* ── init handler ─────────────────────────────────── */
 
-async function handleInit(body: { starterTasks?: KanbanTask[] }) {
+async function handleInit(body: { starterTasks?: KanbanTask[]; boardAgentId?: string }) {
   const client = await getClient();
-  const ws = await getDefaultWorkspace();
-  const kanbanPath = join(ws, "kanban.json");
-  const tasksMemoryPath = join(ws, "TASKS.md");
+  const kanbanPath = await getKanbanPath(body.boardAgentId);
+  const tasksMemoryPath = join(dirname(kanbanPath), "TASKS.md");
 
   // Ensure workspace directory exists via mkdir through exec
   try {
@@ -273,9 +343,10 @@ async function handleInit(body: { starterTasks?: KanbanTask[] }) {
 
   // ── 1. Create kanban.json with smart starter tasks ──
 
+  const now = Date.now();
   const starterBoard: KanbanData = {
     columns: DEFAULT_COLUMNS,
-    tasks: body.starterTasks || [
+    tasks: (body.starterTasks || [
       {
         id: 1,
         title: "Explore the Dashboard",
@@ -300,7 +371,7 @@ async function handleInit(body: { starterTasks?: KanbanTask[] }) {
         column: "backlog",
         priority: "low",
       },
-    ],
+    ]).map((t) => ({ ...t, createdAt: now, updatedAt: now })),
   };
 
   await client.writeFile(

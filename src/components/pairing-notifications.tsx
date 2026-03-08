@@ -276,14 +276,9 @@ export function PairingNotifications() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /* ── Fetch ─────────── */
-  const abortRef = useRef<AbortController | null>(null);
-
   const fetchData = useCallback(async () => {
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
     try {
-      const res = await fetch("/api/pairing", { signal: controller.signal });
+      const res = await fetch("/api/pairing");
       const d = (await res.json()) as PairingData;
       setData(d);
 
@@ -293,11 +288,11 @@ export function PairingNotifications() {
       }
       prevCountRef.current = d.total;
     } catch {
-      // silent (includes abort)
+      // silent
     }
   }, []);
 
-  // Initial fetch + poll every 5s
+  // Initial fetch + poll every 15s
   useEffect(() => {
     fetchData();
     pollRef.current = setInterval(() => {
@@ -306,7 +301,6 @@ export function PairingNotifications() {
       }
     }, 5000);
     return () => {
-      abortRef.current?.abort();
       if (pollRef.current) clearInterval(pollRef.current);
     };
   }, [fetchData]);

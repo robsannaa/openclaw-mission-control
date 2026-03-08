@@ -761,34 +761,27 @@ function ChannelCard({
   pairingCount,
   onConnect,
   onDisconnect,
-  onDelete,
 }: {
   channel: Channel;
   pairingCount: number;
   onConnect: () => void;
   onDisconnect: () => void;
-  onDelete: () => void;
 }) {
   const channelId =
     channel.id in CHANNEL_META ? (channel.id as ChannelId) : null;
   const meta = channelId ? CHANNEL_META[channelId] : null;
-  const [confirmAction, setConfirmAction] = useState<"disconnect" | "delete" | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  function startConfirm(action: "disconnect" | "delete") {
-    if (confirmTimer.current) clearTimeout(confirmTimer.current);
-    setConfirmAction(action);
-    confirmTimer.current = setTimeout(() => setConfirmAction(null), 3000);
-  }
-
   async function handleDisconnect() {
-    if (confirmAction !== "disconnect") {
-      startConfirm("disconnect");
+    if (!confirming) {
+      setConfirming(true);
+      confirmTimer.current = setTimeout(() => setConfirming(false), 3000);
       return;
     }
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
-    setBusy(true);
+    setDisconnecting(true);
     try {
       await fetch("/api/channels", {
         method: "POST",
@@ -797,28 +790,8 @@ function ChannelCard({
       });
       onDisconnect();
     } finally {
-      setBusy(false);
-      setConfirmAction(null);
-    }
-  }
-
-  async function handleDelete() {
-    if (confirmAction !== "delete") {
-      startConfirm("delete");
-      return;
-    }
-    if (confirmTimer.current) clearTimeout(confirmTimer.current);
-    setBusy(true);
-    try {
-      await fetch("/api/channels", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "delete", channel: channel.id }),
-      });
-      onDelete();
-    } finally {
-      setBusy(false);
-      setConfirmAction(null);
+      setDisconnecting(false);
+      setConfirming(false);
     }
   }
 
@@ -859,46 +832,29 @@ function ChannelCard({
         </div>
 
         {/* Actions */}
-        {channel.configured ? (
+        {channel.connected ? (
           <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-            {channel.connected && (
-              <button
-                type="button"
-                title={confirmAction === "disconnect" ? "Click again to confirm" : "Disconnect"}
-                onClick={() => void handleDisconnect()}
-                disabled={busy}
-                className={cn(
-                  "flex h-7 items-center justify-center rounded-lg px-2 text-xs transition-all",
-                  confirmAction === "disconnect"
-                    ? "bg-amber-500/15 text-amber-400 opacity-100 ring-1 ring-amber-500/30"
-                    : "text-[#7a8591] hover:bg-[#20252a] hover:text-[#a8b0ba]"
-                )}
-              >
-                {busy && confirmAction === "disconnect" ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : confirmAction === "disconnect" ? (
-                  "Confirm?"
-                ) : (
-                  <WifiOff className="h-3.5 w-3.5" />
-                )}
-              </button>
-            )}
             <button
               type="button"
-              title={confirmAction === "delete" ? "Click again to delete permanently" : "Delete channel"}
-              onClick={() => void handleDelete()}
-              disabled={busy}
+              title="Settings"
+              className="flex h-7 w-7 items-center justify-center rounded-lg text-[#7a8591] transition-colors hover:bg-[#20252a] hover:text-[#a8b0ba]"
+            >
+              <Settings className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              title={confirming ? "Click again to confirm disconnect" : "Disconnect"}
+              onClick={() => void handleDisconnect()}
+              disabled={disconnecting}
               className={cn(
-                "flex h-7 items-center justify-center rounded-lg px-2 text-xs transition-all",
-                confirmAction === "delete"
+                "flex h-7 w-7 items-center justify-center rounded-lg transition-all",
+                confirming
                   ? "bg-red-500/15 text-red-400 opacity-100 ring-1 ring-red-500/30"
                   : "text-[#7a8591] hover:bg-red-500/10 hover:text-red-400"
               )}
             >
-              {busy && confirmAction === "delete" ? (
+              {disconnecting ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : confirmAction === "delete" ? (
-                "Delete?"
               ) : (
                 <Trash2 className="h-3.5 w-3.5" />
               )}
@@ -958,44 +914,18 @@ export function ChannelsView() {
   const [approvingCode, setApprovingCode] = useState<string | null>(null);
   const [recentlyConnected, setRecentlyConnected] = useState<string | null>(null);
 
-  // Track whether the gateway is restarting (post-connect/disconnect) to stabilise status
-  const stabilising = useRef(false);
-
   const fetchChannels = useCallback(async () => {
     try {
       const res = await fetch("/api/channels");
       if (!res.ok) throw new Error("Failed to load channels");
       const data: { channels: Channel[] } = await res.json();
-      const incoming = data.channels ?? [];
-
-      // Status stabilisation: during gateway restart, a channel that was
-      // previously connected may briefly report disconnected. Preserve the
-      // previous connected status until the gateway settles.
-      if (stabilising.current) {
-        setChannels((prev) => {
-          if (prev.length === 0) return incoming;
-          return incoming.map((ch) => {
-            const old = prev.find((p) => p.id === ch.id);
-            if (old?.connected && !ch.connected) {
-              // Keep showing "connected" during restart flicker
-              return { ...ch, connected: true };
-            }
-            return ch;
-          });
-        });
-      } else {
-        setChannels(incoming);
-      }
+      setChannels(data.channels ?? []);
       setFetchError(null);
     } catch (e) {
-      // Only show error if we have no cached data (stale-while-revalidate)
-      if (channels.length === 0) {
-        setFetchError(e instanceof Error ? e.message : "Failed to load channels");
-      }
+      setFetchError(e instanceof Error ? e.message : "Failed to load channels");
     } finally {
       setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchPairing = useCallback(async () => {
@@ -1031,32 +961,8 @@ export function ChannelsView() {
     }
   }
 
-  /** Poll the health endpoint until the gateway has restarted, then refresh channels. */
-  async function waitForGateway(channelId?: string, maxWaitMs = 12000) {
-    stabilising.current = true;
-    const start = Date.now();
-    const delays = [500, 1000, 1500, 2000, 2500, 3000];
-    for (const delay of delays) {
-      if (Date.now() - start > maxWaitMs) break;
-      await new Promise((r) => setTimeout(r, delay));
-      try {
-        const url = channelId
-          ? `/api/channels/health?channel=${channelId}`
-          : `/api/channels/health`;
-        const res = await fetch(url);
-        if (res.ok) {
-          const data = await res.json();
-          if (!channelId || data.channelReady) break;
-        }
-      } catch { /* gateway still restarting */ }
-    }
-    stabilising.current = false;
-  }
-
-  async function handleConnected(channelId: string) {
+  function handleConnected(channelId: string) {
     setRecentlyConnected(channelId);
-    // Wait for gateway to restart before fetching fresh status (prevents flicker)
-    await waitForGateway(channelId);
     void fetchChannels();
     void fetchPairing();
     setTimeout(() => setRecentlyConnected(null), 5000);
@@ -1181,14 +1087,7 @@ export function ChannelsView() {
                       channel={ch}
                       pairingCount={getPairingCount(ch.id)}
                       onConnect={() => setShowWizard(true)}
-                      onDisconnect={async () => {
-                        await waitForGateway();
-                        void fetchChannels();
-                      }}
-                      onDelete={async () => {
-                        await waitForGateway();
-                        void fetchChannels();
-                      }}
+                      onDisconnect={() => void fetchChannels()}
                     />
                   ))}
                 </div>

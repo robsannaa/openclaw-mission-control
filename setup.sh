@@ -87,6 +87,11 @@ if [[ ! "$PORT" =~ ^[0-9]+$ ]]; then
   exit 1
 fi
 
+if [[ ! "$HOST" =~ ^[a-zA-Z0-9._:-]+$ ]]; then
+  echo "Invalid host: ${HOST}" >&2
+  exit 1
+fi
+
 cd "$ROOT_DIR"
 
 check_lightningcss() {
@@ -135,6 +140,7 @@ install_launchd_service() {
   local plist_dir="$HOME/Library/LaunchAgents"
   local plist_path="${plist_dir}/com.openclaw.dashboard.plist"
   mkdir -p "$plist_dir"
+  install -m 600 /dev/null "$plist_path"
 
   local run_cmd
   if [[ "$DEV_MODE" -eq 1 ]]; then
@@ -170,8 +176,8 @@ install_launchd_service() {
 </plist>
 EOF
 
-  launchctl unload "$plist_path" >/dev/null 2>&1 || true
-  launchctl load -w "$plist_path"
+  launchctl bootout "gui/$(id -u)/com.openclaw.dashboard" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$plist_path"
 }
 
 install_systemd_user_service() {
@@ -179,6 +185,7 @@ install_systemd_user_service() {
   local service_dir="$HOME/.config/systemd/user"
   local service_path="${service_dir}/${SERVICE_NAME}.service"
   mkdir -p "$service_dir"
+  install -m 600 /dev/null "$service_path"
 
   local exec_line
   if [[ "$DEV_MODE" -eq 1 ]]; then
@@ -212,13 +219,25 @@ EOF
 start_with_nohup() {
   log "Starting without service manager (nohup fallback)..."
   mkdir -p "${ROOT_DIR}/.run"
+
+  local pid_file="${ROOT_DIR}/.run/dashboard.pid"
+  if [[ -f "$pid_file" ]]; then
+    local old_pid
+    old_pid=$(<"$pid_file")
+    if kill -0 "$old_pid" 2>/dev/null; then
+      warn "Dashboard already running (PID ${old_pid}). Stop it first or remove ${pid_file}."
+      exit 1
+    fi
+  fi
+
   local log_path="${ROOT_DIR}/.run/dashboard.out.log"
+  install -m 600 /dev/null "$log_path"
   if [[ "$DEV_MODE" -eq 1 ]]; then
     nohup npm run dev -- -H "$HOST" -p "$PORT" >"$log_path" 2>&1 &
   else
     nohup npm run start -- -H "$HOST" -p "$PORT" >"$log_path" 2>&1 &
   fi
-  echo $! > "${ROOT_DIR}/.run/dashboard.pid"
+  echo $! > "$pid_file"
 }
 
 if [[ "$NO_SERVICE" -eq 1 ]]; then

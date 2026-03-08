@@ -15,13 +15,17 @@ import {
   Send,
   User,
   RefreshCw,
+  ChevronDown,
   Cpu,
+  Circle,
   Trash2,
   Paperclip,
   X,
   KeyRound,
   ArrowRight,
+  Plus,
 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { TypingDots } from "@/components/typing-dots";
@@ -56,9 +60,9 @@ type ChatBootstrapResponse = {
 
 /* ── Agent display helpers ──────────────────────── */
 
-/** Show a friendly display name: use agent name, but if it's just the raw ID, show model instead */
+/** Show a friendly display name: capitalize the agent name */
 function agentDisplayName(agent: Agent): string {
-  if (agent.name && agent.name !== agent.id) return agent.name;
+  if (agent.name) return agent.name.charAt(0).toUpperCase() + agent.name.slice(1);
   return formatModel(agent.model);
 }
 
@@ -262,6 +266,9 @@ function ChatPanel({
   modelsLoaded,
   isPostOnboarding,
   onClearPostOnboarding,
+  overrideSessionKey,
+  overrideHistory,
+  loadingHistory,
 }: {
   agentId: string;
   agentName: string;
@@ -274,6 +281,9 @@ function ChatPanel({
   modelsLoaded: boolean;
   isPostOnboarding: boolean;
   onClearPostOnboarding: () => void;
+  overrideSessionKey?: string | null;
+  overrideHistory?: Array<{ role: string; text: string }> | null;
+  loadingHistory?: boolean;
 }) {
   const timeFormat = useSyncExternalStore(
     subscribeTimeFormatPreference,
@@ -281,9 +291,10 @@ function ChatPanel({
     getTimeFormatServerSnapshot,
   );
   const [inputValue, setInputValue] = useState("");
-  const chatSessionKeyRef = useRef(
-    typeof window === "undefined" ? "" : createChatSessionKey(agentId)
-  );
+  const [chatSessionKey, setChatSessionKey] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return createChatSessionKey(agentId);
+  });
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -291,18 +302,36 @@ function ChatPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const prevMsgCountRef = useRef(0);
 
+  // When parent selects a different session, switch to it
+  useEffect(() => {
+    if (!overrideSessionKey) return;
+    setChatSessionKey(overrideSessionKey);
+    setMessages([]);
+  }, [overrideSessionKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When parent loads history for the selected session, populate messages
+  useEffect(() => {
+    if (!overrideHistory) return;
+    const mapped = overrideHistory.map((entry, i) => ({
+      id: `history-${i}`,
+      role: entry.role as "user" | "assistant",
+      parts: [{ type: "text" as const, text: entry.text }],
+    }));
+    setMessages(mapped);
+  }, [overrideHistory]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const addFiles = useCallback((files: FileList | File[]) => {
     const list = Array.isArray(files) ? files : Array.from(files);
     if (list.length) setAttachedFiles((prev) => [...prev, ...list]);
   }, []);
 
   const ensureChatSessionKey = useCallback(() => {
-    const existing = chatSessionKeyRef.current.trim();
+    const existing = chatSessionKey.trim();
     if (existing) return existing;
     const next = createChatSessionKey(agentId);
-    chatSessionKeyRef.current = next;
+    setChatSessionKey(next);
     return next;
-  }, [agentId]);
+  }, [agentId, chatSessionKey]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -409,17 +438,7 @@ function ChatPanel({
         ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
         .map((p) => p.text)
         .join("") || "";
-    const retryFiles =
-      lastUser.parts
-        ?.filter(
-          (p): p is { type: "file"; mediaType: string; filename?: string; url: string } =>
-            p.type === "file" && "url" in p
-        ) || [];
-    if (!retryText && retryFiles.length === 0) return;
-    void sendWithActiveModel({
-      text: retryText,
-      ...(retryFiles.length > 0 ? { files: retryFiles } : {}),
-    });
+    if (retryText) void sendWithActiveModel({ text: retryText });
   }, [messages, sendWithActiveModel]);
 
   const handleSend = useCallback(async () => {
@@ -446,7 +465,7 @@ function ChatPanel({
   const clearChat = useCallback(() => {
     setMessages([]);
     prevMsgCountRef.current = 0;
-    chatSessionKeyRef.current = createChatSessionKey(agentId);
+    setChatSessionKey(createChatSessionKey(agentId));
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [agentId, setMessages]);
 
@@ -479,7 +498,11 @@ function ChatPanel({
     >
       {/* ── Messages area ───────────────────────── */}
       <div className="flex-1 overflow-y-auto">
-        {messages.length === 0 ? (
+        {loadingHistory && isSelected ? (
+          <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
+            Loading history...
+          </div>
+        ) : messages.length === 0 ? (
           noApiKeys ? (
             /* ── No models — redirect to /models ── */
             <div className="flex h-full items-center justify-center px-4 md:px-6">
@@ -911,21 +934,55 @@ function ChatPanel({
 
 /* ── Main chat view with agent selector ────────── */
 
+function formatAge(ms: number): string {
+  const secs = Math.floor(ms / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+}
+
+function formatTokens(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}K`;
+  return `${(n / 1_000_000).toFixed(2)}M`;
+}
+
 const isHosted = process.env.NEXT_PUBLIC_AGENTBAY_HOSTED === "true";
 
 export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [agents, setAgents] = useState<Agent[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<string>("main");
-  const selectedAgentRef = useRef(selectedAgent);
-  selectedAgentRef.current = selectedAgent;
+  const [selectedAgent, setSelectedAgent] = useState<string>(
+    searchParams.get("agent") || "main"
+  );
   const [agentsLoading, setAgentsLoading] = useState(true);
   const [availableModels, setAvailableModels] = useState<Array<{ key: string; name: string }>>([]);
   const [connectedProviders, setConnectedProviders] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
   const [providerDropdownOpen, setProviderDropdownOpen] = useState(false);
+  const [agentDropdownOpen, setAgentDropdownOpen] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const [allSessions, setAllSessions] = useState<Array<{
+    key: string;
+    agentId: string | null;
+    updatedAt: number;
+    ageMs: number;
+    totalTokens: number;
+  }>>([]);
   const providerDropdownRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [sessionDropdownOpen, setSessionDropdownOpen] = useState(false);
+  const sessionDropdownRef = useRef<HTMLDivElement>(null);
+  const [selectedSessionKeys, setSelectedSessionKeys] = useState<Map<string, string>>(new Map());
+  const [sessionHistories, setSessionHistories] = useState<Map<string, Array<{ role: string; text: string }>>>(new Map());
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  // Capture initial ?session= URL param at mount so we can restore it after sessions load
+  const initialSessionKeyRef = useRef(searchParams.get("session"));
 
   // ── Warm-up state: friendly loading for new users ──
   const [warmupExpired, setWarmupExpired] = useState(false);
@@ -979,16 +1036,34 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
           setSelectedProvider(match?.id || providers[0]?.id || null);
         }
         bootstrapLoadedRef.current = true;
-        if (
-          agentList.length > 0 &&
-          !agentList.find((a: Agent) => a.id === selectedAgentRef.current)
-        ) {
-          setSelectedAgent(agentList[0].id);
+        // Resolve the actual agent ID — may differ from selectedAgent if the URL value isn't valid
+        const resolvedAgentId =
+          agentList.length > 0 && !agentList.find((a: Agent) => a.id === selectedAgent)
+            ? agentList[0].id
+            : selectedAgent;
+        if (resolvedAgentId !== selectedAgent && agentList.length > 0) {
+          setSelectedAgent(resolvedAgentId);
           setMountedAgents((prev) => {
             const next = new Set(prev);
-            next.add(agentList[0].id);
+            next.add(resolvedAgentId);
             return next;
           });
+        }
+        // Restore session from URL on first load only
+        const initSession = initialSessionKeyRef.current;
+        if (initSession) {
+          initialSessionKeyRef.current = null;
+          void (async () => {
+            setSelectedSessionKeys((prev) => new Map(prev).set(resolvedAgentId, initSession));
+            setLoadingHistory(true);
+            try {
+              const r = await fetch(`/api/chat/history?sessionKey=${encodeURIComponent(initSession)}`, { cache: "no-store" });
+              const d = await r.json();
+              setSessionHistories((prev) => new Map(prev).set(initSession, d.messages || []));
+            } catch { /* ignore */ } finally {
+              setLoadingHistory(false);
+            }
+          })();
         }
         // Only mark models as "loaded" if we actually found models,
         // or if warm-up is over. Prevents flash of "No model configured"
@@ -1003,7 +1078,34 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
         setAgentsLoading(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [warmupExpired]);
+  }, [selectedAgent, warmupExpired]);
+
+  const fetchSessions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sessions", { cache: "no-store" });
+      if (!res.ok) return;
+      const data = await res.json();
+      const raw: Array<{
+        key: string;
+        updatedAt?: number | null;
+        ageMs?: number | null;
+        totalTokens?: number | null;
+      }> = data.sessions || [];
+      setAllSessions(
+        raw.map((s) => {
+          const parts = s.key.split(":");
+          const agentId = s.key.startsWith("agent:") && parts[1] ? parts[1] : null;
+          return {
+            key: s.key,
+            agentId,
+            updatedAt: Number(s.updatedAt ?? 0),
+            ageMs: Number(s.ageMs ?? 0),
+            totalTokens: Number(s.totalTokens ?? 0),
+          };
+        })
+      );
+    } catch { /* ignore */ }
+  }, []);
 
   useEffect(() => {
     mountedAtRef.current = Date.now();
@@ -1031,6 +1133,14 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
   }, [fetchBootstrap, isVisible, warmingUp]);
 
   useEffect(() => {
+    if (isVisible) void fetchSessions();
+    const id = setInterval(() => {
+      if (isVisible && document.visibilityState === "visible") void fetchSessions();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [fetchSessions, isVisible]);
+
+  useEffect(() => {
     if (!isVisible) return;
     const tick = () => {
       if (document.visibilityState === "visible") {
@@ -1042,6 +1152,24 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
     return () => clearInterval(id);
   }, [isVisible]);
 
+  // When user selects an agent, ensure it's in the mounted set
+  const selectAgent = useCallback((agentId: string) => {
+    setSelectedAgent(agentId);
+    setMountedAgents((prev) => {
+      const next = new Set(prev);
+      next.add(agentId);
+      return next;
+    });
+    setAgentDropdownOpen(false);
+    // Clear unread for this agent since user is looking at it
+    clearUnread(agentId);
+    // Sync URL
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("agent", agentId);
+    params.delete("session");
+    router.replace(`/chat?${params.toString()}`);
+  }, [router, searchParams]);
+
   // Mark chat as active when visible
   useEffect(() => {
     setChatActive(isVisible);
@@ -1049,35 +1177,228 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
 
   // Close dropdowns on click outside
   useEffect(() => {
-    if (!providerDropdownOpen) return;
+    if (!agentDropdownOpen && !sessionDropdownOpen && !providerDropdownOpen) return;
     const handleClick = (e: MouseEvent) => {
+      if (agentDropdownOpen && dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setAgentDropdownOpen(false);
+      }
+      if (sessionDropdownOpen && sessionDropdownRef.current && !sessionDropdownRef.current.contains(e.target as Node)) {
+        setSessionDropdownOpen(false);
+      }
       if (providerDropdownOpen && providerDropdownRef.current && !providerDropdownRef.current.contains(e.target as Node)) {
         setProviderDropdownOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [providerDropdownOpen]);
+  }, [agentDropdownOpen, sessionDropdownOpen, providerDropdownOpen]);
 
   const currentAgent = useMemo(
     () => agents.find((a) => a.id === selectedAgent),
     [agents, selectedAgent]
   );
 
+  const agentSessions = useMemo(
+    () => allSessions.filter((s) => s.agentId === selectedAgent),
+    [allSessions, selectedAgent]
+  );
+
+  const activeSessionKey = selectedSessionKeys.get(selectedAgent) ?? null;
+
+  const selectSession = useCallback(
+    async (sessionKey: string) => {
+      setSelectedSessionKeys((prev) => new Map(prev).set(selectedAgent, sessionKey));
+      setSessionDropdownOpen(false);
+      setLoadingHistory(true);
+      // Sync URL
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("agent", selectedAgent);
+      params.set("session", sessionKey);
+      router.replace(`/chat?${params.toString()}`);
+      const controller = new AbortController();
+      try {
+        const res = await fetch(
+          `/api/chat/history?sessionKey=${encodeURIComponent(sessionKey)}`,
+          { cache: "no-store", signal: controller.signal }
+        );
+        const data = await res.json();
+        setSessionHistories((prev) => new Map(prev).set(sessionKey, data.messages || []));
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") { /* ignore */ }
+      } finally {
+        setLoadingHistory(false);
+      }
+    },
+    [selectedAgent, router, searchParams]
+  );
+
+  const startNewSession = useCallback(() => {
+    setSelectedSessionKeys((prev) => {
+      const next = new Map(prev);
+      next.delete(selectedAgent);
+      return next;
+    });
+    // Sync URL
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("session");
+    router.replace(`/chat?${params.toString()}`);
+  }, [selectedAgent, router, searchParams]);
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      {/* ── Top bar ─────────────── */}
-      <div className="shrink-0 border-b border-stone-200 bg-stone-50 px-4 py-3 md:px-6 dark:border-stone-700 dark:bg-stone-900">
-        <div className="flex items-center gap-2.5">
-          <span className="text-sm">{currentAgent?.emoji || "🤖"}</span>
-          <span className="text-sm font-medium text-stone-700 dark:text-stone-200">
-            {currentAgent ? agentDisplayName(currentAgent) : "Agent"}
-          </span>
-          {currentAgent?.model && currentAgent.model !== "unknown" && (
-            <span className="text-xs text-muted-foreground">
-              {formatModel(currentAgent.model)}
-            </span>
-          )}
+      {/* ── Top bar: agent selector ─────────────── */}
+      <div className="shrink-0 border-b border-stone-200 bg-stone-50 px-4 py-4 md:px-6 dark:border-stone-700 dark:bg-stone-900">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            {/* Agent dropdown */}
+            <div className="relative" ref={dropdownRef}>
+              <button
+                type="button"
+                onClick={() => setAgentDropdownOpen(!agentDropdownOpen)}
+                className={cn(
+                  "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                  "border-stone-200 bg-white text-stone-700 hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
+                )}
+              >
+                <span className="text-xs">
+                  {currentAgent?.emoji || "🤖"}
+                </span>
+                <span className="font-medium">
+                  {currentAgent ? agentDisplayName(currentAgent) : selectedAgent}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 text-stone-400 dark:text-stone-500" />
+              </button>
+
+              {agentDropdownOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 min-w-60 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 shadow-xl dark:border-stone-700 dark:bg-stone-800">
+                  {agentsLoading ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      {warmingUp ? "Starting up..." : "Loading agents..."}
+                    </div>
+                  ) : agents.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">
+                      No agents available
+                    </div>
+                  ) : (
+                    agents.map((agent) => (
+                      <button
+                        key={agent.id}
+                        type="button"
+                        onClick={() => selectAgent(agent.id)}
+                        className={cn(
+                          "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
+                          agent.id === selectedAgent
+                            ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                            : "text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
+                        )}
+                      >
+                        <span className="text-xs">
+                          {agent.emoji || "🤖"}
+                        </span>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium">
+                              {agentDisplayName(agent)}
+                            </span>
+                            {agent.lastActive &&
+                              now - agent.lastActive < 300000 && (
+                                <Circle className="h-2 w-2 fill-emerald-400 text-emerald-400" />
+                              )}
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {formatModel(agent.model)}
+                            {agent.sessionCount > 0 && (
+                              <> &bull; {agent.sessionCount} chat{agent.sessionCount !== 1 ? "s" : ""}</>
+                            )}
+                          </span>
+                        </div>
+                        {agent.id === selectedAgent && (
+                          <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                            active
+                          </span>
+                        )}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Session dropdown */}
+            <div className="relative" ref={sessionDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setSessionDropdownOpen(!sessionDropdownOpen)}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors",
+                  "border-stone-200 bg-white text-stone-700 hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-200 dark:hover:bg-stone-700"
+                )}
+              >
+                <span className="text-xs text-muted-foreground">
+                  {activeSessionKey
+                    ? formatAge(
+                        agentSessions.find((s) => s.key === activeSessionKey)?.ageMs ?? 0
+                      ) + " ago"
+                    : "Current session"}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 text-stone-400 dark:text-stone-500" />
+              </button>
+
+              {sessionDropdownOpen && (
+                <div className="absolute left-0 top-full z-50 mt-1 min-w-56 overflow-hidden rounded-xl border border-stone-200 bg-white py-1 shadow-xl dark:border-stone-700 dark:bg-stone-800">
+                  {agentSessions.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">No sessions yet</div>
+                  ) : (
+                    agentSessions.map((session) => {
+                      const isActive = session.key === activeSessionKey || (!activeSessionKey && session.key === agentSessions[0]?.key);
+                      const isRecent = session.updatedAt > 0 && Date.now() - session.updatedAt < 300_000;
+                      return (
+                        <button
+                          key={session.key}
+                          type="button"
+                          onClick={() => selectSession(session.key)}
+                          className={cn(
+                            "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors",
+                            isActive
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                              : "text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
+                          )}
+                        >
+                          {isRecent && (
+                            <Circle className="h-2 w-2 shrink-0 fill-emerald-400 text-emerald-400" />
+                          )}
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-medium">
+                              {session.ageMs > 0 ? formatAge(session.ageMs) + " ago" : "Just now"}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {formatTokens(session.totalTokens)} tokens
+                            </div>
+                          </div>
+                          {isActive && (
+                            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                              current
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* New session button */}
+            <button
+              type="button"
+              onClick={startNewSession}
+              title="Start new session"
+              className="flex items-center gap-1.5 rounded-lg border border-stone-200 bg-white px-2.5 py-2 text-xs font-medium text-stone-600 transition-colors hover:bg-stone-100 hover:text-stone-900 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:bg-stone-700 dark:hover:text-stone-100"
+            >
+              <Plus className="h-3.5 w-3.5" /> New
+            </button>
+
+          </div>
         </div>
       </div>
 
@@ -1178,6 +1499,13 @@ export function ChatView({ isVisible = true }: { isVisible?: boolean }) {
               modelsLoaded={modelsLoaded}
               isPostOnboarding={isPostOnboarding}
               onClearPostOnboarding={clearPostOnboarding}
+              overrideSessionKey={selectedSessionKeys.get(agentId) ?? null}
+              overrideHistory={
+                selectedSessionKeys.has(agentId)
+                  ? (sessionHistories.get(selectedSessionKeys.get(agentId)!) ?? null)
+                  : null
+              }
+              loadingHistory={loadingHistory && agentId === selectedAgent}
             />
           );
         })
