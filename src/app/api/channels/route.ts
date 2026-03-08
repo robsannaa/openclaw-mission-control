@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { gatewayCall, runCli } from "@/lib/openclaw";
-import { patchConfig, sanitizeConfigFile } from "@/lib/gateway-config";
+import { gatewayCall } from "@/lib/openclaw";
+import { patchConfig } from "@/lib/gateway-config";
 import { getOpenClawHome } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
@@ -182,35 +182,23 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ ok: true, message: "WhatsApp enabled. Use QR login to link your phone." });
         }
 
-        // Use the CLI `channels add` — it writes config to disk directly
-        // without needing the gateway RPC. This avoids the
-        // config.patch → gateway-self-restart → poll-until-alive dance
-        // that caused timeout errors during onboarding.
-        //
-        // Strip any leaked RPC keys (raw, baseHash, restartDelayMs) from
-        // the config first — some gateway versions accidentally persist
-        // these, which causes the CLI's config validator to reject the file.
-        await sanitizeConfigFile().catch(() => {});
-        await runCli(
-          ["channels", "add", "--channel", channel, "--token", token],
-          15000,
-        );
-
-        // The CLI defaults groupPolicy to "allowlist" with an empty
-        // allowFrom list which silently drops all group messages.
-        // Patch the policies to sensible defaults for onboarding.
-        try {
-          await patchConfig({
+        // Write channel config directly via patchConfig rather than
+        // shelling out to `openclaw channels add`, which may not recognise
+        // newer channel names on older CLI builds.
+        const tokenKey = channel === "telegram" ? "botToken" : "token";
+        await patchConfig(
+          {
             channels: {
               [channel]: {
+                enabled: true,
+                [tokenKey]: token,
                 dmPolicy: (body.dmPolicy as string) || "pairing",
                 groupPolicy: (body.groupPolicy as string) || "mention",
               },
             },
-          });
-        } catch {
-          // non-fatal — policies can be adjusted later from the dashboard
-        }
+          },
+          { restartDelayMs: 2000 },
+        );
 
         return NextResponse.json({ ok: true, message: `${channel} connected.` });
       }
