@@ -310,6 +310,10 @@ function gatewayUnavailableResponse(): Response {
   );
 }
 
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 // ── Main handler ────────────────────────────────────
 
 export async function POST(req: Request) {
@@ -333,21 +337,31 @@ export async function POST(req: Request) {
     triggerResponsesEndpointSetup();
     await waitForResponsesEndpoint();
 
-    // Try streaming via OpenResponses API first
-    const streamingRes = await tryStreamingResponse(
-      openResponsesInput,
-      agentId,
-      sessionKey,
-    );
-    if (streamingRes) return streamingRes;
+    const tryGatewayChatOnce = async (): Promise<Response | null> => {
+      // Try streaming via OpenResponses API first
+      const streamingRes = await tryStreamingResponse(
+        openResponsesInput,
+        agentId,
+        sessionKey,
+      );
+      if (streamingRes) return streamingRes;
 
-    // Try a non-streaming OpenResponses request before spawning the CLI.
-    const textRes = await nonStreamingResponse(
-      openResponsesInput,
-      agentId,
-      sessionKey,
-    );
-    if (textRes) return textRes;
+      // Try a non-streaming OpenResponses request.
+      return nonStreamingResponse(
+        openResponsesInput,
+        agentId,
+        sessionKey,
+      );
+    };
+
+    // First attempt.
+    let response = await tryGatewayChatOnce();
+    if (response) return response;
+
+    // Gateway can briefly flap during restarts. Retry once before surfacing an error.
+    await delay(1200);
+    response = await tryGatewayChatOnce();
+    if (response) return response;
 
     return gatewayUnavailableResponse();
   } catch (err) {

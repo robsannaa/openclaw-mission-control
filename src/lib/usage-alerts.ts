@@ -229,23 +229,29 @@ export async function listUsageAlertRules(): Promise<UsageAlertRuleRecord[]> {
   }>(
     "SELECT * FROM alert_rules ORDER BY created_at_ms DESC;",
   );
-  return rows.map((row) => ({
-    id: String(row.id || ""),
-    kind: (row.kind || "token-usage") as UsageAlertKind,
-    scopeType: (row.scope_type || "global") as UsageAlertScopeType,
-    scopeValue: row.scope_value == null ? null : String(row.scope_value),
-    timeline: (row.timeline || "last24h") as UsageAlertTimeline,
-    thresholdType: "gte",
-    thresholdValue: Number(row.threshold_value || 0),
-    deliveryMode: String(row.delivery_mode || "none"),
-    deliveryChannel: row.delivery_channel == null ? null : String(row.delivery_channel),
-    deliveryTo: row.delivery_to == null ? null : String(row.delivery_to),
-    bestEffort: toBool(row.best_effort),
-    enabled: toBool(row.enabled),
-    cooldownWindowKey: row.cooldown_window_key == null ? null : String(row.cooldown_window_key),
-    createdAt: Number(row.created_at_ms || 0),
-    updatedAt: Number(row.updated_at_ms || 0),
-  }));
+  return rows
+    .map((row) => {
+      const id = String(row.id || "").trim();
+      if (!id) return null;
+      return {
+        id,
+        kind: (row.kind || "token-usage") as UsageAlertKind,
+        scopeType: (row.scope_type || "global") as UsageAlertScopeType,
+        scopeValue: row.scope_value == null ? null : String(row.scope_value),
+        timeline: (row.timeline || "last24h") as UsageAlertTimeline,
+        thresholdType: "gte" as const,
+        thresholdValue: Number(row.threshold_value || 0),
+        deliveryMode: String(row.delivery_mode || "none"),
+        deliveryChannel: row.delivery_channel == null ? null : String(row.delivery_channel),
+        deliveryTo: row.delivery_to == null ? null : String(row.delivery_to),
+        bestEffort: toBool(row.best_effort),
+        enabled: toBool(row.enabled),
+        cooldownWindowKey: row.cooldown_window_key == null ? null : String(row.cooldown_window_key),
+        createdAt: Number(row.created_at_ms || 0),
+        updatedAt: Number(row.updated_at_ms || 0),
+      };
+    })
+    .filter((rule): rule is UsageAlertRuleRecord => rule !== null);
 }
 
 export async function createUsageAlertRule(input: UsageAlertCreateInput): Promise<UsageAlertRuleRecord> {
@@ -476,16 +482,23 @@ export async function listRecentAlertFirings(limit = 20): Promise<UsageAlertFiri
   }>(
     `SELECT * FROM alert_firings ORDER BY fired_at_ms DESC LIMIT ${Math.max(1, Math.min(limit, 100))};`,
   );
-  return rows.map((row) => ({
-    id: String(row.id || ""),
-    ruleId: String(row.rule_id || ""),
-    windowKey: String(row.window_key || ""),
-    observedValue: Number(row.observed_value || 0),
-    message: String(row.message || ""),
-    firedAt: Number(row.fired_at_ms || 0),
-    deliveryStatus: (row.delivery_status || "pending") as "pending" | "sent" | "failed",
-    deliveryError: row.delivery_error == null ? null : String(row.delivery_error),
-  }));
+  return rows
+    .map((row) => {
+      const id = String(row.id || "").trim();
+      const ruleId = String(row.rule_id || "").trim();
+      if (!id || !ruleId) return null;
+      return {
+        id,
+        ruleId,
+        windowKey: String(row.window_key || ""),
+        observedValue: Number(row.observed_value || 0),
+        message: String(row.message || ""),
+        firedAt: Number(row.fired_at_ms || 0),
+        deliveryStatus: (row.delivery_status || "pending") as "pending" | "sent" | "failed",
+        deliveryError: row.delivery_error == null ? null : String(row.delivery_error),
+      };
+    })
+    .filter((firing): firing is UsageAlertFiringRecord => firing !== null);
 }
 
 export async function pollPendingAlertFirings(limit = 20): Promise<UsageAlertFiringRecord[]> {
@@ -501,14 +514,17 @@ export async function pollPendingAlertFirings(limit = 20): Promise<UsageAlertFir
   }>(
     `SELECT * FROM alert_firings WHERE delivery_status = 'pending' ORDER BY fired_at_ms ASC LIMIT ${Math.max(1, Math.min(limit, 50))};`,
   );
-  if (pending.length === 0) return [];
-  const ids = pending.map((row) => sqliteValue(String(row.id || ""))).join(", ");
+  const validPending = pending.filter(
+    (row) => String(row.id || "").trim().length > 0 && String(row.rule_id || "").trim().length > 0,
+  );
+  if (validPending.length === 0) return [];
+  const ids = validPending.map((row) => sqliteValue(String(row.id || "").trim())).join(", ");
   await usageDbTransaction([
     `UPDATE alert_firings SET delivery_status = 'sent' WHERE id IN (${ids});`,
   ]);
-  return pending.map((row) => ({
-    id: String(row.id || ""),
-    ruleId: String(row.rule_id || ""),
+  return validPending.map((row) => ({
+    id: String(row.id || "").trim(),
+    ruleId: String(row.rule_id || "").trim(),
     windowKey: String(row.window_key || ""),
     observedValue: Number(row.observed_value || 0),
     message: String(row.message || ""),

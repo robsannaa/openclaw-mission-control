@@ -359,9 +359,10 @@ function getDeliveryNote(
 function isReadyChannel(channel: ChannelInfo): boolean {
   if (channel.setupType === "auto") return true;
   if (!channel.enabled && !channel.configured) return false;
+  const statuses = Array.isArray(channel.statuses) ? channel.statuses : [];
   if (channel.enabled) {
-    if (channel.statuses.some((status) => status.connected || status.linked)) return true;
-    if (channel.statuses.some((status) => status.error)) return false;
+    if (statuses.some((status) => status.connected || status.linked)) return true;
+    if (statuses.some((status) => status.error)) return false;
   }
   return channel.configured || channel.enabled;
 }
@@ -1068,8 +1069,8 @@ function EditCronForm({
                 className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none disabled:opacity-40"
               >
                 <option value="last">Last route</option>
-                {readyChannels.map((ch) => (
-                  <option key={ch.channel} value={ch.channel}>
+                {readyChannels.map((ch, index) => (
+                  <option key={`${ch.channel}:${ch.label}:${index}`} value={ch.channel}>
                     {ch.label || ch.channel}
                   </option>
                 ))}
@@ -1925,8 +1926,8 @@ function CreateCronForm({
                   className="w-full rounded-lg border border-foreground/10 bg-muted/80 px-3 py-2 text-xs text-foreground/90 outline-none disabled:opacity-40"
                 >
                   <option value="last">Last route</option>
-                  {readyChannels.map((ch) => (
-                    <option key={ch.channel} value={ch.channel}>
+                  {readyChannels.map((ch, index) => (
+                    <option key={`${ch.channel}:${ch.label}:${index}`} value={ch.channel}>
                       {ch.label || ch.channel}
                     </option>
                   ))}

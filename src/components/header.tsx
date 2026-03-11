@@ -70,9 +70,9 @@ function ChatBubble({ msg, timeFormat }: { msg: ChatMessage; timeFormat: TimeFor
   if (msg.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-md rounded-2xl rounded-tr-sm bg-primary/90 text-primary-foreground px-3.5 py-2 text-xs leading-relaxed shadow-sm">
+        <div className="max-w-md rounded-2xl rounded-tr-sm border border-primary/30 bg-primary text-primary-foreground px-3.5 py-2 text-xs leading-relaxed shadow-sm dark:border-violet-400/40 dark:bg-violet-500 dark:text-white">
           <p className="whitespace-pre-wrap break-words">{msg.text}</p>
-          <p className="mt-1 text-right text-xs text-white/40">{formatTime(msg.timestamp, timeFormat)}</p>
+          <p className="mt-1 text-right text-xs text-white/70 dark:text-white/75">{formatTime(msg.timestamp, timeFormat)}</p>
         </div>
       </div>
     );

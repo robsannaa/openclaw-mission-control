@@ -145,6 +145,48 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function parseRetryAfterSeconds(message: string): number | null {
+  const match = message.match(/retry after\s+(\d+(?:\.\d+)?)s/i);
+  if (!match) return null;
+  const seconds = Number(match[1]);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return Math.ceil(seconds);
+}
+
+function formatErrorMessage(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err || "");
+  const retryAfterSeconds = parseRetryAfterSeconds(raw);
+  if (retryAfterSeconds) {
+    return `Gateway is busy right now. Please retry in about ${retryAfterSeconds}s.`;
+  }
+
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("gateway closed") ||
+    lower.includes("1006") ||
+    lower.includes("econnrefused") ||
+    lower.includes("socket hang up") ||
+    lower.includes("timed out")
+  ) {
+    return "Connection to OpenClaw Gateway was interrupted. It usually recovers in a few seconds.";
+  }
+
+  const gatewayCallMatch = raw.match(/Gateway call failed:\s*Error:\s*([^\n]+)/i);
+  if (gatewayCallMatch?.[1]) return gatewayCallMatch[1].trim();
+
+  const gatewayWakeMatch = raw.match(/Gateway wake failed \(\d+\):\s*([^\n]+)/i);
+  if (gatewayWakeMatch?.[1]) return gatewayWakeMatch[1].trim();
+
+  const lines = raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .filter((line) => !line.startsWith("Error: Command failed:"));
+  if (lines.length > 0) return lines[0].replace(/^Error:\s*/i, "");
+
+  return "Something went wrong while saving heartbeat settings.";
+}
+
 function parseModelRows(payload: unknown): RawModelRow[] {
   const rows = isRecord(payload) && Array.isArray(payload.models) ? payload.models : [];
   return rows
@@ -929,8 +971,9 @@ export function HeartbeatManager() {
       setData(payload);
       hydrateEditors(payload);
     } catch (err) {
-      flash(String(err), "error");
-      setHeartbeatWarning(err instanceof Error ? err.message : String(err));
+      const prettyError = formatErrorMessage(err);
+      flash(prettyError, "error");
+      setHeartbeatWarning(prettyError);
       setHeartbeatDegraded(true);
     } finally {
       setLoading(false);
@@ -944,6 +987,13 @@ export function HeartbeatManager() {
     return parts.length > 0 ? parts.join(" | ") : null;
   }, [heartbeatWarning, lookupWarning]);
   const combinedDegraded = heartbeatDegraded || lookupDegraded;
+  const busyMessage = useMemo(() => {
+    if (!busyKey) return null;
+    if (busyKey === "wake-now") {
+      return "Sending wake event... this can take a few seconds if the gateway is busy.";
+    }
+    return "Saving heartbeat settings... this can take a few seconds if the gateway is busy.";
+  }, [busyKey]);
 
   useEffect(() => {
     void fetchHeartbeat();
@@ -972,7 +1022,7 @@ export function HeartbeatManager() {
         flash(successMessage, "success");
         if (restartMessage) requestRestart(restartMessage);
       } catch (err) {
-        flash(String(err), "error");
+        flash(formatErrorMessage(err), "error");
       } finally {
         setBusyKey(null);
       }
@@ -990,7 +1040,7 @@ export function HeartbeatManager() {
         "Heartbeat defaults were updated."
       );
     } catch (err) {
-      flash(String(err), "error");
+      flash(formatErrorMessage(err), "error");
     }
   }, [defaultsEditor, flash, runSave]);
 
@@ -1016,7 +1066,7 @@ export function HeartbeatManager() {
           "Heartbeat agent override was updated."
         );
       } catch (err) {
-        flash(String(err), "error");
+        flash(formatErrorMessage(err), "error");
       }
     },
     [agentEditors, flash, runSave]
@@ -1047,7 +1097,7 @@ export function HeartbeatManager() {
         "Heartbeat visibility settings were updated."
       );
     } catch (err) {
-      flash(String(err), "error");
+      flash(formatErrorMessage(err), "error");
     }
   }, [flash, runSave, visibilityEditor]);
 
@@ -1069,7 +1119,7 @@ export function HeartbeatManager() {
       }
       flash("Heartbeat wake event sent", "success");
     } catch (err) {
-      flash(String(err), "error");
+      flash(formatErrorMessage(err), "error");
     } finally {
       setBusyKey(null);
     }
@@ -1112,6 +1162,12 @@ export function HeartbeatManager() {
             <AlertCircle className="h-3.5 w-3.5" />
           )}
           <span>{toast.message}</span>
+        </div>
+      )}
+
+      {busyMessage && (
+        <div className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-3 py-2 text-xs text-sky-200">
+          {busyMessage}
         </div>
       )}
 
@@ -1263,7 +1319,7 @@ export function HeartbeatManager() {
             ) : (
               <Save className="h-3.5 w-3.5" />
             )}
-            Save Defaults
+            {busyKey === "save-defaults" ? "Saving..." : "Save Defaults"}
           </button>
           <button
             type="button"
@@ -1344,7 +1400,7 @@ export function HeartbeatManager() {
             ) : (
               <Play className="h-3.5 w-3.5" />
             )}
-            Trigger
+            {busyKey === "wake-now" ? "Sending..." : "Trigger"}
           </button>
         </div>
       </div>
@@ -1425,7 +1481,7 @@ export function HeartbeatManager() {
                     ) : (
                       <Save className="h-3.5 w-3.5" />
                     )}
-                    Save Override
+                    {busyKey === `save-agent:${agent.id}` ? "Saving..." : "Save Override"}
                   </button>
                   <button
                     type="button"
@@ -1480,7 +1536,7 @@ export function HeartbeatManager() {
                   try {
                     setVisibilityEditor(pretty(JSON.parse(visibilityEditor) as unknown));
                   } catch (err) {
-                    flash(String(err), "error");
+                    flash(formatErrorMessage(err), "error");
                   }
                 }}
                 className="rounded-lg border border-foreground/10 px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted/60"
@@ -1504,7 +1560,7 @@ export function HeartbeatManager() {
                 ) : (
                   <Save className="h-3.5 w-3.5" />
                 )}
-                Save Visibility
+                {busyKey === "save-visibility" ? "Saving..." : "Save Visibility"}
               </button>
             </div>
           </>

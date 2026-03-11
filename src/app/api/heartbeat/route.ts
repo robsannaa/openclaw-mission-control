@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gatewayCall } from "@/lib/openclaw";
 import { gatewayWakeAgent } from "@/lib/gateway-tools";
-import { patchConfig } from "@/lib/gateway-config";
+import { gatewayCallWithRetry, patchConfig } from "@/lib/gateway-config";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -64,7 +63,12 @@ function sanitizeJsonObject(value: unknown): JsonObject | null {
 }
 
 async function gatewayConfigGet(): Promise<Record<string, unknown>> {
-  return gatewayCall<Record<string, unknown>>("config.get", undefined, 12000);
+  return gatewayCallWithRetry<Record<string, unknown>>(
+    "config.get",
+    undefined,
+    12000,
+    4
+  );
 }
 
 type AgentHeartbeatRow = {
@@ -127,7 +131,16 @@ function buildHeartbeatResponse(configData: Record<string, unknown>) {
     sanitizeJsonObject(resolvedDefaults.heartbeat) || defaultsHeartbeat;
 
   const agentRows: AgentHeartbeatRow[] = [];
-  const list = Array.isArray(parsedAgents.list) ? parsedAgents.list : [];
+  const parsedList = Array.isArray(parsedAgents.list) ? parsedAgents.list : [];
+  const resolvedList = Array.isArray(resolvedAgents.list) ? resolvedAgents.list : [];
+  const list = parsedList.length > 0 ? parsedList : resolvedList;
+  const parsedHeartbeatById = new Map<string, JsonObject | null>();
+  for (const entry of parsedList) {
+    if (!isRecord(entry)) continue;
+    const id = String(entry.id || "");
+    if (!id) continue;
+    parsedHeartbeatById.set(id, sanitizeJsonObject(entry.heartbeat));
+  }
   for (const entry of list) {
     if (!isRecord(entry)) continue;
     const id = String(entry.id || "");
@@ -135,7 +148,7 @@ function buildHeartbeatResponse(configData: Record<string, unknown>) {
     agentRows.push({
       id,
       name: String(entry.name || id),
-      heartbeat: sanitizeJsonObject(entry.heartbeat),
+      heartbeat: parsedHeartbeatById.get(id) || null,
     });
   }
 
@@ -296,7 +309,9 @@ export async function POST(request: NextRequest) {
         ? { ...agentsBlock.defaults }
         : {};
 
-      if (heartbeat === null) delete defaultsBlock.heartbeat;
+      // config.patch merge semantics do not reliably remove missing keys;
+      // use explicit null to clear heartbeat override.
+      if (heartbeat === null) defaultsBlock.heartbeat = null;
       else defaultsBlock.heartbeat = heartbeat;
 
       await patchConfig({
@@ -333,7 +348,8 @@ export async function POST(request: NextRequest) {
         if (String(entry.id || "") !== agentId) return entry;
         found = true;
         const nextEntry: Record<string, unknown> = { ...entry };
-        if (heartbeat === null) delete nextEntry.heartbeat;
+        // Use explicit null for reliable clear semantics.
+        if (heartbeat === null) nextEntry.heartbeat = null;
         else nextEntry.heartbeat = heartbeat;
         return nextEntry;
       });
@@ -384,7 +400,7 @@ export async function POST(request: NextRequest) {
 
           if (Object.prototype.hasOwnProperty.call(channelPatch, "heartbeat")) {
             if (channelPatch.heartbeat === null) {
-              delete existingChannel.heartbeat;
+              existingChannel.heartbeat = null;
             } else if (channelPatch.heartbeat) {
               existingChannel.heartbeat = channelPatch.heartbeat;
             }
@@ -402,7 +418,7 @@ export async function POST(request: NextRequest) {
 
               if (Object.prototype.hasOwnProperty.call(accountPatch, "heartbeat")) {
                 if (accountPatch.heartbeat === null) {
-                  delete existingAccount.heartbeat;
+                  existingAccount.heartbeat = null;
                 } else if (accountPatch.heartbeat) {
                   existingAccount.heartbeat = accountPatch.heartbeat;
                 }

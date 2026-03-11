@@ -17,13 +17,13 @@ function toStr(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
-/* ── Channel catalog (the three we support) ── */
+/* ── Channel catalog (Mission Control supports Telegram + Discord) ── */
 
 const CHANNELS = [
   {
     id: "telegram",
     label: "Telegram",
-    icon: "telegram",
+    icon: "✈️",
     setup: "token" as const,
     tokenLabel: "Bot Token",
     tokenPlaceholder: "123456:ABC-DEF1234ghIkl...",
@@ -33,22 +33,16 @@ const CHANNELS = [
   {
     id: "discord",
     label: "Discord",
-    icon: "discord",
+    icon: "💬",
     setup: "token" as const,
     tokenLabel: "Bot Token",
     tokenPlaceholder: "MTIzNDU2Nzg5MDEyMzQ1...",
     hint: "Create a bot in the Discord Developer Portal, enable Message Content Intent, then paste the token.",
     docsUrl: "https://docs.openclaw.ai/channels/discord",
   },
-  {
-    id: "whatsapp",
-    label: "WhatsApp",
-    icon: "whatsapp",
-    setup: "qr" as const,
-    hint: "Scan a QR code with the WhatsApp app on the phone you want to use.",
-    docsUrl: "https://docs.openclaw.ai/channels/whatsapp",
-  },
 ] as const;
+
+const SUPPORTED_CHANNELS = new Set(CHANNELS.map((c) => c.id));
 
 /* ── Read config from disk (fallback when gateway RPC unavailable) ── */
 
@@ -66,9 +60,14 @@ async function readChannelsConfig(): Promise<Record<string, unknown>> {
 
 type ChannelStatus = {
   id: string;
+  channel: string;
   label: string;
   icon: string;
   setup: "token" | "qr";
+  setupType: "qr" | "token" | "cli" | "auto";
+  setupCommand: string;
+  setupHint: string;
+  configHint: string;
   tokenLabel?: string;
   tokenPlaceholder?: string;
   hint: string;
@@ -80,6 +79,15 @@ type ChannelStatus = {
   dmPolicy?: string;
   groupPolicy?: string;
   accounts: string[];
+  botUsername?: string;
+  statuses: {
+    channel: string;
+    account: string;
+    status: string;
+    linked?: boolean;
+    connected?: boolean;
+    error?: string;
+  }[];
 };
 
 async function buildChannelStatuses(): Promise<ChannelStatus[]> {
@@ -111,7 +119,36 @@ async function buildChannelStatuses(): Promise<ChannelStatus[]> {
       : [];
     const chStatus = isRecord(statusChannels[ch.id]) ? (statusChannels[ch.id] as Record<string, unknown>) : null;
 
-    const connected = accountRows.some((r) => r.running === true) || chStatus?.running === true;
+    const statuses = accountRows.map((r) => {
+      const account = toStr(r.accountId) || "default";
+      const connected = r.running === true || r.connected === true || r.linked === true;
+      const status =
+        toStr(r.status) ||
+        (connected ? "connected" : r.configured === true ? "configured" : "stopped");
+      const error = toStr(r.lastError);
+      return {
+        channel: ch.id,
+        account,
+        status,
+        linked: r.linked === true ? true : undefined,
+        connected: connected ? true : undefined,
+        error,
+      };
+    });
+
+    if (statuses.length === 0 && isRecord(chStatus)) {
+      const connected = chStatus.running === true || chStatus.connected === true;
+      statuses.push({
+        channel: ch.id,
+        account: "default",
+        status: connected ? "connected" : chStatus.configured === true ? "configured" : "stopped",
+        linked: undefined,
+        connected: connected ? true : undefined,
+        error: toStr(chStatus.lastError),
+      });
+    }
+
+    const connected = statuses.some((row) => row.connected === true) || chStatus?.running === true;
     const hasToken = conf ? Boolean(conf.botToken || conf.token) : false;
     const enabled = conf ? conf.enabled !== false : false;
     const configured = enabled && (
@@ -119,13 +156,23 @@ async function buildChannelStatuses(): Promise<ChannelStatus[]> {
       connected ||
       accountRows.some((r) => r.configured === true) ||
       chStatus?.configured === true ||
-      (ch.setup === "qr" && accountRows.length > 0)
+      statuses.length > 0
     );
-    const error = accountRows.find((r) => typeof r.lastError === "string" && r.lastError.trim())?.lastError as string | undefined;
+    const error = statuses.find((r) => typeof r.error === "string" && r.error.trim())?.error;
     const accounts = accountRows.map((r) => toStr(r.accountId) || "default");
+    const botUsername =
+      accountRows
+        .map((r) => toStr(r.botUsername) || toStr(r.username))
+        .find((value) => Boolean(value && value.trim())) ||
+      undefined;
 
     return {
       ...ch,
+      channel: ch.id,
+      setupType: ch.setup,
+      setupCommand: `openclaw channels add --channel ${ch.id} --token <TOKEN>`,
+      setupHint: ch.hint,
+      configHint: "You can reconnect, disconnect, or delete this channel anytime from the Channels page.",
       enabled,
       configured,
       connected,
@@ -133,6 +180,8 @@ async function buildChannelStatuses(): Promise<ChannelStatus[]> {
       dmPolicy: toStr(conf?.dmPolicy),
       groupPolicy: toStr(conf?.groupPolicy),
       accounts: accounts.length > 0 ? accounts : configured ? ["default"] : [],
+      botUsername,
+      statuses,
     };
   });
 }
@@ -154,33 +203,25 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const action = body.action as string;
-    const channel = body.channel as string;
+    const action = String(body.action || "").trim();
+    const channel = String(body.channel || "").trim();
 
     if (!channel) {
       return NextResponse.json({ error: "channel is required" }, { status: 400 });
     }
+    if (!SUPPORTED_CHANNELS.has(channel as (typeof CHANNELS)[number]["id"])) {
+      return NextResponse.json({ error: `Unsupported channel: ${channel}` }, { status: 400 });
+    }
 
     switch (action) {
       /* ── Connect (add token) ── */
+      case "add":
       case "connect": {
         const token = (body.token as string || "").trim();
-        if (!token && channel !== "whatsapp") {
+        if (!token) {
           return NextResponse.json({ error: "token is required" }, { status: 400 });
         }
 
-        if (channel === "whatsapp") {
-          // WhatsApp: enable in config, QR login handled separately by /api/channels/qr
-          await patchConfig(
-            { channels: { whatsapp: { enabled: true, dmPolicy: "pairing", groupPolicy: "mention" } } },
-            { restartDelayMs: 2000 },
-          );
-          return NextResponse.json({ ok: true, message: "WhatsApp enabled. Use QR login to link your phone." });
-        }
-
-        // Write channel config directly via patchConfig rather than
-        // shelling out to `openclaw channels add`, which may not recognise
-        // newer channel names on older CLI builds.
         const tokenKey = channel === "telegram" ? "botToken" : "token";
         await patchConfig(
           {
@@ -189,7 +230,7 @@ export async function POST(request: NextRequest) {
                 enabled: true,
                 [tokenKey]: token,
                 dmPolicy: (body.dmPolicy as string) || "pairing",
-                groupPolicy: (body.groupPolicy as string) || "mention",
+                groupPolicy: (body.groupPolicy as string) || "disabled",
               },
             },
           },
@@ -201,21 +242,10 @@ export async function POST(request: NextRequest) {
 
       /* ── Disconnect (remove channel) ── */
       case "disconnect": {
-        // WhatsApp: logout session first
-        if (channel === "whatsapp") {
-          try {
-            await gatewayCall("channels.logout", { channel }, 15000);
-          } catch { /* best effort */ }
-        }
-
         // Disable and clear credentials
         const clearPatch: Record<string, unknown> = { enabled: false, dmPolicy: "", groupPolicy: "" };
         if (channel === "telegram") clearPatch.botToken = "";
         if (channel === "discord") clearPatch.token = "";
-        if (channel === "whatsapp") {
-          clearPatch.dmPolicy = "";
-          clearPatch.groupPolicy = "";
-        }
 
         await patchConfig(
           { channels: { [channel]: clearPatch } },
@@ -227,13 +257,6 @@ export async function POST(request: NextRequest) {
 
       /* ── Delete (fully remove channel from config) ── */
       case "delete": {
-        // WhatsApp: logout session first
-        if (channel === "whatsapp") {
-          try {
-            await gatewayCall("channels.logout", { channel }, 15000);
-          } catch { /* best effort */ }
-        }
-
         // Remove the entire channel config section
         await patchConfig(
           { channels: { [channel]: null } },

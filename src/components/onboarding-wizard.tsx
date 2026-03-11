@@ -7,6 +7,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Loader2,
+  ExternalLink,
   Key,
   Bot,
   ShieldCheck,
@@ -40,9 +41,16 @@ function isAdvisedModel(provider: string, modelId: string): boolean {
   return modelId === advised || modelId.endsWith(advised.replace(/^[^/]+\//, ""));
 }
 
+/** True if the key looks like an OpenAI key (sk- but not sk-or-). Used with OpenRouter to show only OpenAI models. */
+function looksLikeOpenAIKey(key: string): boolean {
+  const k = key.trim();
+  return k.length > 0 && k.startsWith("sk-") && !k.toLowerCase().startsWith("sk-or-");
+}
+
 type DmRequest = {
   channel: string;
   code: string;
+  account?: string;
   senderId?: string;
   senderName?: string;
   message?: string;
@@ -54,6 +62,7 @@ type Provider = {
   label: string;
   placeholder: string;
   defaultModelHint: string;
+  url: string;
   logo: React.ReactNode;
 };
 
@@ -63,6 +72,7 @@ const PROVIDERS: Provider[] = [
     label: "OpenRouter",
     placeholder: "sk-or-...",
     defaultModelHint: "claude-sonnet",
+    url: "https://openrouter.ai/keys",
     logo: (
       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 2L2 7l10 5 10-5-10-5z" />
@@ -76,6 +86,7 @@ const PROVIDERS: Provider[] = [
     label: "OpenAI",
     placeholder: "sk-...",
     defaultModelHint: "gpt-4",
+    url: "https://platform.openai.com/api-keys",
     logo: (
       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
         <path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.872zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z" />
@@ -87,6 +98,7 @@ const PROVIDERS: Provider[] = [
     label: "Anthropic",
     placeholder: "sk-ant-...",
     defaultModelHint: "claude-sonnet",
+    url: "https://console.anthropic.com/settings/keys",
     logo: (
       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
         <path d="M13.827 3.52h3.603L24 20.48h-3.603l-6.57-16.96zm-7.258 0h3.767L16.906 20.48h-3.674l-1.343-3.461H5.017l-1.344 3.46H0l6.569-16.96zm2.327 5.093L6.453 14.58h4.886L8.896 8.613z" />
@@ -133,9 +145,31 @@ const SAVING_STAGES = [
   { label: "Saving configuration...", threshold: 0 },
   { label: "Writing config file...", threshold: 10 },
   { label: "Starting gateway...", threshold: 25 },
-  { label: "Connecting to channel...", threshold: 50 },
+  { label: "Applying channel settings...", threshold: 50 },
   { label: "Almost ready...", threshold: 80 },
 ];
+
+const SAVING_STAGES_NO_CHANNEL = [
+  { label: "Saving configuration...", threshold: 0 },
+  { label: "Writing config file...", threshold: 10 },
+  { label: "Starting gateway...", threshold: 25 },
+  { label: "Checking gateway health...", threshold: 50 },
+  { label: "Almost ready...", threshold: 80 },
+];
+
+const POST_ONBOARDING_KEY = "mc-post-onboarding";
+
+function isMatchingChannel(channelName: string, expected: string): boolean {
+  const ch = channelName.toLowerCase();
+  const base = expected.toLowerCase();
+  return (
+    ch === base ||
+    ch.startsWith(`${base}:`) ||
+    ch.startsWith(`${base}-`) ||
+    ch.startsWith(`${base}/`) ||
+    ch.startsWith(`${base}@`)
+  );
+}
 
 type Props = { onComplete: () => void };
 
@@ -155,6 +189,7 @@ export function OnboardingWizard({ onComplete }: Props) {
   const [channelTokens, setChannelTokens] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState(0);
+  const [savingIncludesChannel, setSavingIncludesChannel] = useState(false);
   const saveProgressRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Step 3 state (pairing)
@@ -197,7 +232,11 @@ export function OnboardingWizard({ onComplete }: Props) {
       });
       const modelsData = await modelsRes.json();
       if (modelsData.ok && Array.isArray(modelsData.models)) {
-        const list: Model[] = modelsData.models;
+        let list: Model[] = modelsData.models;
+        // OpenRouter accepts OpenAI keys; with an OpenAI key only OpenAI models work — filter to those
+        if (providerId === "openrouter" && looksLikeOpenAIKey(key)) {
+          list = list.filter((m) => /openai\/|^openai\//i.test(m.id) || m.id.includes("/openai/"));
+        }
         // Sort advised model to top
         const sorted = [...list].sort((a, b) =>
           isAdvisedModel(providerId, a.id) ? -1 : isAdvisedModel(providerId, b.id) ? 1 : 0
@@ -232,8 +271,22 @@ export function OnboardingWizard({ onComplete }: Props) {
 
   // ── Step 2: Save config + restart gateway ──
 
-  const handleSaveAndRestart = useCallback(async () => {
-    if (!activeChannelToken.trim()) return;
+  const completeOnboarding = useCallback(() => {
+    try {
+      localStorage.setItem(POST_ONBOARDING_KEY, "1");
+    } catch {
+      // ignore storage failures in private mode
+    }
+    onComplete();
+  }, [onComplete]);
+
+  const saveAndRestart = useCallback(async (opts: { goToPairing: boolean; tokens?: Record<string, string> }) => {
+    const effectiveTokens = opts.tokens ?? channelTokens;
+    const telegramToken = (effectiveTokens.telegram || "").trim();
+    const discordToken = (effectiveTokens.discord || "").trim();
+    const hasChannelTokens = Boolean(telegramToken || discordToken);
+
+    setSavingIncludesChannel(hasChannelTokens);
     setSaving(true);
     setSaveProgress(0);
     setError(null);
@@ -257,8 +310,8 @@ export function OnboardingWizard({ onComplete }: Props) {
           provider,
           apiKey,
           model: selectedModel,
-          telegramToken: channelTokens.telegram || "",
-          discordToken: channelTokens.discord || "",
+          telegramToken,
+          discordToken,
         }),
       });
       const data = await res.json();
@@ -267,14 +320,39 @@ export function OnboardingWizard({ onComplete }: Props) {
         return;
       }
       setSaveProgress(100);
-      setTimeout(() => setStep(3), 300);
+      setTimeout(() => {
+        if (opts.goToPairing && hasChannelTokens) {
+          setStep(3);
+          return;
+        }
+        completeOnboarding();
+      }, 300);
     } catch {
       setError("Network error. Please try again.");
     } finally {
       if (saveProgressRef.current) clearInterval(saveProgressRef.current);
       setSaving(false);
     }
-  }, [provider, apiKey, selectedModel, channelTokens, activeChannelToken]);
+  }, [provider, apiKey, selectedModel, channelTokens, completeOnboarding]);
+
+  const handleSaveAndRestart = useCallback(async () => {
+    if (!activeChannelToken.trim()) return;
+    await saveAndRestart({ goToPairing: true });
+  }, [activeChannelToken, saveAndRestart]);
+
+  const handleStartChatNow = useCallback(async () => {
+    await saveAndRestart({
+      goToPairing: false,
+      tokens: { telegram: "", discord: "" },
+    });
+  }, [saveAndRestart]);
+
+  const handleSetUpLater = useCallback(async () => {
+    await saveAndRestart({
+      goToPairing: false,
+      tokens: { telegram: "", discord: "" },
+    });
+  }, [saveAndRestart]);
 
   // ── Step 3: Poll pairing requests ──
 
@@ -286,7 +364,7 @@ export function OnboardingWizard({ onComplete }: Props) {
       const data = await res.json();
       const configured = CHANNELS.filter((c) => channelTokens[c.id]?.trim()).map((c) => c.id);
       const relevantDm = (data.dm || []).filter(
-        (r: DmRequest) => configured.includes(r.channel),
+        (r: DmRequest) => configured.some((ch) => isMatchingChannel(r.channel, ch)),
       );
       setPairingRequests(relevantDm);
     } catch {
@@ -318,19 +396,19 @@ export function OnboardingWizard({ onComplete }: Props) {
   }, [step, configuredChannels, channelTokens]);
 
   const handleApprove = useCallback(
-    async (channel: string, code: string) => {
+    async (channel: string, code: string, account?: string) => {
       setApproving(code);
       setError(null);
       try {
         const res = await fetch("/api/pairing", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "approve-dm", channel, code }),
+          body: JSON.stringify({ action: "approve-dm", channel, code, account }),
         });
         const data = await res.json().catch(() => null);
         if (data?.ok) {
           setApproved(true);
-          setTimeout(() => onComplete(), 1500);
+          setTimeout(() => completeOnboarding(), 1500);
         } else {
           setError(data?.error || `Approve failed (${res.status}).`);
         }
@@ -340,11 +418,12 @@ export function OnboardingWizard({ onComplete }: Props) {
         setApproving(null);
       }
     },
-    [onComplete],
+    [completeOnboarding],
   );
 
   // Derive current saving stage label
-  const currentSavingStage = SAVING_STAGES.filter((s) => saveProgress >= s.threshold).at(-1)!;
+  const activeSavingStages = savingIncludesChannel ? SAVING_STAGES : SAVING_STAGES_NO_CHANNEL;
+  const currentSavingStage = activeSavingStages.filter((s) => saveProgress >= s.threshold).at(-1)!;
 
   const STEPS = [
     { n: 1, label: "Model" },
@@ -466,6 +545,70 @@ export function OnboardingWizard({ onComplete }: Props) {
                 })}
               </div>
 
+              <div className="space-y-2">
+                <p className="text-xs leading-relaxed text-stone-500 dark:text-[#a8b0ba]">
+                  New to this? Start with OpenRouter &mdash; it supports all major models and you only pay for what you use.
+                </p>
+                <div className="rounded-xl border border-stone-200 dark:border-[#23282e] bg-stone-50 dark:bg-[#0d1014] p-4">
+                  <div className="mb-2 flex items-center gap-2">
+                    <Key className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
+                    <span className="text-xs font-semibold text-stone-800 dark:text-[#d6dce3]">
+                      Get your {selectedProvider.label} API key
+                    </span>
+                  </div>
+                  <ol className="space-y-2.5">
+                    <li className="flex items-start gap-3">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-200/80 dark:bg-[#20252a] text-[10px] font-semibold text-stone-600 dark:text-[#7a8591] ring-1 ring-stone-300 dark:ring-[#2c343d]">
+                        1
+                      </span>
+                      <p className="pt-0.5 text-xs leading-relaxed text-stone-500 dark:text-[#a8b0ba]">
+                        Open the{" "}
+                        <a
+                          href={selectedProvider.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 underline underline-offset-2 hover:opacity-90"
+                        >
+                          {selectedProvider.label} API keys page
+                          <ExternalLink className="h-2.5 w-2.5" />
+                        </a>
+                        .
+                      </p>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-200/80 dark:bg-[#20252a] text-[10px] font-semibold text-stone-600 dark:text-[#7a8591] ring-1 ring-stone-300 dark:ring-[#2c343d]">
+                        2
+                      </span>
+                      <p className="pt-0.5 text-xs leading-relaxed text-stone-500 dark:text-[#a8b0ba]">
+                        Create a new API key and copy it.
+                      </p>
+                    </li>
+                    <li className="flex items-start gap-3">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-stone-200/80 dark:bg-[#20252a] text-[10px] font-semibold text-stone-600 dark:text-[#7a8591] ring-1 ring-stone-300 dark:ring-[#2c343d]">
+                        3
+                      </span>
+                      <p className="pt-0.5 text-xs leading-relaxed text-stone-500 dark:text-[#a8b0ba]">
+                        Paste it below and we&apos;ll validate it instantly.
+                      </p>
+                    </li>
+                  </ol>
+                  {provider === "openai" && (
+                    <p className="mt-3 rounded-lg bg-amber-100/70 dark:bg-amber-500/10 px-2.5 py-2 text-[11px] leading-relaxed text-amber-700 dark:text-amber-300">
+                      ChatGPT Plus does not include API access. You need API credits at{" "}
+                      <a
+                        href="https://platform.openai.com/settings/organization/billing"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium underline underline-offset-2"
+                      >
+                        platform.openai.com/settings/organization/billing
+                      </a>
+                      .
+                    </p>
+                  )}
+                </div>
+              </div>
+
               <div className="space-y-1.5">
                 <label className="block text-xs font-medium uppercase tracking-wide text-stone-400 dark:text-[#5a6270]">
                   {selectedProvider.label} API Key
@@ -540,19 +683,28 @@ export function OnboardingWizard({ onComplete }: Props) {
                     Validate your API key first
                   </div>
                 ) : (
+                  <>
                   <Combobox
                     items={models}
                     value={models.find((m) => m.id === selectedModel) ?? null}
                     onValueChange={(val) => setSelectedModel(val?.id ?? "")}
                     itemToStringLabel={(m) => getFriendlyModelName(m.id)}
-                    itemToStringValue={(m) => `${getFriendlyModelName(m.id)} ${m.name} ${m.id}`}
+                    itemToStringValue={(m) => {
+                      const friendly = getFriendlyModelName(m.id);
+                      const idWithSpaces = m.id.replace(/[-./_]/g, " ").toLowerCase();
+                      const friendlyLower = friendly.toLowerCase();
+                      return `${friendly} ${m.name} ${m.id} ${idWithSpaces} ${friendlyLower}`;
+                    }}
                   >
                     <ComboboxInput
-                      placeholder="Search models..."
+                      placeholder="Type to search (e.g. claude, sonnet, gpt)…"
                       className="w-full"
+                      aria-label="Search or select model"
                     />
                     <ComboboxContent>
-                      <ComboboxEmpty>No models match your search.</ComboboxEmpty>
+                      <ComboboxEmpty>
+                        <span className="block text-muted-foreground">No models match. Try a shorter term (e.g. &quot;claude&quot;, &quot;sonnet&quot;) or scroll to browse.</span>
+                      </ComboboxEmpty>
                       <ComboboxList>
                         {(model) => (
                           <ComboboxItem key={model.id} value={model}>
@@ -574,19 +726,61 @@ export function OnboardingWizard({ onComplete }: Props) {
                       </ComboboxList>
                     </ComboboxContent>
                   </Combobox>
+                  <p className="mt-1.5 text-[11px] text-stone-400 dark:text-[#5a6270]">
+                    Search by display name or model ID — partial matches work
+                  </p>
+                  </>
                 )}
               </div>
 
-              <div className="flex justify-end pt-1">
+              <div className="flex items-center justify-between gap-2 pt-1">
                 <button
                   onClick={() => { setError(null); setStep(2); }}
-                  disabled={!validated || !selectedModel}
+                  disabled={!validated || !selectedModel || saving || validating}
+                  className="rounded-lg px-3 py-2 text-xs font-medium text-stone-500 dark:text-[#a8b0ba] ring-1 ring-stone-200 dark:ring-[#2c343d] hover:bg-stone-100 dark:hover:bg-[#1c2128] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                >
+                  Connect Telegram/Discord now
+                </button>
+                <button
+                  onClick={handleStartChatNow}
+                  disabled={!validated || !selectedModel || saving || validating}
                   className="flex items-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-medium bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 hover:bg-stone-700 dark:hover:bg-stone-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
                 >
-                  Next
-                  <ChevronRight className="h-4 w-4" />
+                  {saving ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Starting...
+                    </>
+                  ) : (
+                    <>
+                      Start chat now
+                      <ChevronRight className="h-4 w-4" />
+                    </>
+                  )}
                 </button>
               </div>
+
+              {saving && (
+                <div className="space-y-2 animate-in fade-in duration-300">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-stone-500 dark:text-[#a8b0ba] transition-all duration-500">
+                      {currentSavingStage.label}
+                    </span>
+                    <span className="text-xs tabular-nums text-stone-400 dark:text-[#5a6270]">
+                      {Math.round(saveProgress)}%
+                    </span>
+                  </div>
+                  <div className="h-1 w-full overflow-hidden rounded-full bg-stone-100 dark:bg-[#23282e]">
+                    <div
+                      className="h-full rounded-full bg-stone-900 dark:bg-stone-200 transition-all duration-500 ease-out"
+                      style={{ width: `${saveProgress}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-stone-400 dark:text-[#5a6270]">
+                    Gateway startup can take up to 30s &mdash; hang tight.
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
@@ -596,11 +790,11 @@ export function OnboardingWizard({ onComplete }: Props) {
                 <div className="flex items-center gap-2 mb-1">
                   <Bot className="h-3.5 w-3.5 text-stone-400 dark:text-[#a8b0ba]" />
                   <h2 className="text-base font-semibold tracking-tight text-stone-900 dark:text-[#f5f7fa]">
-                    Connect a channel
+                    Connect a channel (optional)
                   </h2>
                 </div>
                 <p className="text-sm text-stone-500 dark:text-[#a8b0ba] leading-relaxed">
-                  Choose a messaging platform and enter your bot token.
+                  Connect Telegram or Discord now, or start in browser chat and add channels later.
                 </p>
               </div>
 
@@ -702,14 +896,23 @@ export function OnboardingWizard({ onComplete }: Props) {
               )}
 
               <div className="flex items-center justify-between pt-1">
-                <button
-                  onClick={() => { setError(null); setStep(1); }}
-                  disabled={saving}
-                  className="flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium text-stone-500 dark:text-[#a8b0ba] hover:bg-stone-100 dark:hover:bg-[#1c2128] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
-                >
-                  <ChevronLeft className="h-4 w-4" />
-                  Back
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => { setError(null); setStep(1); }}
+                    disabled={saving}
+                    className="flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium text-stone-500 dark:text-[#a8b0ba] hover:bg-stone-100 dark:hover:bg-[#1c2128] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Back
+                  </button>
+                  <button
+                    onClick={handleSetUpLater}
+                    disabled={saving}
+                    className="rounded-lg px-3 py-2 text-xs font-medium text-stone-500 dark:text-[#a8b0ba] ring-1 ring-stone-200 dark:ring-[#2c343d] hover:bg-stone-100 dark:hover:bg-[#1c2128] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
+                  >
+                    Set up later
+                  </button>
+                </div>
                 <button
                   onClick={handleSaveAndRestart}
                   disabled={!activeChannelToken.trim() || saving}
@@ -821,7 +1024,7 @@ export function OnboardingWizard({ onComplete }: Props) {
                         </div>
                       </div>
                       <button
-                        onClick={() => handleApprove(req.channel, req.code)}
+                        onClick={() => handleApprove(req.channel, req.code, req.account)}
                         disabled={approving !== null}
                         className="mt-3.5 flex w-full items-center justify-center gap-1.5 rounded-lg bg-emerald-600 py-2.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
                       >

@@ -124,6 +124,10 @@ const HelpView = dynamic(
   () => import("@/components/help-view").then((m) => m.HelpView),
   { loading: () => <SectionLoading /> }
 );
+const ChannelsView = dynamic(
+  () => import("@/components/channels-view").then((m) => m.ChannelsView),
+  { loading: () => <SectionLoading /> }
+);
 
 const isAgentbayHosting = process.env.NEXT_PUBLIC_AGENTBAY_HOSTED === "true";
 
@@ -157,7 +161,8 @@ export type DashboardSection =
   | "hooks"
   | "doctor"
   | "activity"
-  | "help";
+  | "help"
+  | "channels";
 
 function SectionContent({ section }: { section: DashboardSection }) {
   if (isAgentbayHosting && section === "tailscale") {
@@ -223,6 +228,8 @@ function SectionContent({ section }: { section: DashboardSection }) {
       return <ActivityView />;
     case "help":
       return <HelpView />;
+    case "channels":
+      return <ChannelsView />;
     default:
       return <DashboardView />;
   }

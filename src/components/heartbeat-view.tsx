@@ -14,7 +14,7 @@ export function HeartbeatView() {
             Heartbeat
           </span>
         }
-        description="Configure heartbeat defaults, per-agent overrides, visibility, and wake events."
+        description="Stay on top of important updates automatically, without checking in manually. Heartbeat is a scheduled check-in that lets your agent watch for what matters and notify you when needed."
       />
       <SectionBody width="content" padding="compact" innerClassName="space-y-4">
         <HeartbeatManager />

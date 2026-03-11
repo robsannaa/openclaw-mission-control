@@ -130,16 +130,10 @@ function EventCard({ event }: { event: ActivityEvent }) {
   const statusConf = event.status ? STATUS_CONFIG[event.status] : null;
   const TypeIcon = typeConf.icon;
 
-  const borderClass = statusConf
-    ? statusConf.borderClass
-    : "border-l-stone-200 dark:border-l-[#2c343d]";
-
   return (
     <div
       className={cn(
         "rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-[#2c343d] dark:bg-[#171a1d]",
-        "border-l-2",
-        borderClass,
       )}
     >
       <div className="flex items-start gap-3">
@@ -305,12 +299,7 @@ export function ActivityView() {
             </p>
           </div>
         ) : (
-          <div className="relative space-y-3">
-            {/* Vertical timeline line */}
-            <div
-              aria-hidden="true"
-              className="absolute left-[1.6rem] top-0 h-full w-px bg-stone-200 dark:bg-[#2c343d]"
-            />
+          <div className="space-y-3">
             {filtered.map((event) => (
               <EventCard key={event.id} event={event} />
             ))}

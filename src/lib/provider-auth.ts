@@ -212,6 +212,8 @@ const PROVIDER_MODEL_ALLOWLIST: Record<string, RegExp[]> = {
     /command/i,
     /deepseek/i,
     /qwen/i,
+    /kimi/i,     // Moonshot AI (e.g. Kimi 2.5 — moonshotai/kimi-k2.5)
+    /moonshot/i,
   ],
 };
 

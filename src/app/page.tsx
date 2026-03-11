@@ -21,6 +21,7 @@ const SECTION_TO_PATH: Record<string, string> = {
   skills: "/skills",
   models: "/agents?tab=models",
   accounts: "/accounts",
+  channels: "/channels",
   audio: "/audio",
   vectors: "/vectors",
   logs: "/logs",
@@ -79,5 +80,5 @@ export default async function Home({
     redirect(suffix ? `${targetPath}?${suffix}` : targetPath);
   }
 
-  return <RouteSectionView section="dashboard" />;
+  return <RouteSectionView section="chat" />;
 }

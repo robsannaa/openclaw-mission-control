@@ -2093,7 +2093,7 @@ function ChannelBindingPicker({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "add",
+          action: "connect",
           channel: selectedChannel.channel,
           token: tokenInput.trim(),
           appToken: appTokenInput.trim() || undefined,

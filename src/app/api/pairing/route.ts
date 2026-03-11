@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { gatewayCall, runCli } from "@/lib/openclaw";
+import { gatewayCall, parseJsonFromCliOutput, runCli, runCliCaptureBoth } from "@/lib/openclaw";
 import { getOpenClawHome } from "@/lib/paths";
 import { readdir, readFile } from "fs/promises";
 import { join } from "path";
@@ -33,64 +33,163 @@ type DeviceRequest = {
   [key: string]: unknown;
 };
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function toIsoString(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) return value;
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return new Date(value).toISOString();
+  }
+  return undefined;
+}
+
+function normalizeDmRequests(raw: unknown, fallbackChannel?: string): DmRequest[] {
+  const out: DmRequest[] = [];
+  const topLevelChannel =
+    isRecord(raw) && typeof raw.channel === "string" && raw.channel.trim()
+      ? raw.channel.trim()
+      : undefined;
+  const pushRequest = (entry: unknown, localFallbackChannel?: string) => {
+    if (!isRecord(entry)) return;
+    const codeRaw = entry.code ?? entry.pairingCode;
+    const code = typeof codeRaw === "string" ? codeRaw.trim() : "";
+    if (!code) return;
+
+    const channelRaw =
+      entry.channel ??
+      entry.transport ??
+      localFallbackChannel ??
+      fallbackChannel ??
+      topLevelChannel;
+    const channel = typeof channelRaw === "string" ? channelRaw.trim() : "";
+    if (!channel) return;
+
+    const meta = isRecord(entry.meta) ? entry.meta : {};
+    const senderName =
+      (typeof entry.senderName === "string" && entry.senderName.trim()) ||
+      [meta.firstName, meta.lastName].filter((v): v is string => typeof v === "string" && v.trim().length > 0).join(" ") ||
+      (typeof meta.username === "string" ? meta.username : undefined);
+    const senderId =
+      (typeof entry.senderId === "string" && entry.senderId.trim()) ||
+      (typeof entry.id === "string" && entry.id.trim()) ||
+      (typeof meta.username === "string" ? meta.username : undefined);
+    const account =
+      (typeof entry.accountId === "string" && entry.accountId.trim()) ||
+      (typeof entry.account === "string" && entry.account.trim()) ||
+      (typeof meta.accountId === "string" && meta.accountId.trim()) ||
+      undefined;
+
+    out.push({
+      ...entry,
+      channel,
+      code,
+      account,
+      senderName,
+      senderId,
+      message: typeof entry.message === "string" ? entry.message : undefined,
+      createdAt: toIsoString(entry.createdAt) ?? toIsoString(entry.createdAtMs),
+      expiresAt: toIsoString(entry.expiresAt) ?? toIsoString(entry.expiresAtMs),
+    });
+  };
+
+  if (Array.isArray(raw)) {
+    for (const entry of raw) pushRequest(entry);
+    return out;
+  }
+
+  if (!isRecord(raw)) return out;
+
+  // Common payload shapes across OpenClaw versions.
+  const listCandidates: unknown[] = [
+    raw.requests,
+    raw.pending,
+    raw.dm,
+    raw.items,
+  ];
+  for (const candidate of listCandidates) {
+    for (const entry of asArray(candidate)) pushRequest(entry, topLevelChannel);
+  }
+
+  // Nested buckets: { pending: { dm: [...] } } etc.
+  for (const bucketKey of ["pending", "result", "data"] as const) {
+    const bucket = raw[bucketKey];
+    if (!isRecord(bucket)) continue;
+    const bucketChannel =
+      typeof bucket.channel === "string" && bucket.channel.trim()
+        ? bucket.channel.trim()
+        : topLevelChannel;
+    for (const nestedKey of ["requests", "dm", "items"] as const) {
+      for (const entry of asArray(bucket[nestedKey])) pushRequest(entry, bucketChannel);
+    }
+  }
+
+  // Single request object fallback.
+  pushRequest(raw);
+
+  return out;
+}
+
+function dedupeDmRequests(requests: DmRequest[]): DmRequest[] {
+  const seen = new Set<string>();
+  const out: DmRequest[] = [];
+  for (const req of requests) {
+    const key = `${req.channel}::${req.account || "default"}::${req.code}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(req);
+  }
+  return out;
+}
+
+async function listDmRequestsFromCli(): Promise<DmRequest[]> {
+  const result = await runCliCaptureBoth(["pairing", "list", "--json"], 10000);
+  if (result.code !== 0) {
+    const detail = String(result.stderr || result.stdout || "").trim();
+    throw new Error(detail || `pairing list exited with code ${result.code}`);
+  }
+  const payload = parseJsonFromCliOutput<unknown>(result.stdout, "openclaw pairing list --json");
+  return dedupeDmRequests(normalizeDmRequests(payload));
+}
+
 /* ── GET: list all pending requests ──────────────── */
 
 export async function GET() {
   const home = getOpenClawHome();
-  const dmRequests: DmRequest[] = [];
+  let dmRequests: DmRequest[] = [];
   const deviceRequests: DeviceRequest[] = [];
 
-  // 1. Discover DM pairing channels by scanning credentials dir
-  const credDirs = [join(home, "credentials")];
-  for (const credDir of credDirs) {
-    try {
-      const files = await readdir(credDir);
-      const pairingFiles = files.filter((f) => f.endsWith("-pairing.json"));
-
-      for (const file of pairingFiles) {
-        const channel = file.replace("-pairing.json", "");
-        try {
-          const raw = await readFile(join(credDir, file), "utf-8");
-          const data = JSON.parse(raw);
-          // data can be an array of requests or { requests: [...] }
-          const requests = Array.isArray(data)
-            ? data
-            : Array.isArray(data.requests)
-            ? data.requests
-            : [];
-
-          for (const req of requests) {
-            const code = req.code || req.pairingCode || "";
-            if (code && !dmRequests.some((d) => d.code === code && d.channel === channel)) {
-              // Normalize meta fields to top-level senderName for the frontend
-              const meta = req.meta || {};
-              const senderName =
-                req.senderName ||
-                [meta.firstName, meta.lastName].filter(Boolean).join(" ") ||
-                meta.username ||
-                undefined;
-              dmRequests.push({
-                ...req,
-                channel,
-                code,
-                account:
-                  typeof req.accountId === "string"
-                    ? req.accountId
-                    : typeof req.account === "string"
-                      ? req.account
-                      : undefined,
-                senderName,
-                senderId: req.senderId || req.id || meta.username || undefined,
-              });
-            }
+  // 1) Preferred: ask OpenClaw CLI directly (supports account-aware pairing).
+  try {
+    dmRequests = await listDmRequestsFromCli();
+  } catch {
+    // 2) Fallback: scan credentials pairing files for older/limited environments.
+    const scanned: DmRequest[] = [];
+    const credDirs = [join(home, "credentials")];
+    for (const credDir of credDirs) {
+      try {
+        const files = await readdir(credDir);
+        const pairingFiles = files.filter((f) => f.endsWith("-pairing.json"));
+        for (const file of pairingFiles) {
+          const channel = file.replace("-pairing.json", "");
+          try {
+            const raw = await readFile(join(credDir, file), "utf-8");
+            const data = JSON.parse(raw) as unknown;
+            scanned.push(...normalizeDmRequests(data, channel));
+          } catch {
+            // File may be empty or malformed
           }
-        } catch {
-          // File may be empty or malformed
         }
+      } catch {
+        // credentials dir may not exist
       }
-    } catch {
-      // credentials dir may not exist
     }
+    dmRequests = dedupeDmRequests(scanned);
   }
 
   // 2. Device pairing requests

@@ -61,6 +61,15 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function parseRetryAfterMs(error: unknown): number | null {
+  const msg = String(error || "");
+  const match = msg.match(/retry after\s+(\d+(?:\.\d+)?)s/i);
+  if (!match) return null;
+  const seconds = Number(match[1]);
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  return Math.ceil(seconds * 1000);
+}
+
 type ConfigSetEntry = {
   path: string;
   value: unknown;
@@ -286,7 +295,11 @@ export async function patchConfig(
       if (attempt === maxAttempts) {
         throw error;
       }
-      await sleep(Math.min(400 * attempt, 2500));
+      const retryAfterMs = parseRetryAfterMs(error);
+      const backoffMs = Math.min(400 * attempt, 2500);
+      await sleep(
+        retryAfterMs ? Math.max(backoffMs, retryAfterMs + 150) : backoffMs,
+      );
     }
   }
   throw lastError || new Error("Unknown config.patch error");

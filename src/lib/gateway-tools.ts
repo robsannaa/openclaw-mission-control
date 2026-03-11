@@ -183,27 +183,30 @@ export async function gatewayWakeAgent(opts: {
   text?: string;
   mode?: string;
 }): Promise<string> {
+  const text = opts.text || "Check for urgent follow-ups";
+  const mode = opts.mode || "now";
   const gwUrl = await getGatewayUrl();
   const token = getGatewayToken();
-  const response = await fetch(`${gwUrl}/hooks/wake`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify({
-      text: opts.text || "Check for urgent follow-ups",
-      mode: opts.mode || "now",
-    }),
-    signal: AbortSignal.timeout(20000),
-  });
+  try {
+    const response = await fetch(`${gwUrl}/hooks/wake`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ text, mode }),
+      signal: AbortSignal.timeout(20000),
+    });
+    const body = await response.json().catch(() => null);
 
-  const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      const detail = body?.error?.message || body?.error || response.statusText;
+      throw new Error(`Gateway wake failed (${response.status}): ${detail}`);
+    }
 
-  if (!response.ok) {
-    const detail = body?.error?.message || body?.error || response.statusText;
-    throw new Error(`Gateway wake failed (${response.status}): ${detail}`);
+    return typeof body?.output === "string" ? body.output : JSON.stringify(body || {});
+  } catch {
+    // Compatibility fallback for gateway builds without /hooks/wake.
+    return runCli(["system", "event", "--text", text, "--mode", mode], 20000);
   }
-
-  return typeof body?.output === "string" ? body.output : JSON.stringify(body || {});
 }
