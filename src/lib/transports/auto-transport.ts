@@ -57,10 +57,7 @@ export class AutoTransport implements OpenClawClient {
 
   /** CLI concurrency limiter — prevents subprocess storms during gateway restarts. */
   private activeCli = 0;
-  private readonly maxCli = 2;
-  /** Cooldown end timestamp after HTTP failures — rejects new CLI spawns briefly. */
-  private cliCooldownUntil = 0;
-  private readonly cliCooldownMs = 3_000;
+  private readonly maxCli = 4;
 
   getTransport(): TransportMode {
     return "auto";
@@ -96,8 +93,6 @@ export class AutoTransport implements OpenClawClient {
     }
 
     this.inRecovery = true;
-    // Brief cooldown before allowing CLI fallbacks — prevents thundering herd.
-    this.cliCooldownUntil = Date.now() + this.cliCooldownMs;
     // Force a quick re-probe on the next request.
     this.lastProbe = Date.now() - this.probeIntervalRecoveryMs;
     if (wasHttp) {
