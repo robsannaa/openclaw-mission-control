@@ -5,22 +5,25 @@
  *   Returns setup status including hasModel, hasChannel, hasApiKey, etc.
  *
  * POST /api/onboard
- *   { action: "validate-key", provider, token }
- *   { action: "list-models",  provider, token }
- *   { action: "save-and-restart", provider, apiKey, model, telegramToken?, discordToken? }
+ *   { action: "validate-key", provider, token [, customBaseUrl, customApiKeyHeader ] }
+ *   { action: "list-models",  provider, token [, customBaseUrl, customApiKeyHeader ] }
+ *   { action: "save-and-restart", provider, apiKey, model, telegramToken?, discordToken? [, customBaseUrl, customApiKeyHeader ] }
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { access, readFile, writeFile, mkdir } from "fs/promises";
-import { join, dirname } from "path";
-import { runCli, runCliCaptureBoth, gatewayCall } from "@/lib/openclaw";
-import { getOpenClawBin, getOpenClawHome, getGatewayUrl } from "@/lib/paths";
-import { patchConfig } from "@/lib/gateway-config";
+import {NextRequest, NextResponse} from "next/server";
+import {access, mkdir, readFile, writeFile} from "fs/promises";
+import {dirname, join} from "path";
+import {gatewayCall, runCli, runCliCaptureBoth} from "@/lib/openclaw";
+import {getGatewayUrl, getOpenClawBin, getOpenClawHome} from "@/lib/paths";
+import {patchConfig} from "@/lib/gateway-config";
 import {
-  PROVIDER_ENV_KEYS,
-  validateProviderToken,
-  fetchModelsFromProvider,
+  buildCustomProviderConfig,
   buildProviderCredentialPatch,
+  fetchModelsFromCustomProvider,
+  fetchModelsFromProvider,
+  PROVIDER_ENV_KEYS,
+  validateCustomProviderToken,
+  validateProviderToken,
 } from "@/lib/provider-auth";
 
 export const dynamic = "force-dynamic";
@@ -226,7 +229,7 @@ export async function POST(request: NextRequest) {
     switch (action) {
       /* ── validate-key ──────────────────────────────── */
       case "validate-key": {
-        const provider = String(body.provider || "").trim();
+        const provider = String(body.provider || "").trim().toLowerCase();
         const token = String(body.token || "").trim();
         if (!provider || !token) {
           return NextResponse.json(
@@ -234,13 +237,19 @@ export async function POST(request: NextRequest) {
             { status: 400 },
           );
         }
+        if (provider === "custom") {
+          const baseUrl = String(body.customBaseUrl || "").trim();
+          const apiKeyHeader = String(body.customApiKeyHeader || "Authorization").trim() || "Authorization";
+          const result = await validateCustomProviderToken(baseUrl, apiKeyHeader, token);
+          return NextResponse.json(result);
+        }
         const result = await validateProviderToken(provider, token);
         return NextResponse.json(result);
       }
 
       /* ── list-models ───────────────────────────────── */
       case "list-models": {
-        const provider = String(body.provider || "").trim();
+        const provider = String(body.provider || "").trim().toLowerCase();
         const token = String(body.token || "").trim();
         if (!provider || !token) {
           return NextResponse.json(
@@ -249,7 +258,14 @@ export async function POST(request: NextRequest) {
           );
         }
         try {
-          const models = await fetchModelsFromProvider(provider, token);
+          let models: Array<{ id: string; name: string }>;
+          if (provider === "custom") {
+            const baseUrl = String(body.customBaseUrl || "").trim();
+            const apiKeyHeader = String(body.customApiKeyHeader || "Authorization").trim() || "Authorization";
+            models = await fetchModelsFromCustomProvider(baseUrl, apiKeyHeader, token);
+          } else {
+            models = await fetchModelsFromProvider(provider, token);
+          }
           return NextResponse.json({ ok: true, models });
         } catch (err) {
           return NextResponse.json({
@@ -262,7 +278,7 @@ export async function POST(request: NextRequest) {
 
       /* ── save-and-restart ──────────────────────────── */
       case "save-and-restart": {
-        const provider = String(body.provider || "").trim();
+        const provider = String(body.provider || "").trim().toLowerCase();
         const apiKeyValue = String(body.apiKey || "").trim();
         const model = String(body.model || "").trim();
         const telegramToken = String(body.telegramToken || "").trim();
@@ -275,8 +291,19 @@ export async function POST(request: NextRequest) {
           );
         }
 
+        const isCustom = provider === "custom";
+        const customBaseUrl = String(body.customBaseUrl || "").trim();
+        const customApiKeyHeader = String(body.customApiKeyHeader || "Authorization").trim() || "Authorization";
+
+        if (isCustom && !customBaseUrl) {
+          return NextResponse.json(
+            { ok: false, error: "Custom provider requires baseUrl" },
+            { status: 400 },
+          );
+        }
+
         const envKey = PROVIDER_ENV_KEYS[provider];
-        if (!envKey) {
+        if (!isCustom && !envKey) {
           return NextResponse.json(
             { ok: false, error: `Unsupported provider: ${provider}` },
             { status: 400 },
@@ -301,7 +328,7 @@ export async function POST(request: NextRequest) {
             "--auth-choice", "skip",
             "--skip-channels",
             "--skip-skills",
-            "--skip-search",
+            "--skip-search",  
             "--skip-ui",
           ];
           if (isHosted) {
@@ -337,7 +364,9 @@ export async function POST(request: NextRequest) {
         }
 
         // ── Step 3: Build unified config patch ──
-        const patch: Record<string, unknown> = buildProviderCredentialPatch(provider, apiKeyValue);
+        const patch: Record<string, unknown> = isCustom
+          ? buildCustomProviderConfig(customBaseUrl, customApiKeyHeader, apiKeyValue)
+          : buildProviderCredentialPatch(provider, apiKeyValue);
         patch.agents = { defaults: { model: { primary: model } } };
 
         if (telegramToken) {
@@ -357,15 +386,35 @@ export async function POST(request: NextRequest) {
           let config: Record<string, unknown> = {};
           try { config = JSON.parse(await readFile(configPath, "utf-8")); } catch { /* fresh */ }
 
-          const env = (config.env || {}) as Record<string, unknown>;
-          env[envKey] = apiKeyValue;
-          config.env = env;
+          if (isCustom) {
+            const models = (config.models || {}) as Record<string, unknown>;
+            const providers = (models.providers || {}) as Record<string, unknown>;
+            const headers = customApiKeyHeader.toLowerCase() === "authorization" && !apiKeyValue.toLowerCase().startsWith("bearer ")
+              ? { [customApiKeyHeader]: `Bearer ${apiKeyValue}` }
+              : { [customApiKeyHeader]: apiKeyValue };
+            providers.custom = {
+              baseUrl: customBaseUrl.replace(/\/+$/, ""),
+              headers,
+            };
+            models.providers = providers;
+            config.models = models;
 
-          const auth = (config.auth || {}) as Record<string, unknown>;
-          const profiles = (auth.profiles || {}) as Record<string, unknown>;
-          profiles[`${provider}:default`] = { provider, mode: "api_key" };
-          auth.profiles = profiles;
-          config.auth = auth;
+            const auth = (config.auth || {}) as Record<string, unknown>;
+            const profiles = (auth.profiles || {}) as Record<string, unknown>;
+            profiles["custom:default"] = { provider: "custom", mode: "api_key" };
+            auth.profiles = profiles;
+            config.auth = auth;
+          } else {
+            const env = (config.env || {}) as Record<string, unknown>;
+            env[envKey] = apiKeyValue;
+            config.env = env;
+
+            const auth = (config.auth || {}) as Record<string, unknown>;
+            const profiles = (auth.profiles || {}) as Record<string, unknown>;
+            profiles[`${provider}:default`] = { provider, mode: "api_key" };
+            auth.profiles = profiles;
+            config.auth = auth;
+          }
 
           const agents = (config.agents || {}) as Record<string, unknown>;
           const defaults = (agents.defaults || {}) as Record<string, unknown>;

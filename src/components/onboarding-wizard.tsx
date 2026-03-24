@@ -1,31 +1,30 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, type CSSProperties } from "react";
-import { useSmartPoll } from "@/hooks/use-smart-poll";
+import {type CSSProperties, useCallback, useEffect, useRef, useState} from "react";
 import {
   AlertTriangle,
+  Bot,
   Check,
-  ChevronRight,
   ChevronLeft,
-  Loader2,
+  ChevronRight,
+  Clock,
   ExternalLink,
   Key,
-  Bot,
-  ShieldCheck,
-  Clock,
+  Loader2,
   MessageCircle,
+  ShieldCheck,
   Zap,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import {cn} from "@/lib/utils";
 import {
   Combobox,
-  ComboboxInput,
   ComboboxContent,
-  ComboboxList,
-  ComboboxItem,
   ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
 } from "@/components/ui/combobox";
-import { getFriendlyModelName } from "@/lib/model-metadata";
+import {getFriendlyModelName} from "@/lib/model-metadata";
 
 type Model = { id: string; name: string };
 
@@ -65,6 +64,8 @@ type Provider = {
   defaultModelHint: string;
   url: string;
   logo: React.ReactNode;
+  /** 企业自建 / 自定义 API：需用户输入 baseUrl、API Key 请求头、模型名 */
+  isCustom?: boolean;
 };
 
 const PROVIDERS: Provider[] = [
@@ -103,6 +104,21 @@ const PROVIDERS: Provider[] = [
     logo: (
       <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor">
         <path d="M13.827 3.52h3.603L24 20.48h-3.603l-6.57-16.96zm-7.258 0h3.767L16.906 20.48h-3.674l-1.343-3.461H5.017l-1.344 3.46H0l6.569-16.96zm2.327 5.093L6.453 14.58h4.886L8.896 8.613z" />
+      </svg>
+    ),
+  },
+  {
+    id: "custom",
+    label: "企业自建",
+    placeholder: "Bearer ...",
+    defaultModelHint: "gpt-4",
+    url: "",
+    isCustom: true,
+    logo: (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+        <line x1="8" y1="21" x2="16" y2="21" />
+        <line x1="12" y1="17" x2="12" y2="21" />
       </svg>
     ),
   },
@@ -184,6 +200,12 @@ export function OnboardingWizard({ onComplete }: Props) {
   const [models, setModels] = useState<Model[]>([]);
   const [selectedModel, setSelectedModel] = useState("");
   const [validating, setValidating] = useState(false);
+  // 企业自建 Provider
+  const [customBaseUrl, setCustomBaseUrl] = useState("");
+  const [customApiKeyHeader, setCustomApiKeyHeader] = useState("Authorization");
+  const [customModelManual, setCustomModelManual] = useState("");
+  /** true=支持 /v1/models 拉取列表并验证；false=不支持，直接填 URL 全路径 + 模型名，无需验证 */
+  const [customSupportsModels, setCustomSupportsModels] = useState(true);
 
   // Step 2 state
   const [selectedChannel, setSelectedChannel] = useState<string>("telegram");
@@ -211,16 +233,35 @@ export function OnboardingWizard({ onComplete }: Props) {
 
   // ── Step 1: Validate key + fetch models ──
 
-  const validateKey = useCallback(async (providerId: string, key: string) => {
-    if (!key.trim()) return;
-    setValidating(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/onboard", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "validate-key", provider: providerId, token: key }),
-      });
+  const validateKey = useCallback(
+    async (
+      providerId: string,
+      key: string,
+      customOpts?: { customBaseUrl: string; customApiKeyHeader: string },
+    ) => {
+      if (!key.trim()) return;
+      const isCustom = providerId === "custom";
+      if (isCustom) {
+        const baseUrl = (customOpts?.customBaseUrl ?? customBaseUrl).trim();
+        if (!baseUrl) {
+          setError("请输入 Base URL");
+          return;
+        }
+      }
+      setValidating(true);
+      setError(null);
+      try {
+        const customBody = isCustom
+          ? {
+              customBaseUrl: (customOpts?.customBaseUrl ?? customBaseUrl).trim(),
+              customApiKeyHeader: (customOpts?.customApiKeyHeader ?? customApiKeyHeader).trim() || "Authorization",
+            }
+          : {};
+        const res = await fetch("/api/onboard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "validate-key", provider: providerId, token: key, ...customBody }),
+        });
       const data = await res.json();
       if (!data.ok) {
         setError(data.error ?? "Invalid API key.");
@@ -232,7 +273,7 @@ export function OnboardingWizard({ onComplete }: Props) {
       const modelsRes = await fetch("/api/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "list-models", provider: providerId, token: key }),
+        body: JSON.stringify({ action: "list-models", provider: providerId, token: key, ...customBody }),
       });
       const modelsData = await modelsRes.json();
       if (modelsData.ok && Array.isArray(modelsData.models)) {
@@ -258,9 +299,19 @@ export function OnboardingWizard({ onComplete }: Props) {
     } finally {
       setValidating(false);
     }
-  }, []);
+  },
+  [customBaseUrl, customApiKeyHeader],
+);
 
-  const handleValidate = useCallback(() => validateKey(provider, apiKey), [provider, apiKey, validateKey]);
+  const handleValidate = useCallback(
+    () =>
+      validateKey(
+        provider,
+        apiKey,
+        provider === "custom" ? { customBaseUrl, customApiKeyHeader } : undefined,
+      ),
+    [provider, apiKey, customBaseUrl, customApiKeyHeader, validateKey],
+  );
 
   autoValidateRef.current = validateKey;
 
@@ -270,8 +321,28 @@ export function OnboardingWizard({ onComplete }: Props) {
     setValidated(false);
     setModels([]);
     setSelectedModel("");
+    setCustomBaseUrl("");
+    setCustomApiKeyHeader("Authorization");
+    setCustomModelManual("");
+    setCustomSupportsModels(true);
     setError(null);
   }, []);
+
+  /** 企业自建且不支持 models 时，填写完整即可，无需验证 */
+  const customReadyWithoutValidation =
+    provider === "custom" &&
+    !customSupportsModels &&
+    customBaseUrl.trim() &&
+    apiKey.trim() &&
+    customModelManual.trim();
+
+  const canProceedStep1 =
+    (provider !== "custom" && validated && selectedModel) ||
+    (provider === "custom" &&
+      customSupportsModels &&
+      validated &&
+      (selectedModel || customModelManual.trim())) ||
+    customReadyWithoutValidation;
 
   // ── Step 2: Save config + restart gateway ──
 
@@ -305,17 +376,30 @@ export function OnboardingWizard({ onComplete }: Props) {
     }, 500);
 
     try {
+      const effectiveModel =
+        provider === "custom"
+          ? (selectedModel || customModelManual.trim() || selectedModel)
+          : selectedModel;
+      const modelForApi =
+        provider === "custom" && effectiveModel && !effectiveModel.startsWith("custom/")
+          ? `custom/${effectiveModel}`
+          : effectiveModel;
+      const body: Record<string, string> = {
+        action: "save-and-restart",
+        provider,
+        apiKey,
+        model: modelForApi,
+        telegramToken,
+        discordToken,
+      };
+      if (provider === "custom") {
+        body.customBaseUrl = customBaseUrl.trim();
+        body.customApiKeyHeader = customApiKeyHeader.trim() || "Authorization";
+      }
       const res = await fetch("/api/onboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "save-and-restart",
-          provider,
-          apiKey,
-          model: selectedModel,
-          telegramToken,
-          discordToken,
-        }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -336,7 +420,7 @@ export function OnboardingWizard({ onComplete }: Props) {
       if (saveProgressRef.current) clearInterval(saveProgressRef.current);
       setSaving(false);
     }
-  }, [provider, apiKey, selectedModel, channelTokens, completeOnboarding]);
+  }, [provider, apiKey, selectedModel, customBaseUrl, customApiKeyHeader, customModelManual, channelTokens, completeOnboarding]);
 
   const handleSaveAndRestart = useCallback(async () => {
     if (!activeChannelToken.trim()) return;
@@ -522,7 +606,7 @@ export function OnboardingWizard({ onComplete }: Props) {
               </div>
 
               {/* Provider cards */}
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 {PROVIDERS.map((p) => {
                   const isSelected = provider === p.id;
                   return (
@@ -564,8 +648,11 @@ export function OnboardingWizard({ onComplete }: Props) {
 
               <div className="space-y-2">
                 <p className="text-xs leading-relaxed text-stone-500 dark:text-[#a8b0ba]">
-                  New to this? Start with OpenRouter &mdash; it supports all major models and you only pay for what you use.
+                  {selectedProvider.isCustom
+                    ? "连接企业自建的 OpenAI 兼容 API。支持 /v1/models 的可验证并拉取模型列表；不支持的直接填完整 URL 和模型名。"
+                    : "New to this? Start with OpenRouter — it supports all major models and you only pay for what you use."}
                 </p>
+                {!selectedProvider.isCustom && (
                 <div className="rounded-xl border border-stone-200 dark:border-[#23282e] bg-stone-50 dark:bg-[#0d1014] p-4">
                   <div className="mb-2 flex items-center gap-2">
                     <Key className="h-3.5 w-3.5 text-emerald-500 dark:text-emerald-400" />
@@ -624,6 +711,99 @@ export function OnboardingWizard({ onComplete }: Props) {
                     </p>
                   )}
                 </div>
+                )}
+
+              {provider === "custom" && (
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    <span className="block text-xs font-medium uppercase tracking-wide text-stone-400 dark:text-[#5a6270]">
+                      API 能力
+                    </span>
+                    <div className="flex gap-4">
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input
+                          type="radio"
+                          name="customModelsMode"
+                          checked={customSupportsModels}
+                          onChange={() => {
+                            setCustomSupportsModels(true);
+                            setValidated(false);
+                            setModels([]);
+                            setSelectedModel("");
+                            setError(null);
+                          }}
+                          className="h-3.5 w-3.5 accent-stone-700 dark:accent-stone-300"
+                        />
+                        <span className="text-sm text-stone-700 dark:text-[#d6dce3]">支持模型列表</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2">
+                        <input
+                          type="radio"
+                          name="customModelsMode"
+                          checked={!customSupportsModels}
+                          onChange={() => {
+                            setCustomSupportsModels(false);
+                            setValidated(false);
+                            setModels([]);
+                            setSelectedModel("");
+                            setError(null);
+                          }}
+                          className="h-3.5 w-3.5 accent-stone-700 dark:accent-stone-300"
+                        />
+                        <span className="text-sm text-stone-700 dark:text-[#d6dce3]">不支持，直接填 URL 和模型名</span>
+                      </label>
+                    </div>
+                    <p className="text-[11px] text-stone-500 dark:text-[#5a6270]">
+                      {customSupportsModels
+                        ? "支持 /v1/models 的 API：验证密钥后可拉取模型列表选择"
+                        : "不支持 /v1/models 的 API：填写完整 Base URL 和模型名称，无需验证"}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium uppercase tracking-wide text-stone-400 dark:text-[#5a6270]">
+                      {customSupportsModels ? "Base URL" : "API Base URL（完整路径）"}
+                    </label>
+                    <input
+                      type="url"
+                      value={customBaseUrl}
+                      onChange={(e) => {
+                        setCustomBaseUrl(e.target.value);
+                        if (validated) {
+                          setValidated(false);
+                          setModels([]);
+                          setSelectedModel("");
+                        }
+                        setError(null);
+                      }}
+                      placeholder={customSupportsModels ? "https://api.your-company.com/v1" : "https://api.your-company.com/v1（完整路径，勿省略）"}
+                      disabled={validating}
+                      className="w-full rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-[#0d1014] border border-stone-200 dark:border-[#23282e] text-stone-900 dark:text-[#f5f7fa] placeholder:text-stone-300 dark:placeholder:text-[#3a424c] focus:outline-none focus:ring-2 focus:ring-stone-400/40 dark:focus:ring-stone-500/30 focus:border-stone-400 dark:focus:border-stone-500 disabled:opacity-50"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-medium uppercase tracking-wide text-stone-400 dark:text-[#5a6270]">
+                      API Key 请求头
+                    </label>
+                    <select
+                      value={customApiKeyHeader}
+                      onChange={(e) => {
+                        setCustomApiKeyHeader(e.target.value);
+                        if (validated) {
+                          setValidated(false);
+                          setModels([]);
+                          setSelectedModel("");
+                        }
+                        setError(null);
+                      }}
+                      disabled={validating}
+                      className="w-full rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-[#0d1014] border border-stone-200 dark:border-[#23282e] text-stone-900 dark:text-[#f5f7fa] focus:outline-none focus:ring-2 focus:ring-stone-400/40 dark:focus:ring-stone-500/30 disabled:opacity-50"
+                    >
+                      <option value="Authorization">Authorization (Bearer)</option>
+                      <option value="X-API-Key">X-API-Key</option>
+                    </select>
+                  </div>
+                </div>
+              )}
               </div>
 
               <div className="space-y-1.5">
@@ -652,11 +832,13 @@ export function OnboardingWizard({ onComplete }: Props) {
                         setModels([]);
                         setSelectedModel("");
                         setError(null);
-                        setTimeout(() => autoValidateRef.current?.(provider, pasted), 0);
+                        if (provider !== "custom" || customSupportsModels) {
+                          setTimeout(() => autoValidateRef.current?.(provider, pasted), 0);
+                        }
                       }
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !validated && !validating && apiKey.trim()) {
+                      if (e.key === "Enter" && !validated && !validating && apiKey.trim() && (provider !== "custom" || customSupportsModels)) {
                         handleValidate();
                       }
                     }}
@@ -664,8 +846,18 @@ export function OnboardingWizard({ onComplete }: Props) {
                     disabled={validating}
                     className="flex-1 rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-[#0d1014] border border-stone-200 dark:border-[#23282e] text-stone-900 dark:text-[#f5f7fa] placeholder:text-stone-300 dark:placeholder:text-[#3a424c] focus:outline-none focus:ring-2 focus:ring-stone-400/40 dark:focus:ring-stone-500/30 focus:border-stone-400 dark:focus:border-stone-500 disabled:opacity-50 transition-all duration-200"
                   />
-                  {/* Inline validation pill — only rendered when there is content */}
-                  {(validating || validated) && (
+                  {/* 企业自建且支持 models：显示验证按钮 */}
+                  {provider === "custom" && customSupportsModels && customBaseUrl.trim() && apiKey.trim() && !validated && !validating && (
+                    <button
+                      type="button"
+                      onClick={handleValidate}
+                      className="shrink-0 rounded-lg px-3 py-2.5 text-xs font-medium bg-stone-800 dark:bg-stone-200 text-white dark:text-stone-900 hover:bg-stone-700 dark:hover:bg-stone-300 transition-colors"
+                    >
+                      验证
+                    </button>
+                  )}
+                  {/* Inline validation pill — 不支持 models 模式不显示 */}
+                  {(provider !== "custom" || customSupportsModels) && (validating || validated) && (
                     <div
                       className={cn(
                         "flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all duration-300",
@@ -695,11 +887,35 @@ export function OnboardingWizard({ onComplete }: Props) {
                 <label className="block text-xs font-medium uppercase tracking-wide text-stone-400 dark:text-[#5a6270]">
                   Model
                 </label>
-                {!validated || models.length === 0 ? (
+                {provider === "custom" && !customSupportsModels ? (
+                  <input
+                    type="text"
+                    value={customModelManual}
+                    onChange={(e) => {
+                      setCustomModelManual(e.target.value);
+                      setError(null);
+                    }}
+                    placeholder="例如: gpt-4、claude-3-sonnet"
+                    disabled={saving}
+                    className="w-full rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-[#0d1014] border border-stone-200 dark:border-[#23282e] text-stone-900 dark:text-[#f5f7fa] placeholder:text-stone-300 dark:placeholder:text-[#3a424c] focus:outline-none focus:ring-2 focus:ring-stone-400/40 dark:focus:ring-stone-500/30 focus:border-stone-400 dark:focus:border-stone-500 disabled:opacity-50"
+                  />
+                ) : !validated ? (
                   <div className="w-full rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-[#0d1014] border border-stone-200 dark:border-[#23282e] text-stone-400 dark:text-[#5a6270] opacity-40 cursor-not-allowed">
-                    Validate your API key first
+                    {provider === "custom" ? "填写 Base URL 与 API Key，粘贴密钥或按 Enter 验证" : "Validate your API key first"}
                   </div>
-                ) : (
+                ) : provider === "custom" && models.length === 0 ? (
+                  <input
+                    type="text"
+                    value={customModelManual}
+                    onChange={(e) => {
+                      setCustomModelManual(e.target.value);
+                      setError(null);
+                    }}
+                    placeholder="例如: gpt-4、claude-3-sonnet"
+                    disabled={validating}
+                    className="w-full rounded-lg px-3 py-2.5 text-sm bg-white dark:bg-[#0d1014] border border-stone-200 dark:border-[#23282e] text-stone-900 dark:text-[#f5f7fa] placeholder:text-stone-300 dark:placeholder:text-[#3a424c] focus:outline-none focus:ring-2 focus:ring-stone-400/40 dark:focus:ring-stone-500/30 focus:border-stone-400 dark:focus:border-stone-500 disabled:opacity-50"
+                  />
+                ) : validated && models.length > 0 ? (
                   <>
                   <Combobox
                     items={models}
@@ -747,6 +963,10 @@ export function OnboardingWizard({ onComplete }: Props) {
                     Search by display name or model ID — partial matches work
                   </p>
                   </>
+                ) : (
+                  <div className="w-full rounded-lg px-3 py-2.5 text-sm bg-stone-50 dark:bg-[#0d1014] border border-stone-200 dark:border-[#23282e] text-stone-500 dark:text-[#5a6270]">
+                    No models returned from API
+                  </div>
                 )}
               </div>
 
@@ -777,14 +997,14 @@ export function OnboardingWizard({ onComplete }: Props) {
               <div className="flex items-center justify-between gap-2 pt-1">
                 <button
                   onClick={() => { setError(null); setSaveError(null); setStep(2); }}
-                  disabled={!validated || !selectedModel || saving || validating}
+                  disabled={!canProceedStep1 || saving || validating}
                   className="rounded-lg px-3 py-2 text-xs font-medium text-stone-500 dark:text-[#a8b0ba] ring-1 ring-stone-200 dark:ring-[#2c343d] hover:bg-stone-100 dark:hover:bg-[#1c2128] disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-200"
                 >
                   Connect Telegram/Discord now
                 </button>
                 <button
                   onClick={handleStartChatNow}
-                  disabled={!validated || !selectedModel || saving || validating}
+                  disabled={!canProceedStep1 || saving || validating}
                   className="flex items-center gap-1.5 rounded-lg px-5 py-2.5 text-sm font-medium bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 hover:bg-stone-700 dark:hover:bg-stone-200 disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-200 shadow-sm"
                 >
                   {saving ? (

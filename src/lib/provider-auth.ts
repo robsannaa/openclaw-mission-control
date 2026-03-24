@@ -276,3 +276,106 @@ export function buildProviderCredentialPatch(
 
   return patch;
 }
+
+/** 构建企业自建 / 自定义 provider 的 headers（用于验证或请求） */
+function buildCustomHeaders(apiKeyHeader: string, token: string): Record<string, string> {
+  const header = String(apiKeyHeader || "Authorization").trim() || "Authorization";
+  if (header.toLowerCase() === "authorization" && !token.toLowerCase().startsWith("bearer ")) {
+    return { [header]: `Bearer ${token}` };
+  }
+  return { [header]: token };
+}
+
+/** 校验企业自建 API 的 baseUrl 和密钥 */
+export async function validateCustomProviderToken(
+  baseUrl: string,
+  apiKeyHeader: string,
+  token: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const url = String(baseUrl || "").trim().replace(/\/+$/, "");
+  const apiKey = String(token || "").trim();
+  if (!url || !apiKey) {
+    return { ok: false, error: "Base URL and API key are required" };
+  }
+  const modelsUrl = `${url}/v1/models`;
+  try {
+    const res = await fetch(modelsUrl, {
+      method: "GET",
+      headers: buildCustomHeaders(apiKeyHeader, apiKey),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (res.ok) return { ok: true };
+    const errBody = truncateProviderError(await res.text().catch(() => ""));
+    return {
+      ok: false,
+      error: `API returned ${res.status}${errBody ? `: ${errBody}` : ""}`,
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Connection failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+/** 从企业自建 API 获取模型列表 */
+export async function fetchModelsFromCustomProvider(
+  baseUrl: string,
+  apiKeyHeader: string,
+  token: string,
+): Promise<ProviderModelItem[]> {
+  const url = String(baseUrl || "").trim().replace(/\/+$/, "");
+  const apiKey = String(token || "").trim();
+  if (!url || !apiKey) throw new Error("Base URL and API key are required");
+  const modelsUrl = `${url}/v1/models`;
+  const res = await fetch(modelsUrl, {
+    method: "GET",
+    headers: buildCustomHeaders(apiKeyHeader, apiKey),
+    signal: AbortSignal.timeout(15000),
+  });
+  if (!res.ok) throw new Error(`API returned ${res.status}`);
+  const data = await res.json();
+  const rows =
+    data && typeof data === "object" && Array.isArray((data as { data?: unknown[] }).data)
+      ? (data as { data: Array<{ id?: string; name?: string }> }).data
+      : [];
+  return rows
+    .map((row) => {
+      const rawId = String(row?.id || "").trim();
+      if (!rawId) return null;
+      return {
+        id: `custom/${rawId}`,
+        name: String(row?.name || rawId),
+      };
+    })
+    .filter((row): row is ProviderModelItem => row !== null);
+}
+
+/** 构建企业自建 provider 的 config patch */
+export function buildCustomProviderConfig(
+  baseUrl: string,
+  apiKeyHeader: string,
+  token: string,
+): Record<string, unknown> {
+  const url = String(baseUrl || "").trim().replace(/\/+$/, "");
+  if (!url || !String(token || "").trim()) return {};
+  const headers = buildCustomHeaders(apiKeyHeader, token.trim());
+  return {
+    models: {
+      providers: {
+        custom: {
+          baseUrl: url,
+          headers,
+        },
+      },
+    },
+    auth: {
+      profiles: {
+        "custom:default": {
+          provider: "custom",
+          mode: "api_key",
+        },
+      },
+    },
+  };
+}
