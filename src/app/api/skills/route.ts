@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runCliJson } from "@/lib/openclaw";
 import { fetchConfig, patchConfig } from "@/lib/gateway-config";
-import { readFile } from "fs/promises";
+import { readFile, readdir } from "fs/promises";
+import { join } from "path";
+import { getOpenClawHome, getSystemSkillsDir } from "@/lib/paths";
 
 export const dynamic = "force-dynamic";
 
@@ -78,6 +80,120 @@ type SkillDetail = {
   install: { id: string; kind: string; label: string; bins?: string[] }[];
 };
 
+/* ── Filesystem fallback (OpenClaw v2026.3.23+ compat) ── */
+
+const OPENCLAW_HOME = getOpenClawHome();
+
+async function readSkillsFromFilesystem(): Promise<SkillsList> {
+  const workspaceDir = join(OPENCLAW_HOME, "workspace");
+  const managedSkillsDir = join(OPENCLAW_HOME, "skills");
+
+  const skills: Skill[] = [];
+
+  // Read openclaw.json for allowlist
+  let allowlist: string[] = [];
+  let hasAllowlist = false;
+  try {
+    const raw = await readFile(join(OPENCLAW_HOME, "openclaw.json"), "utf-8");
+    const config = JSON.parse(raw);
+    const sa = config?.skills?.allow;
+    if (Array.isArray(sa) && sa.length > 0) {
+      allowlist = sa;
+      hasAllowlist = true;
+    }
+  } catch { /* no config */ }
+
+  // Scan directories in order: managed, workspace, personal, bundled
+  const dirs: { path: string; source: string }[] = [
+    { path: managedSkillsDir, source: "openclaw-managed" },
+    { path: join(workspaceDir, "skills"), source: "openclaw-workspace" },
+  ];
+  // Add personal skills directory if it exists
+  const homeDir = process.env.HOME || process.env.USERPROFILE || "/home/openclaw";
+  dirs.push({ path: join(homeDir, ".agents", "skills"), source: "agents-skills-personal" });
+
+  // Bundled skills from npm
+  try {
+    const sysDir = await getSystemSkillsDir();
+    dirs.push({ path: sysDir, source: "openclaw-bundled" });
+  } catch { /* can't find system skills */ }
+
+  const seen = new Set<string>();
+  for (const { path: dir, source } of dirs) {
+    try {
+      const entries = await readdir(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!entry.isDirectory() || seen.has(entry.name)) continue;
+        seen.add(entry.name);
+        const skillDir = join(dir, entry.name);
+        const skill = await readSkillMeta(
+          entry.name,
+          skillDir,
+          source,
+          hasAllowlist,
+          allowlist
+        );
+        if (skill) skills.push(skill);
+      }
+    } catch {
+      // directory doesn't exist — skip
+    }
+  }
+
+  return { workspaceDir, managedSkillsDir, skills };
+}
+
+async function readSkillMeta(
+  name: string,
+  dir: string,
+  source: string,
+  hasAllowlist: boolean,
+  allowlist: string[]
+): Promise<Skill | null> {
+  let description = "";
+  let emoji = "";
+  let homepage = "";
+
+  // Try SKILL.md frontmatter
+  try {
+    const raw = await readFile(join(dir, "SKILL.md"), "utf-8");
+    const fm = raw.match(/^---\n([\s\S]*?)\n---/);
+    if (fm) {
+      const block = fm[1];
+      const dMatch = block.match(/description:\s*["']?(.*?)["']?\s*$/m);
+      const eMatch = block.match(/emoji:\s*["']?(.+?)["']?\s*$/m);
+      const hMatch = block.match(/homepage:\s*["']?(.+?)["']?\s*$/m);
+      if (dMatch) description = dMatch[1];
+      if (eMatch) emoji = eMatch[1];
+      if (hMatch) homepage = hMatch[1];
+    }
+  } catch { /* no SKILL.md */ }
+
+  // Try package.json as fallback for description
+  if (!description) {
+    try {
+      const raw = await readFile(join(dir, "package.json"), "utf-8");
+      const pkg = JSON.parse(raw);
+      description = pkg.description || "";
+    } catch { /* no package.json */ }
+  }
+
+  const blockedByAllowlist = hasAllowlist && !allowlist.includes(name);
+
+  return {
+    name,
+    description,
+    emoji,
+    eligible: !blockedByAllowlist,
+    disabled: false,
+    blockedByAllowlist,
+    source,
+    bundled: source === "openclaw-bundled",
+    homepage: homepage || undefined,
+    missing: { bins: [], anyBins: [], env: [], config: [], os: [] },
+  };
+}
+
 /* ── GET ──────────────────────────────────────────── */
 
 export async function GET(request: NextRequest) {
@@ -152,8 +268,25 @@ export async function GET(request: NextRequest) {
     }
 
     // Default: list all skills
-    const data = await runCliJson<SkillsList>(["skills", "list"]);
-    return NextResponse.json(data);
+    try {
+      const data = await runCliJson<SkillsList>(["skills", "list"]);
+      return NextResponse.json(data);
+    } catch (cliErr) {
+      console.warn("Skills CLI failed, using filesystem fallback:", cliErr);
+      try {
+        const data = await readSkillsFromFilesystem();
+        return NextResponse.json({ ...data, transport: "filesystem-fallback" });
+      } catch (fsErr) {
+        console.error("Skills filesystem fallback also failed:", fsErr);
+        return NextResponse.json({
+          workspaceDir: "",
+          managedSkillsDir: "",
+          skills: [],
+          warning: `CLI: ${String(cliErr)} | FS: ${String(fsErr)}`,
+          degraded: true,
+        });
+      }
+    }
   } catch (err) {
     console.error("Skills API error:", err);
     if (action === "check") {

@@ -48,6 +48,70 @@ function tsToMs(ts: string): number {
 }
 
 /**
+ * Parse a tslog JSON log entry (OpenClaw v2026.3.23+ format).
+ */
+function parseTslogEntry(
+  json: Record<string, unknown>,
+  lineIndex: number,
+  raw: string
+): LogEntry | null {
+  const meta = json._meta as Record<string, unknown> | undefined;
+  if (!meta) return null;
+
+  const time = (json.time as string) || (meta.date as string) || "";
+  if (!time) return null;
+
+  // Map log level
+  const levelName = ((meta.logLevelName as string) || "INFO").toUpperCase();
+  let level: "info" | "warn" | "error" = "info";
+  if (levelName === "ERROR" || levelName === "FATAL") level = "error";
+  else if (levelName === "WARN" || levelName === "WARNING") level = "warn";
+
+  // Filter out DEBUG (too noisy for dashboard)
+  if (levelName === "DEBUG" || levelName === "TRACE") return null;
+
+  // Extract source from field "0"
+  let source = "gateway";
+  const field0 = json["0"] as string | undefined;
+  if (field0) {
+    try {
+      const parsed = JSON.parse(field0);
+      source = parsed.subsystem || parsed.module || "gateway";
+    } catch {
+      // Not JSON — use raw string if short enough
+      if (field0.length < 50) source = field0;
+    }
+  }
+
+  // Build message from numbered fields "1", "2", ...
+  const parts: string[] = [];
+  for (let n = 1; n <= 5; n++) {
+    const field = json[String(n)];
+    if (field === undefined) break;
+    if (typeof field === "string") {
+      parts.push(field);
+    } else if (typeof field === "object" && field !== null) {
+      try {
+        parts.push(JSON.stringify(field));
+      } catch {
+        parts.push(String(field));
+      }
+    }
+  }
+  const message = parts.join(" ") || "(no message)";
+
+  return {
+    line: lineIndex,
+    time,
+    timeMs: tsToMs(time),
+    source,
+    level,
+    message,
+    raw,
+  };
+}
+
+/**
  * Parse raw log lines into structured entries.
  * Handles:
  *   1. Structured lines: `TIMESTAMP [SOURCE] MESSAGE`
@@ -63,6 +127,22 @@ function parseLines(
   for (let i = 0; i < lines.length; i++) {
     const raw = lines[i];
     if (!raw) continue;
+
+    // ── tslog JSON format (OpenClaw v2026.3.23+) ──
+    if (raw.startsWith("{")) {
+      try {
+        const json = JSON.parse(raw);
+        const entry = parseTslogEntry(json, i, raw);
+        if (entry) {
+          entries.push(entry);
+          continue;
+        }
+        // parseTslogEntry returned null (e.g. DEBUG) — skip line
+        if (json._meta) continue;
+      } catch {
+        // Not valid JSON — fall through to regex parsers
+      }
+    }
 
     // Try structured: TIMESTAMP [source] message
     const structMatch = raw.match(STRUCTURED_RE);
