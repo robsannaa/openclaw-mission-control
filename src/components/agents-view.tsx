@@ -54,6 +54,7 @@ import {
   EyeOff,
   RotateCcw,
   Terminal,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { requestRestart } from "@/lib/restart-store";
@@ -149,6 +150,7 @@ type Agent = {
   identityTheme: string | null;
   identityAvatar: string | null;
   identitySource: string | null;
+  skills: string[] | null;
   subagents: string[];
   runtimeSubagents: Array<{
     sessionKey: string;
@@ -3136,6 +3138,11 @@ function EditAgentModal({
   const [model, setModel] = useState(agent.model);
   const [fallbacks, setFallbacks] = useState<string[]>(agent.fallbackModels);
   const [subagents, setSubagents] = useState<string[]>(agent.subagents);
+  const [skillsMode, setSkillsMode] = useState<"all" | "custom">(
+    agent.skills !== null ? "custom" : "all"
+  );
+  const [selectedSkills, setSelectedSkills] = useState<string[]>(agent.skills || []);
+  const [availableSkills, setAvailableSkills] = useState<string[]>([]);
   const [bindings, setBindings] = useState<string[]>(initialBindings);
   const [displayName, setDisplayName] = useState(agent.name);
   const [setAsDefault, setSetAsDefault] = useState(agent.isDefault);
@@ -3197,6 +3204,21 @@ function EditAgentModal({
       setModelsLoading(false);
     })();
   }, [agent.fallbackModels, agent.model, defaultModel]);
+
+  /* ── Fetch available skills ── */
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/skills", { cache: "no-store" });
+        const data = await res.json();
+        const names = ((data.skills || []) as { name: string; eligible?: boolean }[])
+          .map((s) => s.name)
+          .filter(Boolean)
+          .sort();
+        setAvailableSkills(names);
+      } catch { /* ignore */ }
+    })();
+  }, []);
 
   /* ── Channel binding wizard state ── */
   /* ── Keyboard ── */
@@ -3322,6 +3344,7 @@ function EditAgentModal({
         id: agent.id,
         model: model || null,
         fallbacks: fallbacks.length > 0 ? fallbacks : [],
+        skills: skillsMode === "custom" ? selectedSkills : null,
         subagents,
         bindings,
       };
@@ -3411,7 +3434,9 @@ function EditAgentModal({
     model,
     onClose,
     onSaved,
+    selectedSkills,
     setAsDefault,
+    skillsMode,
     subagents,
   ]);
 
@@ -3764,7 +3789,97 @@ function EditAgentModal({
             </div>
           )}
 
-          {/* 4. Channel Bindings */}
+          {/* 4. Per-agent skill filtering */}
+          {availableSkills.length > 0 && (
+            <div>
+              <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
+                <Wrench className="h-3 w-3 text-amber-400" /> Skills
+                <span className="text-xs font-normal text-muted-foreground/40">
+                  — control which skills this agent can use
+                </span>
+              </label>
+              <div className="mb-2 flex items-center gap-3">
+                <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground/80">
+                  <input
+                    type="radio"
+                    name={`skills-mode-${agent.id}`}
+                    checked={skillsMode === "all"}
+                    onChange={() => setSkillsMode("all")}
+                    disabled={busy}
+                    className="h-3 w-3 text-[var(--accent-brand)]"
+                  />
+                  All skills (inherit global)
+                </label>
+                <label className="flex cursor-pointer items-center gap-1.5 text-xs text-foreground/80">
+                  <input
+                    type="radio"
+                    name={`skills-mode-${agent.id}`}
+                    checked={skillsMode === "custom"}
+                    onChange={() => setSkillsMode("custom")}
+                    disabled={busy}
+                    className="h-3 w-3 text-[var(--accent-brand)]"
+                  />
+                  Custom allowlist
+                </label>
+              </div>
+              {skillsMode === "custom" && (
+                <>
+                  <div className="max-h-40 space-y-0.5 overflow-y-auto rounded-lg border border-foreground/10 p-1.5">
+                    {availableSkills.map((skill) => {
+                      const checked = selectedSkills.includes(skill);
+                      return (
+                        <label
+                          key={skill}
+                          className={cn(
+                            "flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-xs transition-colors",
+                            checked
+                              ? "bg-amber-500/10 text-amber-500"
+                              : "text-muted-foreground hover:bg-foreground/5"
+                          )}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() =>
+                              setSelectedSkills((prev) =>
+                                checked
+                                  ? prev.filter((s) => s !== skill)
+                                  : [...prev, skill]
+                              )
+                            }
+                            disabled={busy}
+                            className="sr-only"
+                          />
+                          <div
+                            className={cn(
+                              "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                              checked
+                                ? "border-amber-500 bg-amber-500/20"
+                                : "border-foreground/10 bg-foreground/5"
+                            )}
+                          >
+                            {checked && (
+                              <CheckCircle className="h-2.5 w-2.5 text-amber-500" />
+                            )}
+                          </div>
+                          <span className="flex-1 truncate font-medium">
+                            {skill}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground/50">
+                    {selectedSkills.length === 0
+                      ? "No skills selected — agent will have no skills loaded"
+                      : `${selectedSkills.length} skill${selectedSkills.length !== 1 ? "s" : ""} selected`}
+                  </p>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* 5. Channel Bindings */}
           <div>
             <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-foreground/70">
               <Globe className="h-3 w-3 text-blue-400" /> Channel Bindings

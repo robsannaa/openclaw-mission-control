@@ -34,6 +34,7 @@ type AgentFull = {
   identityTheme: string | null;
   identityAvatar: string | null;
   identitySource: string | null;
+  skills: string[] | null;
   subagents: string[];
   runtimeSubagents: Array<{
     sessionKey: string;
@@ -548,6 +549,12 @@ export async function GET() {
         (cfg.workspace as string) || defaultWorkspace;
       const agentDir = join(OPENCLAW_HOME, "agents", id, "agent");
 
+      // Skills (per-agent allowlist — flat array of skill names)
+      const skillsCfg = cfg.skills;
+      const skills: string[] | null = Array.isArray(skillsCfg)
+        ? (skillsCfg as unknown[]).map((s) => String(s)).filter(Boolean)
+        : null;
+
       // Subagents
       const subagentsCfg = cfg.subagents as
         | Record<string, unknown>
@@ -622,6 +629,7 @@ export async function GET() {
         identityTheme,
         identityAvatar,
         identitySource,
+        skills,
         subagents,
         runtimeSubagents,
         status,
@@ -833,6 +841,21 @@ export async function POST(request: NextRequest) {
             agent.model = { primary: newModel, fallbacks: newFallbacks };
           } else {
             agent.model = newModel;
+          }
+        }
+
+        // Update per-agent skill allowlist
+        if ("skills" in body) {
+          const skillsValue = body.skills;
+          if (skillsValue === null || skillsValue === undefined) {
+            // null/undefined = remove override, inherit all global skills
+            delete agent.skills;
+          } else if (Array.isArray(skillsValue)) {
+            const skillNames = (skillsValue as unknown[])
+              .map((s) => String(s || "").trim())
+              .filter(Boolean);
+            // Empty array = explicitly allow no skills; non-empty = allowlist
+            agent.skills = skillNames;
           }
         }
 
